@@ -1,0 +1,9 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: poc
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+featureGates:
+  InPlacePodVerticalScaling: true 

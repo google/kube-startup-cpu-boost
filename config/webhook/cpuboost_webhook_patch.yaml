@@ -1,0 +1,14 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  name: cpuboost.autoscaling.x-k8s.io
+  namespaceSelector:
+    matchExpressions:
+    - key: app.kubernetes.io/part-of
+      operator: NotIn
+      values: [kube-startup-cpu-boost]

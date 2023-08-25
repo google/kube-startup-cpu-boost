@@ -1,0 +1,69 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - autoscaling.x-k8s.io
+  resources:
+  - startupcpuboosts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling.x-k8s.io
+  resources:
+  - startupcpuboosts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - autoscaling.x-k8s.io
+  resources:
+  - startupcpuboosts/status
+  verbs:
+  - get
+  - patch
+  - update
