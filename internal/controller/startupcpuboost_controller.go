@@ -67,7 +67,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	boostPodHandler := &boostPodHandler{
 		manager: r.Manager,
-		log:     r.Log,
+		log:     r.Log.WithName("pod-handler"),
 	}
 	lsPredicate, err := predicate.LabelSelectorPredicate(*boostPodHandler.GetPodLabelSelector())
 	if err != nil {
@@ -83,15 +83,19 @@ func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
-	boostObj, ok := e.Object.(*autoscaling.StartupCPUBoost)
+	spec, ok := e.Object.(*autoscaling.StartupCPUBoost)
 	if !ok {
 		return true
 	}
-	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(boostObj))
-	log.V(2).Info("StartupCPUBoost create event")
+	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(spec))
+	log.V(2).Info("handling startup-cpu-boost create")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	if err := r.Manager.AddStartupCPUBoost(ctx, boostObj); err != nil {
-		log.Error(err, "Failed to add startupCPUBoost to boost manager")
+	boost, err := boost.NewStartupCPUBoost(r.Client, spec)
+	if err != nil {
+		log.Error(err, "failed to create startup-cpu-boost from spec")
+	}
+	if err := r.Manager.AddStartupCPUBoost(ctx, boost); err != nil {
+		log.Error(err, "failed to register startup-cpu-boost in manager")
 	}
 	return true
 }
@@ -102,19 +106,20 @@ func (r *StartupCPUBoostReconciler) Delete(e event.DeleteEvent) bool {
 		return true
 	}
 	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(e.Object))
-	log.V(2).Info("StartupCPUBoost delete event")
-	r.Manager.DeleteStartupCPUBoost(boostObj)
+	log.V(2).Info("handling startup-cpu-boost delete")
+	ctx := ctrl.LoggerInto(context.Background(), log)
+	r.Manager.RemoveStartupCPUBoost(ctx, boostObj.Namespace, boostObj.Name)
 	return true
 }
 
 func (r *StartupCPUBoostReconciler) Update(e event.UpdateEvent) bool {
 	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(e.ObjectNew))
-	log.V(2).Info("StartupCPUBoost update event")
+	log.V(2).Info("handling startup-cpu-boost update")
 	return true
 }
 
 func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
 	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(e.Object))
-	log.V(2).Info("StartupCPUBoost generic event")
+	log.V(2).Info("handling startup-cpu-boost generic event")
 	return true
 }

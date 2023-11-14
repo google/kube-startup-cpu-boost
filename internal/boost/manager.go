@@ -24,17 +24,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
+	"github.com/go-logr/logr"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/policy"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-
-	apiResource "k8s.io/apimachinery/pkg/api/resource"
 )
 
 var (
 	errStartupCPUBoostAlreadyExists = errors.New("startupCPUBoost already exists")
-	errInvalidStartupCPUBoostSpec   = errors.New("invalid startupCPUBoost spec")
 )
 
 const (
@@ -44,54 +41,99 @@ const (
 )
 
 type Manager interface {
-	AddStartupCPUBoost(ctx context.Context, boost *autoscaling.StartupCPUBoost) error
-	DeleteStartupCPUBoost(boost *autoscaling.StartupCPUBoost)
-	GetStartupCPUBoostForPod(pod *corev1.Pod) (*startupCPUBoost, bool)
-	GetStartupCPUBoost(namespace string, name string) (*startupCPUBoost, bool)
+	AddStartupCPUBoost(ctx context.Context, boost *StartupCPUBoost) error
+	RemoveStartupCPUBoost(ctx context.Context, namespace, name string)
+	StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (*StartupCPUBoost, bool)
+	StartupCPUBoost(namespace, name string) (*StartupCPUBoost, bool)
 	Start(ctx context.Context) error
+}
+
+type TimeTicker interface {
+	Tick() <-chan time.Time
+	Stop()
+}
+
+type timeTickerImpl struct {
+	t time.Ticker
+}
+
+func (t *timeTickerImpl) Tick() <-chan time.Time {
+	return t.t.C
+}
+
+func (t *timeTickerImpl) Stop() {
+	t.t.Stop()
+}
+
+func newTimeTickerImpl(d time.Duration) TimeTicker {
+	return &timeTickerImpl{
+		t: *time.NewTicker(d),
+	}
 }
 
 type managerImpl struct {
 	sync.RWMutex
 	client           client.Client
-	startupCPUBoosts map[string]map[string]*startupCPUBoost
+	ticker           TimeTicker
 	checkInterval    time.Duration
+	startupCPUBoosts map[string]map[string]*StartupCPUBoost
+	timePolicyBoosts map[boostKey]*StartupCPUBoost
+}
+
+type boostKey struct {
+	name      string
+	namespace string
 }
 
 func NewManager(client client.Client) Manager {
+	return NewManagerWithTicker(client, newTimeTickerImpl(DefaultManagerCheckInterval))
+}
+
+func NewManagerWithTicker(client client.Client, ticker TimeTicker) Manager {
 	return &managerImpl{
 		client:           client,
-		startupCPUBoosts: make(map[string]map[string]*startupCPUBoost),
+		ticker:           ticker,
 		checkInterval:    DefaultManagerCheckInterval,
+		startupCPUBoosts: make(map[string]map[string]*StartupCPUBoost),
+		timePolicyBoosts: make(map[boostKey]*StartupCPUBoost),
 	}
 }
 
-func (m *managerImpl) AddStartupCPUBoost(ctx context.Context, boost *autoscaling.StartupCPUBoost) error {
+func (m *managerImpl) AddStartupCPUBoost(ctx context.Context, boost *StartupCPUBoost) error {
 	m.Lock()
 	defer m.Unlock()
-	if _, ok := m.getStartupCPUBoostWithNS(boost.Namespace, boost.Name); ok {
+	if _, ok := m.getStartupCPUBoost(boost.namespace, boost.name); ok {
 		return errStartupCPUBoostAlreadyExists
 	}
-	boostImpl, err := newStartupCPUBoost(boost)
-	if err != nil {
-		return errInvalidStartupCPUBoostSpec
-	}
-	m.addStartupCPUBoostWithNS(boostImpl)
+	log := m.loggerFromContext(ctx).WithValues("boost", boost.Name, "namespace", boost.Namespace)
+	log.V(5).Info("handling startup-cpu-boost create")
+	m.addStartupCPUBoost(boost)
 	return nil
 }
 
-func (m *managerImpl) DeleteStartupCPUBoost(boost *autoscaling.StartupCPUBoost) {
+func (m *managerImpl) RemoveStartupCPUBoost(ctx context.Context, namespace, name string) {
 	m.Lock()
 	defer m.Unlock()
-	if _, ok := m.getStartupCPUBoostWithNS(boost.Namespace, boost.Name); !ok {
-		return
+	log := m.loggerFromContext(ctx).WithValues("boost", name, "namespace", namespace)
+	log.V(5).Info("handling startup-cpu-boost delete")
+	if boosts, ok := m.startupCPUBoosts[namespace]; ok {
+		delete(boosts, name)
 	}
-	m.deleteStartupCPUBoostWithNS(boost.Namespace, boost.Name)
+	key := boostKey{name: name, namespace: namespace}
+	delete(m.timePolicyBoosts, key)
 }
 
-func (m *managerImpl) GetStartupCPUBoostForPod(pod *corev1.Pod) (*startupCPUBoost, bool) {
+func (m *managerImpl) StartupCPUBoost(namespace string, name string) (*StartupCPUBoost, bool) {
 	m.RLock()
 	defer m.RUnlock()
+	return m.getStartupCPUBoost(namespace, name)
+}
+
+func (m *managerImpl) StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (*StartupCPUBoost, bool) {
+	m.RLock()
+	defer m.RUnlock()
+	log := m.loggerFromContext(ctx).WithValues("pod", pod.Name, "namespace", pod.Namespace)
+	log.V(5).Info("handling startup-cpu-boost pod lookup")
 	nsBoosts, ok := m.startupCPUBoosts[pod.Namespace]
 	if !ok {
 		return nil, false
@@ -104,105 +146,60 @@ func (m *managerImpl) GetStartupCPUBoostForPod(pod *corev1.Pod) (*startupCPUBoos
 	return nil, false
 }
 
-func (m *managerImpl) GetStartupCPUBoost(namespace string, name string) (*startupCPUBoost, bool) {
-	m.RLock()
-	defer m.RUnlock()
-	return m.getStartupCPUBoostWithNS(namespace, name)
-}
-
 func (m *managerImpl) Start(ctx context.Context) error {
-	log := ctrl.LoggerFrom(ctx).WithName("boost-manager")
-	t := time.NewTicker(m.checkInterval)
-	defer t.Stop()
-	log.V(2).Info("Boost manager starting")
+	log := m.loggerFromContext(ctx)
+	//t := time.NewTicker(m.checkInterval)
+	//defer t.Stop()
+	defer m.ticker.Stop()
+	log.V(2).Info("Starting")
 	for {
 		select {
-		case <-t.C:
+		case <-m.ticker.Tick():
 			log.V(5).Info("tick...")
-			m.updateStartupCPUBoostPods(ctx)
+			m.updateTimePolicyBoosts(ctx)
 		case <-ctx.Done():
 			return nil
 		}
 	}
 }
 
-func (m *managerImpl) addStartupCPUBoostWithNS(boostImpl *startupCPUBoost) {
-	nsBoosts, ok := m.startupCPUBoosts[boostImpl.namespace]
+func (m *managerImpl) addStartupCPUBoost(boost *StartupCPUBoost) {
+	boosts, ok := m.startupCPUBoosts[boost.namespace]
 	if !ok {
-		nsBoosts = make(map[string]*startupCPUBoost)
-		m.startupCPUBoosts[boostImpl.namespace] = nsBoosts
+		boosts = make(map[string]*StartupCPUBoost)
+		m.startupCPUBoosts[boost.namespace] = boosts
 	}
-	nsBoosts[boostImpl.name] = boostImpl
+	boosts[boost.name] = boost
+	if _, ok := boost.DurationPolicies()[policy.FixedDurationPolicyName]; ok {
+		key := boostKey{name: boost.name, namespace: boost.namespace}
+		m.timePolicyBoosts[key] = boost
+	}
 }
 
-func (m *managerImpl) getStartupCPUBoostWithNS(ns string, name string) (*startupCPUBoost, bool) {
-	if nsboosts, ok := m.startupCPUBoosts[ns]; ok {
-		boost, ok := nsboosts[name]
+func (m *managerImpl) getStartupCPUBoost(namespace string, name string) (*StartupCPUBoost, bool) {
+	if boosts, ok := m.startupCPUBoosts[namespace]; ok {
+		boost, ok := boosts[name]
 		return boost, ok
 	}
 	return nil, false
 }
 
-func (m *managerImpl) deleteStartupCPUBoostWithNS(ns string, name string) {
-	if nsBoosts, ok := m.startupCPUBoosts[ns]; ok {
-		delete(nsBoosts, name)
-	}
-}
-
-func (m *managerImpl) getAllStartupCPUBoosts() []*startupCPUBoost {
-	result := make([]*startupCPUBoost, 0)
-	for _, nsMap := range m.startupCPUBoosts {
-		for _, boost := range nsMap {
-			result = append(result, boost)
-		}
-	}
-	return result
-}
-
-func (m *managerImpl) updateStartupCPUBoostPods(ctx context.Context) {
+func (m *managerImpl) updateTimePolicyBoosts(ctx context.Context) {
 	m.RLock()
 	defer m.RUnlock()
-	now := time.Now()
-	for _, boost := range m.getAllStartupCPUBoosts() {
-		for _, pod := range boost.pods {
-			if pod.boostTimestamp.Add(boost.time).Before(now) {
-				log := ctrl.LoggerFrom(ctx).WithName("boost-manager").WithValues("pod.boostTimestamp", pod.boostTimestamp,
-					"boost.time", boost.time, "time.now", now, "pod", pod.name, "namespace", pod.namespace)
-				log.V(2).Info("Reverting startup CPU boost for pod")
-				if err := m.podCleanup(ctx, pod); err != nil {
-					log.Error(err, "unable to update pod")
-				}
-				delete(boost.pods, pod.name)
+	log := m.loggerFromContext(ctx)
+	for _, boost := range m.timePolicyBoosts {
+		for _, pod := range boost.validatePolicy(ctx, policy.FixedDurationPolicyName) {
+			log = log.WithValues("boost", boost.name, "namespace", boost.namespace, "pod", pod.Name)
+			log.V(5).Info("updating pod with initial resources")
+			if err := boost.revertResources(ctx, pod); err != nil {
+				log.Error(err, "failed to revert resources for pod")
 			}
 		}
 	}
 }
 
-func (m *managerImpl) podCleanup(ctx context.Context, pod *startupCPUBoostPod) error {
-	podObj := &corev1.Pod{}
-	if err := m.client.Get(ctx, types.NamespacedName{Namespace: pod.namespace, Name: pod.name}, podObj); err != nil {
-		return err
-	}
-	for _, container := range podObj.Spec.Containers {
-		if request, ok := pod.initCPURequests[container.Name]; ok {
-			if reqQuantity, err := apiResource.ParseQuantity(request); err == nil {
-				container.Resources.Requests[corev1.ResourceCPU] = reqQuantity
-			} else {
-				return errors.New("unparsable init CPU request: " + err.Error())
-			}
-		}
-		if limit, ok := pod.initCPULimits[container.Name]; ok {
-			if limitQuantity, err := apiResource.ParseQuantity(limit); err == nil {
-				container.Resources.Limits[corev1.ResourceCPU] = limitQuantity
-			} else {
-				return errors.New("unparsable init CPU limit: " + err.Error())
-			}
-		}
-	}
-	delete(podObj.Labels, StartupCPUBoostPodLabelKey)
-	delete(podObj.Annotations, StartupCPUBoostPodAnnotationKey)
-	if err := m.client.Update(ctx, podObj); err != nil {
-		return err
-	}
-	return nil
+func (m *managerImpl) loggerFromContext(ctx context.Context) logr.Logger {
+	return ctrl.LoggerFrom(ctx).
+		WithName("boost-manager")
 }

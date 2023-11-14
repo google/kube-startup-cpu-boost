@@ -82,12 +82,38 @@ spec:
                 description: BootPercent defines the percent of CPU request increase
                   that POD will get during the CPU boost time period
                 format: int64
+                minimum: 1
                 type: integer
-              timePeriod:
-                description: TimePeriod defines the period of time, in seconds, that
-                  POD will be affected by the CPU Boost after the initialization
-                format: int64
-                type: integer
+              durationPolicy:
+                description: DurationPolicy specifies policies for resource boost
+                  duration
+                properties:
+                  fixedDuration:
+                    description: fixed time duration policy
+                    properties:
+                      unit:
+                        description: unit of time for a fixed time policy
+                        enum:
+                        - Seconds
+                        - Minutes
+                        type: string
+                      value:
+                        description: duration value for a fixed time policy
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    type: object
+                  podCondition:
+                    description: podCondition based duration policy
+                    properties:
+                      status:
+                        description: status of a PODCondition to match in a policy
+                        type: string
+                      type:
+                        description: type of a PODCondition to check in a policy
+                        type: string
+                    type: object
+                type: object
             type: object
           status:
             description: StartupCPUBoostStatus defines the observed state of StartupCPUBoost

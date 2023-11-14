@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	. "github.com/onsi/ginkgo/v2"
 
 	corev1 "k8s.io/api/core/v1"
@@ -86,7 +87,7 @@ func TestBoostContainersCPU(t *testing.T) {
 	if !ok {
 		t.Fatalf("POD is missing startup CPU boost annotation")
 	}
-	annot := &boost.StartupCPUBoostPodAnnotation{}
+	annot := &bpod.BoostPodAnnotation{}
 	if err := json.Unmarshal([]byte(annotStr), annot); err != nil {
 		t.Fatalf("can't unmarshal boost annotation due to %s", err)
 	}
