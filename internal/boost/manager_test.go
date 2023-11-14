@@ -19,7 +19,7 @@ var _ = Describe("Manager", func() {
 	Describe("Registers startup-cpu-boost", func() {
 		var (
 			spec  *autoscaling.StartupCPUBoost
-			boost *cpuboost.StartupCPUBoost
+			boost cpuboost.StartupCPUBoost
 			err   error
 		)
 		BeforeEach(func() {
@@ -59,7 +59,7 @@ var _ = Describe("Manager", func() {
 	Describe("De-registers startup-cpu-boost", func() {
 		var (
 			spec  *autoscaling.StartupCPUBoost
-			boost *cpuboost.StartupCPUBoost
+			boost cpuboost.StartupCPUBoost
 			err   error
 		)
 		BeforeEach(func() {
@@ -87,7 +87,7 @@ var _ = Describe("Manager", func() {
 			pod               *corev1.Pod
 			podNameLabel      string
 			podNameLabelValue string
-			boost             *cpuboost.StartupCPUBoost
+			boost             cpuboost.StartupCPUBoost
 			found             bool
 		)
 		BeforeEach(func() {
@@ -179,7 +179,7 @@ var _ = Describe("Manager", func() {
 		When("There are startup-cpu-boosts with fixed duration policy", func() {
 			var (
 				spec       *autoscaling.StartupCPUBoost
-				boost      *cpuboost.StartupCPUBoost
+				boost      cpuboost.StartupCPUBoost
 				pod        *corev1.Pod
 				mockClient *mock.MockClient
 				c          chan time.Time

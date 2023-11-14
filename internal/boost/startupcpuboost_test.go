@@ -18,7 +18,7 @@ import (
 var _ = Describe("StartupCPUBoost", func() {
 	var (
 		spec  *autoscaling.StartupCPUBoost
-		boost *cpuboost.StartupCPUBoost
+		boost cpuboost.StartupCPUBoost
 		err   error
 		pod   *corev1.Pod
 	)

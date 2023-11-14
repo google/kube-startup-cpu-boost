@@ -102,7 +102,7 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 	}
 }
 
-func (h *boostPodHandler) boostForPod(pod *corev1.Pod) (*boost.StartupCPUBoost, bool) {
+func (h *boostPodHandler) boostForPod(pod *corev1.Pod) (boost.StartupCPUBoost, bool) {
 	boostName, ok := pod.Labels[bpod.BoostLabelKey]
 	if !ok {
 		return nil, false

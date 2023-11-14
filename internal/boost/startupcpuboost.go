@@ -33,7 +33,21 @@ import (
 )
 
 // StartupCPUBoost is an implementation of a StartupCPUBoost CRD
-type StartupCPUBoost struct {
+type StartupCPUBoost interface {
+	Name() string
+	Namespace() string
+	BoostPercent() int64
+	DurationPolicies() map[string]policy.DurationPolicy
+	Pod(name string) (*corev1.Pod, bool)
+	UpsertPod(ctx context.Context, pod *corev1.Pod) error
+	DeletePod(ctx context.Context, pod *corev1.Pod) error
+	ValidatePolicy(ctx context.Context, name string) []*corev1.Pod
+	RevertResources(ctx context.Context, pod *corev1.Pod) error
+	Matches(pod *corev1.Pod) bool
+}
+
+// StartupCPUBoostImpl is an implementation of a StartupCPUBoost CRD
+type StartupCPUBoostImpl struct {
 	sync.RWMutex
 	name      string
 	namespace string
@@ -45,12 +59,12 @@ type StartupCPUBoost struct {
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
-func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost) (*StartupCPUBoost, error) {
+func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost) (StartupCPUBoost, error) {
 	selector, err := metav1.LabelSelectorAsSelector(&boost.Selector)
 	if err != nil {
 		return nil, err
 	}
-	return &StartupCPUBoost{
+	return &StartupCPUBoostImpl{
 		name:      boost.Name,
 		namespace: boost.Namespace,
 		selector:  selector,
@@ -61,27 +75,27 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 }
 
 // Name returns startup-cpu-boost name
-func (b *StartupCPUBoost) Name() string {
+func (b *StartupCPUBoostImpl) Name() string {
 	return b.name
 }
 
 // Namespace returns startup-cpu-boost namespace
-func (b *StartupCPUBoost) Namespace() string {
+func (b *StartupCPUBoostImpl) Namespace() string {
 	return b.namespace
 }
 
 // BoostPercent returns startup-cpu-boost boost percentage
-func (b *StartupCPUBoost) BoostPercent() int64 {
+func (b *StartupCPUBoostImpl) BoostPercent() int64 {
 	return b.percent
 }
 
 // DurationPolicies returns configured duration policies
-func (b *StartupCPUBoost) DurationPolicies() map[string]policy.DurationPolicy {
+func (b *StartupCPUBoostImpl) DurationPolicies() map[string]policy.DurationPolicy {
 	return b.policies
 }
 
 // Pod returns a POD if tracked by startup-cpu-boost.
-func (b *StartupCPUBoost) Pod(name string) (*corev1.Pod, bool) {
+func (b *StartupCPUBoostImpl) Pod(name string) (*corev1.Pod, bool) {
 	if v, ok := b.pods.Load(name); ok {
 		return v.(*corev1.Pod), ok
 	}
@@ -90,7 +104,7 @@ func (b *StartupCPUBoost) Pod(name string) (*corev1.Pod, bool) {
 
 // UpsertPod inserts new or updates existing POD to startup-cpu-boost tracking
 // The update of existing POD triggers validation logic and may result in POD update
-func (b *StartupCPUBoost) UpsertPod(ctx context.Context, pod *corev1.Pod) error {
+func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) error {
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("upserting a pod")
 	if _, loaded := b.pods.Swap(pod.Name, pod); !loaded {
@@ -105,7 +119,7 @@ func (b *StartupCPUBoost) UpsertPod(ctx context.Context, pod *corev1.Pod) error 
 	}
 	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
 		log.V(5).Info("updating pod with initial resources")
-		if err := b.revertResources(ctx, pod); err != nil {
+		if err := b.RevertResources(ctx, pod); err != nil {
 			return fmt.Errorf("failed to update pod: %s", err)
 		}
 	}
@@ -113,7 +127,7 @@ func (b *StartupCPUBoost) UpsertPod(ctx context.Context, pod *corev1.Pod) error 
 }
 
 // DeletePod removes the POD from the startup-cpu-boost tracking
-func (b *StartupCPUBoost) DeletePod(ctx context.Context, pod *corev1.Pod) error {
+func (b *StartupCPUBoostImpl) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("handling pod delete")
 	if _, loaded := b.pods.LoadAndDelete(pod.Name); loaded {
@@ -122,20 +136,9 @@ func (b *StartupCPUBoost) DeletePod(ctx context.Context, pod *corev1.Pod) error 
 	return nil
 }
 
-// loggerFromContext provides Logger from a current context with configured
-// values common for startup-cpu-boost like name or namespace
-func (b *StartupCPUBoost) loggerFromContext(ctx context.Context) logr.Logger {
-	return ctrl.LoggerFrom(ctx).
-		WithName("startup-cpu-boost").
-		WithValues(
-			"name", b.name,
-			"namespace", b.namespace,
-		)
-}
-
-// validatePolicy validates policy with a given name on all startup-cpu-boost PODs.
+// ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
 // The function returns slice of PODs that violated the policy.
-func (b *StartupCPUBoost) validatePolicy(ctx context.Context, name string) (violated []*corev1.Pod) {
+func (b *StartupCPUBoostImpl) ValidatePolicy(ctx context.Context, name string) (violated []*corev1.Pod) {
 	violated = make([]*corev1.Pod, 0)
 	policy, ok := b.policies[name]
 	if !ok {
@@ -151,19 +154,9 @@ func (b *StartupCPUBoost) validatePolicy(ctx context.Context, name string) (viol
 	return
 }
 
-// validatePolicyOnPod validates given policy on a given POD.
-// The function returns true if policy is valid or false otherwise
-func (b *StartupCPUBoost) validatePolicyOnPod(ctx context.Context, p policy.DurationPolicy, pod *corev1.Pod) (valid bool) {
-	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
-	if valid = p.Valid(pod); !valid {
-		log.WithValues("policy", p.Name()).V(5).Info("policy is not valid")
-	}
-	return
-}
-
-// revertResources updates POD's container resource requests and limits to their original
+// RevertResources updates POD's container resource requests and limits to their original
 // values using the data from StartupCPUBoost annotation
-func (b *StartupCPUBoost) revertResources(ctx context.Context, pod *corev1.Pod) error {
+func (b *StartupCPUBoostImpl) RevertResources(ctx context.Context, pod *corev1.Pod) error {
 	if err := bpod.RevertResourceBoost(pod); err != nil {
 		return fmt.Errorf("failed to update pod spec: %s", err)
 	}
@@ -172,6 +165,32 @@ func (b *StartupCPUBoost) revertResources(ctx context.Context, pod *corev1.Pod) 
 	}
 	b.pods.Delete(pod.Name)
 	return nil
+}
+
+// Matches verifies if a boost selector matches the given POD
+func (b *StartupCPUBoostImpl) Matches(pod *corev1.Pod) bool {
+	return b.selector.Matches(labels.Set(pod.Labels))
+}
+
+// loggerFromContext provides Logger from a current context with configured
+// values common for startup-cpu-boost like name or namespace
+func (b *StartupCPUBoostImpl) loggerFromContext(ctx context.Context) logr.Logger {
+	return ctrl.LoggerFrom(ctx).
+		WithName("startup-cpu-boost").
+		WithValues(
+			"name", b.name,
+			"namespace", b.namespace,
+		)
+}
+
+// validatePolicyOnPod validates given policy on a given POD.
+// The function returns true if policy is valid or false otherwise
+func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p policy.DurationPolicy, pod *corev1.Pod) (valid bool) {
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
+	if valid = p.Valid(pod); !valid {
+		log.WithValues("policy", p.Name()).V(5).Info("policy is not valid")
+	}
+	return
 }
 
 // policiesFromSpec maps the Duration Policies from the API spec to the map holding policy
