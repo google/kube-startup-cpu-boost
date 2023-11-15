@@ -26,7 +26,7 @@ import os
 import re
 import sys
 
-_EXCLUDE_DIRS = ('.git', '.terraform')
+_EXCLUDE_DIRS = ('.git', '.terraform', 'config')
 _EXCLUDE_RE = re.compile(r'# skip boilerplate check')
 _EXCLUDE_FILES = {}
 _MATCH_FILES = ('Dockerfile', '.py', '.sh', '.tf', '.yaml', '.yml', '.go', '.rego')
