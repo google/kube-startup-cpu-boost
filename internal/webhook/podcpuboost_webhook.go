@@ -18,10 +18,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	inf "gopkg.in/inf.v0"
 	corev1 "k8s.io/api/core/v1"
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
@@ -56,7 +56,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	log := ctrl.LoggerFrom(ctx).WithName("cpuboost-webhook").WithValues("pod.Name", pod.Name, "pod.Namespace", pod.Namespace)
 	log.V(5).Info("Handling Pod")
 
-	boostImpl, ok := h.manager.GetStartupCPUBoostForPod(pod)
+	boostImpl, ok := h.manager.StartupCPUBoostForPod(ctx, pod)
 	if !ok {
 		log.V(5).Info("StartupCPUBoost was not found")
 		return admission.Allowed("no StartupCPUBoost matched")
@@ -85,8 +85,7 @@ func (h *podCPUBoostHandler) InjectDecoder(d *admission.Decoder) error {
 
 func (h *podCPUBoostHandler) boostContainersCPU(pod *corev1.Pod, boostPerc int64, log logr.Logger) (result []corev1.Container, boosted bool) {
 	result = pod.Spec.Containers
-	now := time.Now()
-	boostAnnot := *boost.NewStartupCPUBoostPodAnnotation(&now)
+	boostAnnot := bpod.NewBoostAnnotation()
 	for _, container := range pod.Spec.Containers {
 		log = log.WithValues("container.Name", container.Name)
 		if boostedReq, initReq, _ := increaseQuantityForResource(container.Resources.Requests, corev1.ResourceCPU, boostPerc, log.WithValues("resourceRequirement", "request")); boostedReq {
@@ -101,7 +100,7 @@ func (h *podCPUBoostHandler) boostContainersCPU(pod *corev1.Pod, boostPerc int64
 		if pod.Annotations == nil {
 			pod.Annotations = make(map[string]string)
 		}
-		pod.Annotations[boost.StartupCPUBoostPodAnnotationKey] = boostAnnot.MustMarshalToJSON()
+		pod.Annotations[boost.StartupCPUBoostPodAnnotationKey] = boostAnnot.ToJSON()
 	}
 	return
 }

@@ -83,12 +83,17 @@ gcloud container clusters create poc \
        operator: In
        values: ["app-001", "app-002"]
    spec:
-     timePeriod: 60
      boostPercent: 50
+     durationPolicy:
+       podCondition:
+         name: Ready
+         value: "True"
    ```
 
    The above example will boost CPU requests and limits of all PODs with `app=app-001` and `app=app-002`
-   labels in `demo` namespace. The resources will be increased by 50% for 60 seconds.
+   labels in `demo` namespace. The resources will be increased by 50% until the
+   [POD Condition](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)
+   `Ready` becomes `True`.
 
 2. Schedule your workloads and observe the results
 

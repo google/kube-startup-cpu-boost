@@ -12,12 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: poc
-nodes:
-- role: control-plane
-- role: worker
-- role: worker
-featureGates:
-  InPlacePodVerticalScaling: true
+MD013:
+  line_length: 100
+  tables: false

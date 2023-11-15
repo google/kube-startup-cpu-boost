@@ -19,51 +19,93 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
+type BoostPodHandler interface {
+	Create(context.Context, event.CreateEvent, workqueue.RateLimitingInterface)
+	Delete(context.Context, event.DeleteEvent, workqueue.RateLimitingInterface)
+	Update(context.Context, event.UpdateEvent, workqueue.RateLimitingInterface)
+	Generic(context.Context, event.GenericEvent, workqueue.RateLimitingInterface)
+	GetPodLabelSelector() *metav1.LabelSelector
+}
+
 type boostPodHandler struct {
 	manager boost.Manager
 	log     logr.Logger
 }
 
-func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, q workqueue.RateLimitingInterface) {
+func NewBoostPodHandler(manager boost.Manager, log logr.Logger) BoostPodHandler {
+	return &boostPodHandler{
+		manager: manager,
+		log:     log,
+	}
+}
+
+func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq workqueue.RateLimitingInterface) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
-		h.log.V(2).Info("Pod create event contains non-pod object")
 		return
 	}
-	log := h.log.WithValues("pod.Name", pod.Name, "pod.Namespace", pod.Namespace)
-	log.V(5).Info("Pod create event")
-	boostPod, err := boost.NewStartupCPUBoostPod(pod)
-	if err != nil {
-		log = log.WithValues("error", err.Error())
-		log.V(2).Info("failed to parse startup cpu boost pod")
-		return
-	}
-	boost, ok := h.manager.GetStartupCPUBoost(boostPod.GetNamespace(), boostPod.GetBoostName())
+	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
+	log.V(5).Info("handling pod create")
+	boost, ok := h.boostForPod(pod)
 	if !ok {
-		log.V(2).Info("failed to get startup cpu boost for a pod")
+		log.V(5).Info("failed to get boost for pod")
 		return
 	}
-	log = log.WithValues("boost.Name", boost.Name())
-	log.V(5).Info("Found boost in manager")
-	if err := boost.AddPod(boostPod); err != nil {
-		log.Error(err, "failed to add pod to startup cpu boost")
-		return
+	log.WithValues("boost", boost.Name())
+	if err := boost.UpsertPod(ctx, pod); err != nil {
+		log.Error(err, "failed to handle pod create")
 	}
 }
 
-func (h *boostPodHandler) Delete(context.Context, event.DeleteEvent, workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq workqueue.RateLimitingInterface) {
+	pod, ok := e.Object.(*corev1.Pod)
+	if !ok {
+		return
+	}
+	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
+	log.V(5).Info("handling pod delete")
+	boost, ok := h.boostForPod(pod)
+	if !ok {
+		log.V(5).Info("failed to get boost for pod")
+		return
+	}
+	if err := boost.DeletePod(ctx, pod); err != nil {
+		log.Error(err, "failed to handle pod delete")
+	}
 }
 
-func (h *boostPodHandler) Update(context.Context, event.UpdateEvent, workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq workqueue.RateLimitingInterface) {
+	pod, ok := e.ObjectNew.(*corev1.Pod)
+	if !ok {
+		return
+	}
+	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
+	log.V(5).Info("handling pod update")
+	//TODO react only on POD or container condition updates
+	boost, ok := h.boostForPod(pod)
+	if !ok {
+		log.V(5).Info("failed to get boost for pod")
+		return
+	}
+	if err := boost.UpsertPod(ctx, pod); err != nil {
+		log.Error(err, "failed to handle pod update")
+	}
 }
 
-func (h *boostPodHandler) Generic(context.Context, event.GenericEvent, workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent, wq workqueue.RateLimitingInterface) {
+	pod, ok := e.Object.(*corev1.Pod)
+	if !ok {
+		return
+	}
+	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
+	log.V(5).Info("got pod generic event")
 }
 
 func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
@@ -76,4 +118,12 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 			},
 		},
 	}
+}
+
+func (h *boostPodHandler) boostForPod(pod *corev1.Pod) (boost.StartupCPUBoost, bool) {
+	boostName, ok := pod.Labels[bpod.BoostLabelKey]
+	if !ok {
+		return nil, false
+	}
+	return h.manager.StartupCPUBoost(pod.Namespace, boostName)
 }

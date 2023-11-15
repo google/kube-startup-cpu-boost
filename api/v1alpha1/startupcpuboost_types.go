@@ -15,17 +15,60 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// FixedDurationPolicyUnit defines the unit of time for a fixed
+// time duration policy
+// +kubebuilder:validation:Enum=Seconds;Minutes
+type FixedDurationPolicyUnit string
+
+const (
+	FixedDurationPolicyUnitSec FixedDurationPolicyUnit = "Seconds"
+	FixedDurationPolicyUnitMin FixedDurationPolicyUnit = "Minutes"
+)
+
+// FixedDurationPolicy defines the fixed time duration policy
+type FixedDurationPolicy struct {
+	// unit of time for a fixed time policy
+	// +kubebuilder:validation:Required
+	Unit FixedDurationPolicyUnit `json:"unit,omitempty"`
+	// duration value for a fixed time policy
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum:=1
+	Value int64 `json:"value,omitempty"`
+}
+
+// PodConditionDurationPolicy defines the PodCondition based
+// duration policy
+type PodConditionDurationPolicy struct {
+	// type of a PODCondition to check in a policy
+	Type corev1.PodConditionType `json:"type,omitempty"`
+	// status of a PODCondition to match in a policy
+	Status corev1.ConditionStatus `json:"status,omitempty"`
+}
+
+// DurationPolicy defines the policy used to determine the duration
+// time of a resource boost
+type DurationPolicy struct {
+	// fixed time duration policy
+	// +kubebuilder:validation:Optional
+	Fixed *FixedDurationPolicy `json:"fixedDuration,omitempty"`
+	// podCondition based duration policy
+	// +kubebuilder:validation:Optional
+	PodCondition *PodConditionDurationPolicy `json:"podCondition,omitempty"`
+}
+
 // StartupCPUBoostSpec defines the desired state of StartupCPUBoost
 type StartupCPUBoostSpec struct {
-	// TimePeriod defines the period of time, in seconds, that POD will be affected
-	// by the CPU Boost after the initialization
-	TimePeriod int64 `json:"timePeriod,omitempty"`
-
+	// DurationPolicy specifies policies for resource boost duration
+	// +kubebuilder:validation:Required
+	DurationPolicy DurationPolicy `json:"durationPolicy,omitempty"`
 	// BootPercent defines the percent of CPU request increase that POD will get
 	// during the CPU boost time period
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum:=1
 	BoostPercent int64 `json:"boostPercent,omitempty"`
 }
 
