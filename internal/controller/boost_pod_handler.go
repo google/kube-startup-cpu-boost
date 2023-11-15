@@ -26,9 +26,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
+type BoostPodHandler interface {
+	Create(context.Context, event.CreateEvent, workqueue.RateLimitingInterface)
+	Delete(context.Context, event.DeleteEvent, workqueue.RateLimitingInterface)
+	Update(context.Context, event.UpdateEvent, workqueue.RateLimitingInterface)
+	Generic(context.Context, event.GenericEvent, workqueue.RateLimitingInterface)
+	GetPodLabelSelector() *metav1.LabelSelector
+}
+
 type boostPodHandler struct {
 	manager boost.Manager
 	log     logr.Logger
+}
+
+func NewBoostPodHandler(manager boost.Manager, log logr.Logger) BoostPodHandler {
+	return &boostPodHandler{
+		manager: manager,
+		log:     log,
+	}
 }
 
 func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq workqueue.RateLimitingInterface) {
@@ -41,6 +56,7 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq wo
 	boost, ok := h.boostForPod(pod)
 	if !ok {
 		log.V(5).Info("failed to get boost for pod")
+		return
 	}
 	log.WithValues("boost", boost.Name())
 	if err := boost.UpsertPod(ctx, pod); err != nil {
@@ -58,6 +74,7 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq wo
 	boost, ok := h.boostForPod(pod)
 	if !ok {
 		log.V(5).Info("failed to get boost for pod")
+		return
 	}
 	if err := boost.DeletePod(ctx, pod); err != nil {
 		log.Error(err, "failed to handle pod delete")
@@ -75,6 +92,7 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 	boost, ok := h.boostForPod(pod)
 	if !ok {
 		log.V(5).Info("failed to get boost for pod")
+		return
 	}
 	if err := boost.UpsertPod(ctx, pod); err != nil {
 		log.Error(err, "failed to handle pod update")

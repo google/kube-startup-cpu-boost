@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package boost_test
+package controller_test
 
 import (
 	"testing"
@@ -27,16 +27,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestBoost(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Boost Suite")
-}
-
 var (
 	podTemplate   *corev1.Pod
 	annotTemplate *bpod.BoostPodAnnotation
 	specTemplate  *autoscaling.StartupCPUBoost
 )
+
+func TestController(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Controller Suite")
+}
 
 var _ = BeforeSuite(func() {
 	specTemplate = &autoscaling.StartupCPUBoost{

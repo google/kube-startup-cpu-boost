@@ -65,10 +65,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	boostPodHandler := &boostPodHandler{
-		manager: r.Manager,
-		log:     r.Log.WithName("pod-handler"),
-	}
+	boostPodHandler := NewBoostPodHandler(r.Manager, r.Log.WithName("pod-handler"))
 	lsPredicate, err := predicate.LabelSelectorPredicate(*boostPodHandler.GetPodLabelSelector())
 	if err != nil {
 		return err
