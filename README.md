@@ -86,8 +86,8 @@ gcloud container clusters create poc \
      boostPercent: 50
      durationPolicy:
        podCondition:
-         name: Ready
-         value: "True"
+         type: Ready
+         status: "True"
    ```
 
    The above example will boost CPU requests and limits of all PODs with `app=app-001` and `app=app-002`
