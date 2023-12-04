@@ -33,19 +33,42 @@ func TestBoost(t *testing.T) {
 }
 
 var (
-	podTemplate   *corev1.Pod
-	annotTemplate *bpod.BoostPodAnnotation
-	specTemplate  *autoscaling.StartupCPUBoost
+	podTemplate           *corev1.Pod
+	annotTemplate         *bpod.BoostPodAnnotation
+	specTemplate          *autoscaling.StartupCPUBoost
+	containerOneName      string
+	containerTwoName      string
+	containerOnePercValue int64
+	containerTwoPercValue int64
 )
 
 var _ = BeforeSuite(func() {
+	containerOneName = "container-one"
+	containerTwoName = "container-two"
+	containerOnePercValue = 120
+	containerTwoPercValue = 100
 	specTemplate = &autoscaling.StartupCPUBoost{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "boost-001",
 			Namespace: "demo",
 		},
 		Spec: autoscaling.StartupCPUBoostSpec{
-			BoostPercent: 55,
+			ResourcePolicy: autoscaling.ResourcePolicy{
+				ContainerPolicies: []autoscaling.ContainerPolicy{
+					{
+						ContainerName: containerOneName,
+						PercentageIncrease: autoscaling.PercentageIncrease{
+							Value: containerOnePercValue,
+						},
+					},
+					{
+						ContainerName: containerTwoName,
+						PercentageIncrease: autoscaling.PercentageIncrease{
+							Value: containerTwoPercValue,
+						},
+					},
+				},
+			},
 		},
 	}
 	annotTemplate = &bpod.BoostPodAnnotation{

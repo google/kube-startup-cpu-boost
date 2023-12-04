@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package policy
+package duration
 
 import (
 	"time"
@@ -31,11 +31,11 @@ type FixedDurationPolicy struct {
 	duration time.Duration
 }
 
-func NewFixedDurationPolicy(duration time.Duration) DurationPolicy {
+func NewFixedDurationPolicy(duration time.Duration) Policy {
 	return NewFixedDurationPolicyWithTimeFunc(time.Now, duration)
 }
 
-func NewFixedDurationPolicyWithTimeFunc(timeFunc TimeFunc, duration time.Duration) DurationPolicy {
+func NewFixedDurationPolicyWithTimeFunc(timeFunc TimeFunc, duration time.Duration) Policy {
 	return &FixedDurationPolicy{
 		timeFunc: timeFunc,
 		duration: duration,

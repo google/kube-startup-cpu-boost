@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
-	"github.com/google/kube-startup-cpu-boost/internal/boost/policy"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -33,9 +33,7 @@ var (
 )
 
 const (
-	DefaultManagerCheckInterval     = time.Duration(5 * time.Second)
-	StartupCPUBoostPodLabelKey      = "autoscaling.x-k8s.io/startup-cpu-boost"
-	StartupCPUBoostPodAnnotationKey = "autoscaling.x-k8s.io/startup-cpu-boost"
+	DefaultManagerCheckInterval = time.Duration(5 * time.Second)
 )
 
 type Manager interface {
@@ -168,7 +166,7 @@ func (m *managerImpl) addStartupCPUBoost(boost StartupCPUBoost) {
 		m.startupCPUBoosts[boost.Namespace()] = boosts
 	}
 	boosts[boost.Name()] = boost
-	if _, ok := boost.DurationPolicies()[policy.FixedDurationPolicyName]; ok {
+	if _, ok := boost.DurationPolicies()[duration.FixedDurationPolicyName]; ok {
 		key := boostKey{name: boost.Name(), namespace: boost.Namespace()}
 		m.timePolicyBoosts[key] = boost
 	}
@@ -187,7 +185,7 @@ func (m *managerImpl) updateTimePolicyBoosts(ctx context.Context) {
 	defer m.RUnlock()
 	log := m.loggerFromContext(ctx)
 	for _, boost := range m.timePolicyBoosts {
-		for _, pod := range boost.ValidatePolicy(ctx, policy.FixedDurationPolicyName) {
+		for _, pod := range boost.ValidatePolicy(ctx, duration.FixedDurationPolicyName) {
 			log = log.WithValues("boost", boost.Name(), "namespace", boost.Namespace(), "pod", pod.Name)
 			log.V(5).Info("updating pod with initial resources")
 			if err := boost.RevertResources(ctx, pod); err != nil {

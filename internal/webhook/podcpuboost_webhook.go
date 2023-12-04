@@ -22,9 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
-	inf "gopkg.in/inf.v0"
 	corev1 "k8s.io/api/core/v1"
-	apiResource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -53,78 +51,60 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	log := ctrl.LoggerFrom(ctx).WithName("cpuboost-webhook").WithValues("pod.Name", pod.Name, "pod.Namespace", pod.Namespace)
-	log.V(5).Info("Handling Pod")
+	log := ctrl.LoggerFrom(ctx).WithName("cpuboost-webhook")
+	log.V(5).Info("handling Pod")
 
 	boostImpl, ok := h.manager.StartupCPUBoostForPod(ctx, pod)
 	if !ok {
-		log.V(5).Info("StartupCPUBoost was not found")
+		log.V(5).Info("no startupCPUBoost matched")
 		return admission.Allowed("no StartupCPUBoost matched")
 	}
-	containers, ok := h.boostContainersCPU(pod, boostImpl.BoostPercent(), log)
-	if !ok {
-		log.V(5).Info("no suitable CPU requests were found")
-		return admission.Allowed("no CPU request found")
-	}
-	pod.Spec.Containers = containers
-	pod.ObjectMeta.Labels[boost.StartupCPUBoostPodLabelKey] = boostImpl.Name()
+	log = log.WithValues("boost", boostImpl.Name())
+	h.boostContainerResources(boostImpl, pod, log)
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-/*
-func (h *podCPUBoostHandler) InjectDecoder(d *admission.Decoder) error {
-	h.decoder = d
-	return nil
-}
-*/
-
-func (h *podCPUBoostHandler) boostContainersCPU(pod *corev1.Pod, boostPerc int64, log logr.Logger) (result []corev1.Container, boosted bool) {
-	result = pod.Spec.Containers
-	boostAnnot := bpod.NewBoostAnnotation()
-	for _, container := range pod.Spec.Containers {
-		log = log.WithValues("container.Name", container.Name)
-		if boostedReq, initReq, _ := increaseQuantityForResource(container.Resources.Requests, corev1.ResourceCPU, boostPerc, log.WithValues("resourceRequirement", "request")); boostedReq {
-			boosted = true
-			boostAnnot.InitCPURequests[container.Name] = initReq.String()
+func (h *podCPUBoostHandler) boostContainerResources(b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
+	annotation := bpod.NewBoostAnnotation()
+	for i, container := range pod.Spec.Containers {
+		policy, found := b.ResourcePolicy(container.Name)
+		if !found {
+			continue
 		}
-		if boostedLimit, initLimit, _ := increaseQuantityForResource(container.Resources.Limits, corev1.ResourceCPU, boostPerc, log.WithValues("resourceRequirement", "limit")); boostedLimit {
-			boostAnnot.InitCPULimits[container.Name] = initLimit.String()
-		}
+		log = log.WithValues("container", container.Name,
+			"CPURequests", container.Resources.Requests.Cpu().String(),
+			"CPULimits", container.Resources.Limits.Cpu().String(),
+		)
+		updateBoostAnnotation(annotation, container.Name, container.Resources)
+		resources := policy.NewResources(&container)
+		log = log.WithValues(
+			"newCPURequests", resources.Requests.Cpu().String(),
+			"newCPULimits", resources.Limits.Cpu().String(),
+		)
+		log.Info("increasing resources")
+		pod.Spec.Containers[i].Resources = *resources
 	}
-	if boosted {
+	if len(annotation.InitCPULimits) > 0 || len(annotation.InitCPURequests) > 0 {
 		if pod.Annotations == nil {
 			pod.Annotations = make(map[string]string)
 		}
-		pod.Annotations[boost.StartupCPUBoostPodAnnotationKey] = boostAnnot.ToJSON()
+		pod.Annotations[bpod.BoostAnnotationKey] = annotation.ToJSON()
+		if pod.Labels == nil {
+			pod.Labels = make(map[string]string)
+		}
+		pod.Labels[bpod.BoostLabelKey] = b.Name()
 	}
-	return
 }
 
-func increaseQuantityForResource(resources corev1.ResourceList, resName corev1.ResourceName, incPerc int64, log logr.Logger) (increased bool, init, new *apiResource.Quantity) {
-	if quantity, ok := resources[resName]; ok {
-		newQuantity := increaseQuantity(quantity, incPerc)
-		log = log.WithValues(resName.String(), quantity.String(), "incPercent", incPerc,
-			resName.String()+"New", newQuantity.String())
-		log.V(2).Info("increasing container resource quantity")
-		resources[corev1.ResourceCPU] = *newQuantity
-		init = &quantity
-		new = newQuantity
-		increased = true
+func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string, resources corev1.ResourceRequirements) {
+	if cpuRequests, ok := resources.Requests[corev1.ResourceCPU]; ok {
+		annot.InitCPURequests[containerName] = cpuRequests.String()
 	}
-	return
-}
-
-func increaseQuantity(quantity apiResource.Quantity, incPerc int64) *apiResource.Quantity {
-	quantityDec := quantity.AsDec()
-	decPerc := inf.NewDec(100+incPerc, 2)
-	decResult := &inf.Dec{}
-	decResult.Mul(quantityDec, decPerc)
-	decRoundedResult := inf.Dec{}
-	decRoundedResult.Round(decResult, 2, inf.RoundCeil)
-	return apiResource.NewDecimalQuantity(decRoundedResult, quantity.Format)
+	if cpuLimits, ok := resources.Limits[corev1.ResourceCPU]; ok {
+		annot.InitCPULimits[containerName] = cpuLimits.String()
+	}
 }

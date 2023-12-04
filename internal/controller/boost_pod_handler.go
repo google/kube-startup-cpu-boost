@@ -112,7 +112,7 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 	return &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
-				Key:      boost.StartupCPUBoostPodLabelKey,
+				Key:      bpod.BoostLabelKey,
 				Operator: metav1.LabelSelectorOpExists,
 				Values:   []string{},
 			},

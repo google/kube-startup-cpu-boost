@@ -45,7 +45,16 @@ var _ = BeforeSuite(func() {
 			Namespace: "demo",
 		},
 		Spec: autoscaling.StartupCPUBoostSpec{
-			BoostPercent: 55,
+			ResourcePolicy: autoscaling.ResourcePolicy{
+				ContainerPolicies: []autoscaling.ContainerPolicy{
+					{
+						ContainerName: "demo",
+						PercentageIncrease: autoscaling.PercentageIncrease{
+							Value: 120,
+						},
+					},
+				},
+			},
 		},
 	}
 	annotTemplate = &bpod.BoostPodAnnotation{

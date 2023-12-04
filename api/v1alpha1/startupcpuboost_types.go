@@ -60,16 +60,42 @@ type DurationPolicy struct {
 	PodCondition *PodConditionDurationPolicy `json:"podCondition,omitempty"`
 }
 
+// PercentagePolicy defines the policy used to determine the target
+// resources for a container
+type PercentageIncrease struct {
+	// Value specifies the percentage value
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum:=1
+	Value int64 `json:"value,omitempty"`
+}
+
+// ContainerPolicy defines the policy used to determine the target
+// resources for a container
+type ContainerPolicy struct {
+	// ContainerName specifies the name of container for a given policy
+	// +kubebuilder:validation:Required
+	ContainerName string `json:"containerName,omitempty"`
+	// PercentageIncrease specifies the percentage increase policy for a container
+	// +kubebuilder:validation:Required
+	PercentageIncrease PercentageIncrease `json:"percentageIncrease,omitempty"`
+}
+
+// ResourcePolicy defines the policy used to determine the target
+// resources for a POD
+type ResourcePolicy struct {
+	// ContainerPolicies specifies resource policies for the containers
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems:=1
+	ContainerPolicies []ContainerPolicy `json:"containerPolicies,omitempty"`
+}
+
 // StartupCPUBoostSpec defines the desired state of StartupCPUBoost
 type StartupCPUBoostSpec struct {
+	// ResourcePolicy specifies policies for container resource increase
+	ResourcePolicy ResourcePolicy `json:"resourcePolicy,omitempty"`
 	// DurationPolicy specifies policies for resource boost duration
 	// +kubebuilder:validation:Required
 	DurationPolicy DurationPolicy `json:"durationPolicy,omitempty"`
-	// BootPercent defines the percent of CPU request increase that POD will get
-	// during the CPU boost time period
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Minimum:=1
-	BoostPercent int64 `json:"boostPercent,omitempty"`
 }
 
 // StartupCPUBoostStatus defines the observed state of StartupCPUBoost

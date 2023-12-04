@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package policy
+package duration
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -27,7 +27,7 @@ type PodConditionPolicy struct {
 	status    corev1.ConditionStatus
 }
 
-func NewPodConditionPolicy(condition corev1.PodConditionType, status corev1.ConditionStatus) DurationPolicy {
+func NewPodConditionPolicy(condition corev1.PodConditionType, status corev1.ConditionStatus) Policy {
 	return &PodConditionPolicy{
 		condition: condition,
 		status:    status,
