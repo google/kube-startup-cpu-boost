@@ -12,17 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package policy contains implementation of resource boost duration policies
-package policy
-
-import corev1 "k8s.io/api/core/v1"
-
-const (
-	PolicyTypeFixed        = "Fixed"
-	PolicyTypePodCondition = "PodCondition"
-)
-
-type DurationPolicy interface {
-	Valid(pod *corev1.Pod) bool
-	Name() string
-}
+// Package webhook contains validating and mutating webhooks
+// that are used by the Startup CPU Boost
+package webhook

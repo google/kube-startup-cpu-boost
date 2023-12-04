@@ -22,8 +22,9 @@ import (
 
 	"github.com/go-logr/logr"
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
-	"github.com/google/kube-startup-cpu-boost/internal/boost/policy"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,8 +37,8 @@ import (
 type StartupCPUBoost interface {
 	Name() string
 	Namespace() string
-	BoostPercent() int64
-	DurationPolicies() map[string]policy.DurationPolicy
+	ResourcePolicy(containerName string) (resource.ContainerPolicy, bool)
+	DurationPolicies() map[string]duration.Policy
 	Pod(name string) (*corev1.Pod, bool)
 	UpsertPod(ctx context.Context, pod *corev1.Pod) error
 	DeletePod(ctx context.Context, pod *corev1.Pod) error
@@ -49,13 +50,13 @@ type StartupCPUBoost interface {
 // StartupCPUBoostImpl is an implementation of a StartupCPUBoost CRD
 type StartupCPUBoostImpl struct {
 	sync.RWMutex
-	name      string
-	namespace string
-	percent   int64
-	selector  labels.Selector
-	policies  map[string]policy.DurationPolicy
-	pods      sync.Map
-	client    client.Client
+	name             string
+	namespace        string
+	selector         labels.Selector
+	durationPolicies map[string]duration.Policy
+	resourcePolicies map[string]resource.ContainerPolicy
+	pods             sync.Map
+	client           client.Client
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
@@ -65,12 +66,12 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 		return nil, err
 	}
 	return &StartupCPUBoostImpl{
-		name:      boost.Name,
-		namespace: boost.Namespace,
-		selector:  selector,
-		percent:   boost.Spec.BoostPercent,
-		policies:  policiesFromSpec(boost.Spec.DurationPolicy),
-		client:    client,
+		name:             boost.Name,
+		namespace:        boost.Namespace,
+		selector:         selector,
+		durationPolicies: mapDurationPolicy(boost.Spec.DurationPolicy),
+		resourcePolicies: mapResourcePolicy(boost.Spec.ResourcePolicy),
+		client:           client,
 	}, nil
 }
 
@@ -84,14 +85,15 @@ func (b *StartupCPUBoostImpl) Namespace() string {
 	return b.namespace
 }
 
-// BoostPercent returns startup-cpu-boost boost percentage
-func (b *StartupCPUBoostImpl) BoostPercent() int64 {
-	return b.percent
+// ResourcePolicy returns the resource policy for a given container
+func (b *StartupCPUBoostImpl) ResourcePolicy(containerName string) (resource.ContainerPolicy, bool) {
+	policy, ok := b.resourcePolicies[containerName]
+	return policy, ok
 }
 
 // DurationPolicies returns configured duration policies
-func (b *StartupCPUBoostImpl) DurationPolicies() map[string]policy.DurationPolicy {
-	return b.policies
+func (b *StartupCPUBoostImpl) DurationPolicies() map[string]duration.Policy {
+	return b.durationPolicies
 }
 
 // Pod returns a POD if tracked by startup-cpu-boost.
@@ -112,7 +114,7 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 		return nil
 	}
 	log.V(5).Info("updating existing pod")
-	condPolicy, ok := b.policies[policy.PodConditionPolicyName]
+	condPolicy, ok := b.durationPolicies[duration.PodConditionPolicyName]
 	if !ok {
 		log.V(5).Info("skipping pod update as podCondition policy is missing")
 		return nil
@@ -140,7 +142,7 @@ func (b *StartupCPUBoostImpl) DeletePod(ctx context.Context, pod *corev1.Pod) er
 // The function returns slice of PODs that violated the policy.
 func (b *StartupCPUBoostImpl) ValidatePolicy(ctx context.Context, name string) (violated []*corev1.Pod) {
 	violated = make([]*corev1.Pod, 0)
-	policy, ok := b.policies[name]
+	policy, ok := b.durationPolicies[name]
 	if !ok {
 		return
 	}
@@ -185,7 +187,7 @@ func (b *StartupCPUBoostImpl) loggerFromContext(ctx context.Context) logr.Logger
 
 // validatePolicyOnPod validates given policy on a given POD.
 // The function returns true if policy is valid or false otherwise
-func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p policy.DurationPolicy, pod *corev1.Pod) (valid bool) {
+func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p duration.Policy, pod *corev1.Pod) (valid bool) {
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	if valid = p.Valid(pod); !valid {
 		log.WithValues("policy", p.Name()).V(5).Info("policy is not valid")
@@ -193,16 +195,26 @@ func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p policy.
 	return
 }
 
-// policiesFromSpec maps the Duration Policies from the API spec to the map holding policy
-// implementations under policy name keys
-func policiesFromSpec(policiesSpec autoscaling.DurationPolicy) map[string]policy.DurationPolicy {
-	policies := make(map[string]policy.DurationPolicy)
+// mapDurationPolicy maps the Duration Policy from the API spec to the map of policy
+// implementations with policy name keys
+func mapDurationPolicy(policiesSpec autoscaling.DurationPolicy) map[string]duration.Policy {
+	policies := make(map[string]duration.Policy)
 	if fixedPolicy := policiesSpec.Fixed; fixedPolicy != nil {
-		duration := fixedPolicyToDuration(*fixedPolicy)
-		policies[policy.FixedDurationPolicyName] = policy.NewFixedDurationPolicy(duration)
+		d := fixedPolicyToDuration(*fixedPolicy)
+		policies[duration.FixedDurationPolicyName] = duration.NewFixedDurationPolicy(d)
 	}
 	if condPolicy := policiesSpec.PodCondition; condPolicy != nil {
-		policies[policy.PodConditionPolicyName] = policy.NewPodConditionPolicy(condPolicy.Type, condPolicy.Status)
+		policies[duration.PodConditionPolicyName] = duration.NewPodConditionPolicy(condPolicy.Type, condPolicy.Status)
+	}
+	return policies
+}
+
+// mapResourcePolicy maps the Resource Policy from the API spec to the map of policy
+// implementations with container name keys
+func mapResourcePolicy(spec autoscaling.ResourcePolicy) map[string]resource.ContainerPolicy {
+	policies := make(map[string]resource.ContainerPolicy)
+	for _, policySpec := range spec.ContainerPolicies {
+		policies[policySpec.ContainerName] = resource.NewPercentageContainerPolicy(policySpec.PercentageIncrease.Value)
 	}
 	return policies
 }

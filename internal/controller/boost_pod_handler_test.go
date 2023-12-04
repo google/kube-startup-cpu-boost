@@ -18,7 +18,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/controller"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
@@ -193,10 +193,7 @@ var _ = Describe("BoostPodHandler", func() {
 				m = &selector.MatchExpressions[0]
 			})
 			It("has a valid key", func() {
-				Expect(m.Key).To(Equal(boost.StartupCPUBoostPodLabelKey))
-			})
-			It("has a valid operator", func() {
-				Expect(m.Key).To(Equal(boost.StartupCPUBoostPodLabelKey))
+				Expect(m.Key).To(Equal(pod.BoostLabelKey))
 			})
 			It("has empty values list", func() {
 				Expect(m.Values).To(HaveLen(0))

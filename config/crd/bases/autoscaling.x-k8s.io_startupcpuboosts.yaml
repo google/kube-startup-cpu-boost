@@ -78,12 +78,6 @@ spec:
           spec:
             description: StartupCPUBoostSpec defines the desired state of StartupCPUBoost
             properties:
-              boostPercent:
-                description: BootPercent defines the percent of CPU request increase
-                  that POD will get during the CPU boost time period
-                format: int64
-                minimum: 1
-                type: integer
               durationPolicy:
                 description: DurationPolicy specifies policies for resource boost
                   duration
@@ -113,6 +107,35 @@ spec:
                         description: type of a PODCondition to check in a policy
                         type: string
                     type: object
+                type: object
+              resourcePolicy:
+                description: ResourcePolicy specifies policies for container resource
+                  increase
+                properties:
+                  containerPolicies:
+                    description: ContainerPolicies specifies resource policies for
+                      the containers
+                    items:
+                      description: ContainerPolicy defines the policy used to determine
+                        the target resources for a container
+                      properties:
+                        containerName:
+                          description: ContainerName specifies the name of container
+                            for a given policy
+                          type: string
+                        percentageIncrease:
+                          description: PercentageIncrease specifies the percentage
+                            increase policy for a container
+                          properties:
+                            value:
+                              description: Value specifies the percentage value
+                              format: int64
+                              minimum: 1
+                              type: integer
+                          type: object
+                      type: object
+                    minItems: 1
+                    type: array
                 type: object
             type: object
           status:

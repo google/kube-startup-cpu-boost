@@ -20,7 +20,8 @@ import (
 
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
-	"github.com/google/kube-startup-cpu-boost/internal/boost/policy"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -51,8 +52,19 @@ var _ = Describe("StartupCPUBoost", func() {
 		It("returns valid namespace", func() {
 			Expect(boost.Namespace()).To(Equal(spec.Namespace))
 		})
-		It("returns valid boost percent", func() {
-			Expect(boost.BoostPercent()).To(Equal(spec.Spec.BoostPercent))
+		It("returns valid resource policy for container one", func() {
+			p, ok := boost.ResourcePolicy(containerOneName)
+			Expect(ok).To(BeTrue())
+			Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+			percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+			Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
+		})
+		It("returns valid resource policy for container two", func() {
+			p, ok := boost.ResourcePolicy(containerTwoName)
+			Expect(ok).To(BeTrue())
+			Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+			percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+			Expect(percPolicy.Percentage()).To(Equal(containerTwoPercValue))
 		})
 		When("the spec has fixed duration policy", func() {
 			BeforeEach(func() {
@@ -62,11 +74,11 @@ var _ = Describe("StartupCPUBoost", func() {
 				}
 			})
 			It("returns fixed duration policy implementation", func() {
-				Expect(boost.DurationPolicies()).To(HaveKey(policy.FixedDurationPolicyName))
+				Expect(boost.DurationPolicies()).To(HaveKey(duration.FixedDurationPolicyName))
 			})
 			It("returned fixed duration policy implementation is valid", func() {
-				p := boost.DurationPolicies()[policy.FixedDurationPolicyName]
-				fixedP, ok := p.(*policy.FixedDurationPolicy)
+				p := boost.DurationPolicies()[duration.FixedDurationPolicyName]
+				fixedP, ok := p.(*duration.FixedDurationPolicy)
 				Expect(ok).To(BeTrue())
 				expDuration := time.Duration(spec.Spec.DurationPolicy.Fixed.Value) * time.Second
 				Expect(fixedP.Duration()).To(Equal(expDuration))
@@ -84,11 +96,11 @@ var _ = Describe("StartupCPUBoost", func() {
 				}
 			})
 			It("returns pod condition duration policy implementation", func() {
-				Expect(boost.DurationPolicies()).To(HaveKey(policy.PodConditionPolicyName))
+				Expect(boost.DurationPolicies()).To(HaveKey(duration.PodConditionPolicyName))
 			})
 			It("returned pod condition duration policy implementation is valid", func() {
-				p := boost.DurationPolicies()[policy.PodConditionPolicyName]
-				podCondP, ok := p.(*policy.PodConditionPolicy)
+				p := boost.DurationPolicies()[duration.PodConditionPolicyName]
+				podCondP, ok := p.(*duration.PodConditionPolicy)
 				Expect(ok).To(BeTrue())
 				Expect(podCondP.Condition()).To(Equal(spec.Spec.DurationPolicy.PodCondition.Type))
 				Expect(podCondP.Status()).To(Equal(spec.Spec.DurationPolicy.PodCondition.Status))
