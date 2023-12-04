@@ -30,7 +30,7 @@ enabled.**
 To install the latest release of Kube Startup CPU Boost in your cluster, run the following command:
 
 ```sh
-kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.0.2/manifests.yaml
+kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.1.0/manifests.yaml
 ```
 
 The Kube Startup CPU Boost components run in `kube-startup-cpu-boost-system` namespace.
@@ -71,7 +71,7 @@ gcloud container clusters create poc \
 
 1. Create `StartupCPUBoost` object in your workload's namespace
 
-   ```sh
+   ```yaml
    apiVersion: autoscaling.x-k8s.io/v1alpha1
    kind: StartupCPUBoost
    metadata:
@@ -79,19 +79,24 @@ gcloud container clusters create poc \
      namespace: demo
    selector:
      matchExpressions:
-     - key: app
+     - key: app.kubernetes.io/name
        operator: In
-       values: ["app-001", "app-002"]
+       values: ["spring-rest-jpa"]
    spec:
-     boostPercent: 50
+     resourcePolicy:
+       containerPolicies:
+       - containerName: spring-rest-jpa
+         percentageIncrease:
+           value: 50
      durationPolicy:
        podCondition:
          type: Ready
          status: "True"
    ```
 
-   The above example will boost CPU requests and limits of all PODs with `app=app-001` and `app=app-002`
-   labels in `demo` namespace. The resources will be increased by 50% until the
+   The above example will boost CPU requests and limits of a container `spring-rest-jpa` in a
+   PODs with `app.kubernetes.io/name=spring-rest-jpa` label in `demo` namespace.
+   The resources will be increased by 50% until the
    [POD Condition](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)
    `Ready` becomes `True`.
 
