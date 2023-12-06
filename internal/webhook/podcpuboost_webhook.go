@@ -79,6 +79,10 @@ func (h *podCPUBoostHandler) boostContainerResources(b boost.StartupCPUBoost, po
 			"CPURequests", container.Resources.Requests.Cpu().String(),
 			"CPULimits", container.Resources.Limits.Cpu().String(),
 		)
+		if resizeRequiresRestart(container, corev1.ResourceCPU) {
+			log.Info("skipping container due to restart policy")
+			continue
+		}
 		updateBoostAnnotation(annotation, container.Name, container.Resources)
 		resources := policy.NewResources(&container)
 		log = log.WithValues(
@@ -107,4 +111,14 @@ func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string,
 	if cpuLimits, ok := resources.Limits[corev1.ResourceCPU]; ok {
 		annot.InitCPULimits[containerName] = cpuLimits.String()
 	}
+}
+
+func resizeRequiresRestart(c corev1.Container, r corev1.ResourceName) bool {
+	for _, p := range c.ResizePolicy {
+		if p.ResourceName != r {
+			continue
+		}
+		return p.RestartPolicy == corev1.RestartContainer
+	}
+	return false
 }

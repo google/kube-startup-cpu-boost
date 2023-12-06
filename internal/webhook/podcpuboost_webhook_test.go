@@ -189,6 +189,22 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 						Expect(response.Patches).To(HaveLen(3))
 					})
 				})
+				When("container has restart container resize policy", func() {
+					BeforeEach(func() {
+						pod.Spec.Containers[0].ResizePolicy = []corev1.ContainerResizePolicy{
+							{
+								ResourceName:  corev1.ResourceCPU,
+								RestartPolicy: corev1.RestartContainer,
+							},
+						}
+					})
+					It("allows the admission", func() {
+						Expect(response.Allowed).To(BeTrue())
+					})
+					It("returns admission with zero patches", func() {
+						Expect(response.Patches).To(HaveLen(0))
+					})
+				})
 			})
 			When("there is a policy for two containers", func() {
 				var (
