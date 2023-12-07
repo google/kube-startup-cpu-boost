@@ -1,4 +1,7 @@
-<!--  Copyright 2023 Google LLC
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ Copyright 2023 Google LLC
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -13,7 +16,6 @@
  limitations under the License.
 -->
 
-<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
