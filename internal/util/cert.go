@@ -23,12 +23,13 @@ import (
 )
 
 const (
-	certDir             = "/tmp/k8s-webhook-server/serving-certs"
-	podBoostWebHookName = "kube-startup-cpu-boost-mutating-webhook-configuration"
-	caName              = "kube-startup-cpu-boost-ca"
-	caOrganization      = "kube-startup-cpu-boost"
-	webhookServiceName  = "kube-startup-cpu-boost-webhook-service"
-	webhookSecretName   = "kube-startup-cpu-boost-webhook-secret"
+	certDir                    = "/tmp/k8s-webhook-server/serving-certs"
+	boostMutatingWebHookName   = "kube-startup-cpu-boost-mutating-webhook-configuration"
+	boostValidatingWebHookName = "kube-startup-cpu-boost-validating-webhook-configuration"
+	caName                     = "kube-startup-cpu-boost-ca"
+	caOrganization             = "kube-startup-cpu-boost"
+	webhookServiceName         = "kube-startup-cpu-boost-webhook-service"
+	webhookSecretName          = "kube-startup-cpu-boost-webhook-secret"
 )
 
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;update
@@ -49,7 +50,10 @@ func ManageCerts(mgr ctrl.Manager, namespace string, setupFinished chan struct{}
 		IsReady:        setupFinished,
 		Webhooks: []cert.WebhookInfo{{
 			Type: cert.Mutating,
-			Name: podBoostWebHookName,
+			Name: boostMutatingWebHookName,
+		}, {
+			Type: cert.Validating,
+			Name: boostValidatingWebHookName,
 		}},
 		RequireLeaderElection: false,
 	})

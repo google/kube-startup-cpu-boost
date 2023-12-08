@@ -122,6 +122,10 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, certsReady chan 
 	<-certsReady
 	setupLog.Info("Certificate generation has completed")
 
+	if failedWebhook, err := boostWebhook.Setup(mgr); err != nil {
+		setupLog.Error(err, "Unable to create webhook", "webhook", failedWebhook)
+		os.Exit(1)
+	}
 	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme)
 	mgr.GetWebhookServer().Register("/mutate-v1-pod", cpuBoostWebHook)
 
