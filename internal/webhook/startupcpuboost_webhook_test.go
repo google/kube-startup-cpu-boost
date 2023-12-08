@@ -1,0 +1,83 @@
+package webhook_test
+
+import (
+	"context"
+
+	"github.com/google/kube-startup-cpu-boost/api/v1alpha1"
+	"github.com/google/kube-startup-cpu-boost/internal/webhook"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+var _ = Describe("StartupCPUBoost webhook", func() {
+	var w webhook.StartupCPUBoostWebhook
+	BeforeEach(func() {
+		w = webhook.StartupCPUBoostWebhook{}
+	})
+
+	When("Validates StartupCPUBoost", func() {
+		var (
+			boost v1alpha1.StartupCPUBoost
+			err   error
+		)
+		When("Startup CPU Boost has no duration policy", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						DurationPolicy: v1alpha1.DurationPolicy{},
+					},
+				}
+			})
+			It("errors", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).To(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has more than one duration policy", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						DurationPolicy: v1alpha1.DurationPolicy{
+							Fixed:        &v1alpha1.FixedDurationPolicy{},
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).To(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has one duration policy", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("does not error", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+})

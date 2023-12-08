@@ -60,7 +60,7 @@ type DurationPolicy struct {
 	PodCondition *PodConditionDurationPolicy `json:"podCondition,omitempty"`
 }
 
-// PercentagePolicy defines the policy used to determine the target
+// PercentageIncrease defines the policy used to determine the target
 // resources for a container
 type PercentageIncrease struct {
 	// Value specifies the percentage value
