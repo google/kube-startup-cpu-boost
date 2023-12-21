@@ -134,7 +134,7 @@ spec:
 ### [Boost resources] percentage increase
 
 Define the percentage increase for a target container(s). The CPU requests and limits of selected
-container(s) will be increase by given percentage value.
+container(s) will be increase by the given percentage value.
 
 ```yaml
 spec:
@@ -146,7 +146,7 @@ spec:
 
 ### [Boost duration] fixed time
 
-Define the fixed amount of time, the resource boost will last for it since the POD creation.
+Define the fixed amount of time, the resource boost effect will last for it since the POD creation.
 
 ```yaml
 spec:
@@ -158,7 +158,7 @@ spec:
 
 ### [Boost duration] POD condition
 
-Define the POD condition, the resource boost will last until the condition is met.
+Define the POD condition, the resource boost effect will last until the condition is met.
 
   ```yaml
   spec:
