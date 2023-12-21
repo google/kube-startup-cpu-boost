@@ -11,6 +11,20 @@ the resources are set back to their original values.
 
 Note: this is not an officially supported Google product.
 
+---
+
+## Table of contents
+
+* [Description](#description)
+* [Installation](#installation)
+* [Usage](#usage)
+* [Features](#features)
+  * [[Boost target] POD label selector](#boost-target-pod-label-selector)
+  * [[Boost resources] percentage increase](#boost-resources-percentage-increase)
+  * [[Boost duration] fixed time](#boost-duration-fixed-time)
+  * [[Boost duration] POD condition](#boost-duration-pod-condition)
+* [License](#license)
+
 ## Description
 
 The primary use cases for Kube Startup CPU Boosts are workloads that require extra CPU resources during
@@ -30,7 +44,7 @@ enabled.**
 To install the latest release of Kube Startup CPU Boost in your cluster, run the following command:
 
 ```sh
-kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.1.0/manifests.yaml
+kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.2.0/manifests.yaml
 ```
 
 The Kube Startup CPU Boost components run in `kube-startup-cpu-boost-system` namespace.
@@ -81,11 +95,11 @@ gcloud container clusters create poc \
      matchExpressions:
      - key: app.kubernetes.io/name
        operator: In
-       values: ["spring-rest-jpa"]
+       values: ["spring-demo-app"]
    spec:
      resourcePolicy:
        containerPolicies:
-       - containerName: spring-rest-jpa
+       - containerName: spring-demo-app
          percentageIncrease:
            value: 50
      durationPolicy:
@@ -94,13 +108,65 @@ gcloud container clusters create poc \
          status: "True"
    ```
 
-   The above example will boost CPU requests and limits of a container `spring-rest-jpa` in a
-   PODs with `app.kubernetes.io/name=spring-rest-jpa` label in `demo` namespace.
+   The above example will boost CPU requests and limits of a container `spring-demo-app` in a
+   PODs with `app.kubernetes.io/name=spring-demo-app` label in `demo` namespace.
    The resources will be increased by 50% until the
    [POD Condition](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)
    `Ready` becomes `True`.
 
 2. Schedule your workloads and observe the results
+
+## Features
+
+### [Boost target] POD label selector
+
+Define the PODs that will be subject for resource boost with a label selector.
+
+```yaml
+spec:
+  selector:
+    matchExpressions:
+    - key: app.kubernetes.io/name
+       operator: In
+       values: ["spring-rest-jpa"]
+```
+
+### [Boost resources] percentage increase
+
+Define the percentage increase for a target container(s). The CPU requests and limits of selected
+container(s) will be increase by given percentage value.
+
+```yaml
+spec:
+  containerPolicies:
+   - containerName: spring-rest-jpa
+     percentageIncrease:
+       value: 50
+```
+
+### [Boost duration] fixed time
+
+Define the fixed amount of time, the resource boost will last for it since the POD creation.
+
+```yaml
+spec:
+ durationPolicy:
+  fixedDuration:
+    unit: Seconds
+    value: 60
+```
+
+### [Boost duration] POD condition
+
+Define the POD condition, the resource boost will last until the condition is met.
+
+  ```yaml
+  spec:
+   durationPolicy:
+     podCondition:
+       type: Ready
+       status: "True" 
+  ```
 
 ## License
 
