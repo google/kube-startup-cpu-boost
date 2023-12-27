@@ -93,5 +93,89 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
+		When("Startup CPU Boost has container without resource policies", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName: "container-one",
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).To(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has container with two resource policies", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:      "container-one",
+									FixedResources:     &v1alpha1.FixedResources{},
+									PercentageIncrease: &v1alpha1.PercentageIncrease{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).To(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has container with one resource policies", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:  "container-one",
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("does not error", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
 	})
 })

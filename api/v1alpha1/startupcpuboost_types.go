@@ -16,6 +16,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,8 +61,19 @@ type DurationPolicy struct {
 	PodCondition *PodConditionDurationPolicy `json:"podCondition,omitempty"`
 }
 
-// PercentageIncrease defines the policy used to determine the target
-// resources for a container
+// FixedResources defines the CPU resource policy that sets CPU resources
+// to the given values
+type FixedResources struct {
+	// Requests specifies the CPU requests
+	// +kubebuilder:validation:Required
+	Requests resource.Quantity `json:"requests,omitempty"`
+	// Limits specifies the CPU requests
+	// +kubebuilder:validation:Required
+	Limits resource.Quantity `json:"limits,omitempty"`
+}
+
+// PercentageIncrease defines the CPU resource policy that increases
+// CPU resources by the given percentage value
 type PercentageIncrease struct {
 	// Value specifies the percentage value
 	// +kubebuilder:validation:Required
@@ -75,9 +87,14 @@ type ContainerPolicy struct {
 	// ContainerName specifies the name of container for a given policy
 	// +kubebuilder:validation:Required
 	ContainerName string `json:"containerName,omitempty"`
-	// PercentageIncrease specifies the percentage increase policy for a container
-	// +kubebuilder:validation:Required
-	PercentageIncrease PercentageIncrease `json:"percentageIncrease,omitempty"`
+	// PercentageIncrease specifies the CPU resource policy that increases
+	// CPU resources by the given percentage value
+	// +kubebuilder:validation:Optional
+	PercentageIncrease *PercentageIncrease `json:"percentageIncrease,omitempty"`
+	// FixedResources specifies the CPU resource policy that sets the CPU
+	// resources to the given values
+	// +kubebuilder:validation:Optional
+	FixedResources *FixedResources `json:"fixedResources,omitempty"`
 }
 
 // ResourcePolicy defines the policy used to determine the target

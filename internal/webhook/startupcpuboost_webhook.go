@@ -67,6 +67,9 @@ func (w *StartupCPUBoostWebhook) ValidateDelete(ctx context.Context, obj runtime
 // validation on a top of declarative API validation
 func validate(boost *v1alpha1.StartupCPUBoost) error {
 	var allErrs field.ErrorList
+	if errs := validateContainerPolicies(boost.Spec.ResourcePolicy.ContainerPolicies); len(errs) > 0 {
+		allErrs = append(allErrs, errs...)
+	}
 	if err := validateDurationPolicy(boost.Spec.DurationPolicy); err != nil {
 		allErrs = append(allErrs, err)
 	}
@@ -92,4 +95,28 @@ func validateDurationPolicy(policy v1alpha1.DurationPolicy) *field.Error {
 		return field.Invalid(fldPath, policy, err.Error())
 	}
 	return nil
+}
+
+func validateContainerPolicies(policies []v1alpha1.ContainerPolicy) field.ErrorList {
+	var allErrs field.ErrorList
+	baseFldPath := field.NewPath("spec").
+		Child("resourcePolicy").
+		Child("containerPolicies")
+	for i := range policies {
+		fldPath := baseFldPath.Index(i)
+		var cnt int
+		if policies[i].FixedResources != nil {
+			cnt++
+		}
+		if policies[i].PercentageIncrease != nil {
+			cnt++
+		}
+		if cnt != 1 {
+			allErrs = append(allErrs, field.Invalid(fldPath,
+				policies[i],
+				"one type of resource policy should be defined",
+			))
+		}
+	}
+	return allErrs
 }
