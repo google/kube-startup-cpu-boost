@@ -125,7 +125,7 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 		return nil
 	}
 	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
-		log.V(5).Info("updating pod with initial resources")
+		log.V(2).Info("updating pod with initial resources")
 		if err := b.RevertResources(ctx, pod); err != nil {
 			return fmt.Errorf("failed to update pod: %s", err)
 		}

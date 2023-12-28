@@ -89,7 +89,7 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 			"newCPURequests", resources.Requests.Cpu().String(),
 			"newCPULimits", resources.Limits.Cpu().String(),
 		)
-		log.Info("increasing resources")
+		log.V(2).Info("increasing resources")
 		pod.Spec.Containers[i].Resources = *resources
 	}
 	if len(annotation.InitCPULimits) > 0 || len(annotation.InitCPURequests) > 0 {
