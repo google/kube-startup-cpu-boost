@@ -52,25 +52,8 @@ var _ = BeforeSuite(func() {
 			Name:      "boost-001",
 			Namespace: "demo",
 		},
-		Spec: autoscaling.StartupCPUBoostSpec{
-			ResourcePolicy: autoscaling.ResourcePolicy{
-				ContainerPolicies: []autoscaling.ContainerPolicy{
-					{
-						ContainerName: containerOneName,
-						PercentageIncrease: &autoscaling.PercentageIncrease{
-							Value: containerOnePercValue,
-						},
-					},
-					{
-						ContainerName: containerTwoName,
-						PercentageIncrease: &autoscaling.PercentageIncrease{
-							Value: containerTwoPercValue,
-						},
-					},
-				},
-			},
-		},
 	}
+
 	annotTemplate = &bpod.BoostPodAnnotation{
 		BoostTimestamp: time.Now(),
 		InitCPURequests: map[string]string{
