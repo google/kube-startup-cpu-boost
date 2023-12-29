@@ -17,6 +17,7 @@ package resource
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,21 +48,22 @@ func (p *FixedPolicy) NewResources(ctx context.Context, container *corev1.Contai
 		WithValues("newCPURequsts", p.cpuRequests.String()).
 		WithValues("newCPULimits", p.cpuLimits.String())
 	result := container.Resources.DeepCopy()
-	if qty, ok := result.Requests[corev1.ResourceCPU]; ok {
-		if qty.Cmp(p.cpuRequests) < 0 {
-			result.Requests[corev1.ResourceCPU] = p.cpuRequests
-		} else {
-			log = log.WithValues("cpuRequests", qty.String())
-			log.V(2).Info("container has higher CPU requests than in a policy")
-		}
-	}
-	if qty, ok := result.Limits[corev1.ResourceCPU]; ok {
-		if qty.Cmp(p.cpuLimits) < 0 {
-			result.Limits[corev1.ResourceCPU] = p.cpuLimits
-		} else {
-			log = log.WithValues("cpuLimits", qty.String())
-			log.V(2).Info("container has higher CPU limits than in a policy")
-		}
-	}
+	p.setResource(corev1.ResourceCPU, result.Requests, p.cpuRequests, log)
+	p.setResource(corev1.ResourceCPU, result.Limits, p.cpuLimits, log)
 	return result
+}
+
+func (p *FixedPolicy) setResource(resource corev1.ResourceName, resources corev1.ResourceList, target apiResource.Quantity, log logr.Logger) {
+	if target.IsZero() {
+		return
+	}
+	current, ok := resources[resource]
+	if !ok {
+		return
+	}
+	if target.Cmp(current) < 0 {
+		log.V(2).Info("container has higher CPU requests than policy")
+		return
+	}
+	resources[resource] = target
 }

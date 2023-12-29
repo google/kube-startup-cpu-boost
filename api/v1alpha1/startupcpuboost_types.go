@@ -68,7 +68,7 @@ type FixedResources struct {
 	// +kubebuilder:validation:Required
 	Requests resource.Quantity `json:"requests,omitempty"`
 	// Limits specifies the CPU requests
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	Limits resource.Quantity `json:"limits,omitempty"`
 }
 

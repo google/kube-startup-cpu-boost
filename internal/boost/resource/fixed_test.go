@@ -32,67 +32,117 @@ var _ = Describe("Fixed Resource Policy", func() {
 		container              *corev1.Container
 		cpuRequests, cpuLimits apiResource.Quantity
 	)
-
 	BeforeEach(func() {
-		cpuRequests = apiResource.MustParse("1")
-		cpuLimits = apiResource.MustParse("2")
+		container = containerTemplate.DeepCopy()
 	})
 	JustBeforeEach(func() {
 		policy = resource.NewFixedPolicy(cpuRequests, cpuLimits)
 		newResources = policy.NewResources(context.TODO(), container)
 	})
-	When("There are resources and limits defined", func() {
+	Describe("has both requests and limits defined", func() {
 		BeforeEach(func() {
-			container = containerTemplate.DeepCopy()
-			cpuReq := apiResource.MustParse("500m")
-			cpuLim := apiResource.MustParse("1")
-			container.Resources.Requests[corev1.ResourceCPU] = cpuReq
-			container.Resources.Limits[corev1.ResourceCPU] = cpuLim
+			cpuRequests = apiResource.MustParse("1")
+			cpuLimits = apiResource.MustParse("2")
 		})
-		It("returns resources with a valid CPU requests", func() {
-			Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
-			qty := newResources.Requests[corev1.ResourceCPU]
-			Expect(qty.String()).To(Equal(cpuRequests.String()))
+		When("container has requests and limits defined", func() {
+			BeforeEach(func() {
+				container.Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("500m")
+				container.Resources.Limits[corev1.ResourceCPU] = apiResource.MustParse("1")
+			})
+			It("returns resources with a valid CPU requests", func() {
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Requests[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(cpuRequests.String()))
+			})
+			It("returns resources with a valid CPU limits", func() {
+				Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Limits[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(cpuLimits.String()))
+			})
 		})
-		It("returns resources with a valid CPU limits", func() {
-			Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
-			qty := newResources.Limits[corev1.ResourceCPU]
-			Expect(qty.String()).To(Equal(cpuLimits.String()))
+		When("container has no requests and limits defined", func() {
+			BeforeEach(func() {
+				container.Resources.Requests = nil
+				container.Resources.Limits = nil
+			})
+			It("returns empty new resources", func() {
+				Expect(newResources.Requests).To(HaveLen(0))
+				Expect(newResources.Limits).To(HaveLen(0))
+			})
+		})
+		When("container has requests defined", func() {
+			BeforeEach(func() {
+				container.Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("500m")
+				container.Resources.Limits = nil
+			})
+			It("returns resources with a valid CPU requests", func() {
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Requests[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(cpuRequests.String()))
+			})
+			It("returns resources without CPU limits", func() {
+				Expect(newResources.Limits).NotTo(HaveKey(corev1.ResourceCPU))
+			})
+		})
+		When("container has lower requests and limits defined", func() {
+			var (
+				containerCPUReq, containerCPULim apiResource.Quantity
+			)
+			BeforeEach(func() {
+				containerCPUReq = cpuRequests.DeepCopy()
+				containerCPUReq.Add(apiResource.MustParse("1"))
+				containerCPULim = cpuLimits.DeepCopy()
+				containerCPULim.Add(apiResource.MustParse("1"))
+				container.Resources.Requests[corev1.ResourceCPU] = containerCPUReq
+				container.Resources.Limits[corev1.ResourceCPU] = containerCPULim
+			})
+			It("returns resources with a valid CPU requests", func() {
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Requests[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(containerCPUReq.String()))
+			})
+			It("returns resources with a valid CPU limits", func() {
+				Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Limits[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(containerCPULim.String()))
+			})
 		})
 	})
-	When("There are no requests and limits defined", func() {
+	Describe("has only requests defined", func() {
 		BeforeEach(func() {
-			container = containerTemplate.DeepCopy()
-			container.Resources.Requests = nil
-			container.Resources.Limits = nil
+			cpuRequests = apiResource.MustParse("1")
+			cpuLimits = apiResource.Quantity{}
 		})
-		It("returns empty new resources", func() {
-			Expect(newResources.Requests).To(HaveLen(0))
-			Expect(newResources.Limits).To(HaveLen(0))
+		When("container has resources and limits defined", func() {
+			BeforeEach(func() {
+				container.Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("500m")
+				container.Resources.Limits[corev1.ResourceCPU] = apiResource.MustParse("1")
+			})
+			It("returns resources with a valid CPU requests", func() {
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Requests[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(cpuRequests.String()))
+			})
+			It("returns resources with a valid CPU limits", func() {
+				Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Limits[corev1.ResourceCPU]
+				containerLimits := container.Resources.Limits[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(containerLimits.String()))
+			})
 		})
-	})
-	When("There are lower requests and limits defined", func() {
-		var (
-			containerCPUReq, containerCPULim apiResource.Quantity
-		)
-		BeforeEach(func() {
-			containerCPUReq = cpuRequests.DeepCopy()
-			containerCPUReq.Add(apiResource.MustParse("1"))
-			containerCPULim = cpuLimits.DeepCopy()
-			containerCPULim.Add(apiResource.MustParse("1"))
-			container = containerTemplate.DeepCopy()
-			container.Resources.Requests[corev1.ResourceCPU] = containerCPUReq
-			container.Resources.Limits[corev1.ResourceCPU] = containerCPULim
-		})
-		It("returns resources with a valid CPU requests", func() {
-			Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
-			qty := newResources.Requests[corev1.ResourceCPU]
-			Expect(qty.String()).To(Equal(containerCPUReq.String()))
-		})
-		It("returns resources with a valid CPU limits", func() {
-			Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
-			qty := newResources.Limits[corev1.ResourceCPU]
-			Expect(qty.String()).To(Equal(containerCPULim.String()))
+		When("container has resources defined", func() {
+			BeforeEach(func() {
+				container.Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("500m")
+				container.Resources.Limits = nil
+			})
+			It("returns resources with a valid CPU requests", func() {
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				qty := newResources.Requests[corev1.ResourceCPU]
+				Expect(qty.String()).To(Equal(cpuRequests.String()))
+			})
+			It("returns resources without CPU limits", func() {
+				Expect(newResources.Limits).NotTo(HaveKey(corev1.ResourceCPU))
+			})
 		})
 	})
 })
