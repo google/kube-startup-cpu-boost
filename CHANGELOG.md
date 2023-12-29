@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 (Dec 29, 2023)
+
+FEATURES:
+
+* Possibility to set fixed value in a CPU boost target [#18](https://github.com/google/kube-startup-cpu-boost/pull/18)
+
 ## 0.2.0 (Dec 8, 2023)
 
 FEATURES:
