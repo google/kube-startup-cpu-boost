@@ -60,7 +60,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 		return admission.Allowed("no StartupCPUBoost matched")
 	}
 	log = log.WithValues("boost", boostImpl.Name())
-	h.boostContainerResources(boostImpl, pod, log)
+	h.boostContainerResources(ctx, boostImpl, pod, log)
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
@@ -68,7 +68,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-func (h *podCPUBoostHandler) boostContainerResources(b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
+func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
 	annotation := bpod.NewBoostAnnotation()
 	for i, container := range pod.Spec.Containers {
 		policy, found := b.ResourcePolicy(container.Name)
@@ -84,12 +84,12 @@ func (h *podCPUBoostHandler) boostContainerResources(b boost.StartupCPUBoost, po
 			continue
 		}
 		updateBoostAnnotation(annotation, container.Name, container.Resources)
-		resources := policy.NewResources(&container)
+		resources := policy.NewResources(ctx, &container)
 		log = log.WithValues(
 			"newCPURequests", resources.Requests.Cpu().String(),
 			"newCPULimits", resources.Limits.Cpu().String(),
 		)
-		log.Info("increasing resources")
+		log.V(2).Info("increasing resources")
 		pod.Spec.Containers[i].Resources = *resources
 	}
 	if len(annotation.InitCPULimits) > 0 || len(annotation.InitCPURequests) > 0 {

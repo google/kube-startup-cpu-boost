@@ -278,9 +278,13 @@ func containerResourcePatch(pod *corev1.Pod, policy resource.ContainerPolicy, re
 	var newQuantity apiResource.Quantity
 	switch requirement {
 	case "requests":
-		newQuantity = policy.NewResources(&pod.Spec.Containers[containerIdx]).Requests[corev1.ResourceCPU]
+		newQuantity = policy.NewResources(
+			context.TODO(),
+			&pod.Spec.Containers[containerIdx]).Requests[corev1.ResourceCPU]
 	case "limits":
-		newQuantity = policy.NewResources(&pod.Spec.Containers[containerIdx]).Limits[corev1.ResourceCPU]
+		newQuantity = policy.NewResources(
+			context.TODO(),
+			&pod.Spec.Containers[containerIdx]).Limits[corev1.ResourceCPU]
 	default:
 		panic("unsupported resource requirement")
 	}

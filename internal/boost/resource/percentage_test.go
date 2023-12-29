@@ -15,6 +15,8 @@
 package resource_test
 
 import (
+	"context"
+
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,15 +38,13 @@ var _ = Describe("PercentageResourcePolicy", func() {
 	})
 	JustBeforeEach(func() {
 		policy = resource.NewPercentageContainerPolicy(percentage)
-		newResources = policy.NewResources(container)
+		newResources = policy.NewResources(context.TODO(), container)
 	})
 	When("There are resources and limits defined", func() {
 		BeforeEach(func() {
 			container = containerTemplate.DeepCopy()
-			cpuReq, err := apiResource.ParseQuantity("1")
-			Expect(err).NotTo(HaveOccurred())
-			cpuLim, err := apiResource.ParseQuantity("2")
-			Expect(err).NotTo(HaveOccurred())
+			cpuReq := apiResource.MustParse("1")
+			cpuLim := apiResource.MustParse("2")
 			container.Resources.Requests[corev1.ResourceCPU] = cpuReq
 			container.Resources.Limits[corev1.ResourceCPU] = cpuLim
 		})
@@ -59,7 +59,7 @@ var _ = Describe("PercentageResourcePolicy", func() {
 			Expect(qty.String()).To(Equal("2400m"))
 		})
 	})
-	When("There are no resources and limits defined", func() {
+	When("There are no requests and limits defined", func() {
 		BeforeEach(func() {
 			container = containerTemplate.DeepCopy()
 			container.Resources.Requests = nil

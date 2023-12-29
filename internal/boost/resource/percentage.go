@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package resource contains implementation of resource boost duration policies
 package resource
 
 import (
+	"context"
+
 	"gopkg.in/inf.v0"
 	corev1 "k8s.io/api/core/v1"
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
@@ -35,7 +36,7 @@ func (p *PercentageContainerPolicy) Percentage() int64 {
 	return p.percentage
 }
 
-func (p *PercentageContainerPolicy) NewResources(container *corev1.Container) *corev1.ResourceRequirements {
+func (p *PercentageContainerPolicy) NewResources(ctx context.Context, container *corev1.Container) *corev1.ResourceRequirements {
 	result := container.Resources.DeepCopy()
 	p.increaseResource(corev1.ResourceCPU, result.Requests)
 	p.increaseResource(corev1.ResourceCPU, result.Limits)

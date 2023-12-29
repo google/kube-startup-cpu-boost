@@ -15,8 +15,12 @@
 // Package resource contains implementation of resource boost duration policies
 package resource
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	"context"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 type ContainerPolicy interface {
-	NewResources(container *corev1.Container) *corev1.ResourceRequirements
+	NewResources(ctx context.Context, container *corev1.Container) *corev1.ResourceRequirements
 }

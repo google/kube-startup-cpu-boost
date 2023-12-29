@@ -16,6 +16,7 @@ package boost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -65,12 +66,16 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 	if err != nil {
 		return nil, err
 	}
+	resourcePolicies, err := mapResourcePolicy(boost.Spec.ResourcePolicy)
+	if err != nil {
+		return nil, err
+	}
 	return &StartupCPUBoostImpl{
 		name:             boost.Name,
 		namespace:        boost.Namespace,
 		selector:         selector,
 		durationPolicies: mapDurationPolicy(boost.Spec.DurationPolicy),
-		resourcePolicies: mapResourcePolicy(boost.Spec.ResourcePolicy),
+		resourcePolicies: resourcePolicies,
 		client:           client,
 	}, nil
 }
@@ -120,7 +125,7 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 		return nil
 	}
 	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
-		log.V(5).Info("updating pod with initial resources")
+		log.V(2).Info("updating pod with initial resources")
 		if err := b.RevertResources(ctx, pod); err != nil {
 			return fmt.Errorf("failed to update pod: %s", err)
 		}
@@ -211,12 +216,30 @@ func mapDurationPolicy(policiesSpec autoscaling.DurationPolicy) map[string]durat
 
 // mapResourcePolicy maps the Resource Policy from the API spec to the map of policy
 // implementations with container name keys
-func mapResourcePolicy(spec autoscaling.ResourcePolicy) map[string]resource.ContainerPolicy {
+func mapResourcePolicy(spec autoscaling.ResourcePolicy) (map[string]resource.ContainerPolicy, error) {
+	var errs []error
 	policies := make(map[string]resource.ContainerPolicy)
 	for _, policySpec := range spec.ContainerPolicies {
-		policies[policySpec.ContainerName] = resource.NewPercentageContainerPolicy(policySpec.PercentageIncrease.Value)
+		var policy resource.ContainerPolicy
+		var cnt int
+		if fixedResources := policySpec.FixedResources; fixedResources != nil {
+			policy = resource.NewFixedPolicy(fixedResources.Requests, fixedResources.Limits)
+			cnt++
+		}
+		if percIncrease := policySpec.PercentageIncrease; percIncrease != nil {
+			policy = resource.NewPercentageContainerPolicy(percIncrease.Value)
+			cnt++
+		}
+		if cnt != 1 {
+			errs = append(errs, fmt.Errorf("invalid number of resource policies fo container %s; must be one", policySpec.ContainerName))
+			continue
+		}
+		policies[policySpec.ContainerName] = policy
 	}
-	return policies
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	return policies, nil
 }
 
 // fixedPolicyToDuration maps the attributes from FixedDurationPolicy API spec to the

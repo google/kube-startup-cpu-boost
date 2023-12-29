@@ -49,7 +49,7 @@ var _ = BeforeSuite(func() {
 				ContainerPolicies: []autoscaling.ContainerPolicy{
 					{
 						ContainerName: "demo",
-						PercentageIncrease: autoscaling.PercentageIncrease{
+						PercentageIncrease: &autoscaling.PercentageIncrease{
 							Value: 120,
 						},
 					},

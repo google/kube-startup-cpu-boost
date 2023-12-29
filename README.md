@@ -21,6 +21,7 @@ Note: this is not an officially supported Google product.
 * [Features](#features)
   * [[Boost target] POD label selector](#boost-target-pod-label-selector)
   * [[Boost resources] percentage increase](#boost-resources-percentage-increase)
+  * [[Boost resources] fixed target](#boost-resources-fixed-target)
   * [[Boost duration] fixed time](#boost-duration-fixed-time)
   * [[Boost duration] POD condition](#boost-duration-pod-condition)
 * [License](#license)
@@ -142,6 +143,21 @@ spec:
    - containerName: spring-rest-jpa
      percentageIncrease:
        value: 50
+```
+
+### [Boost resources] fixed target
+
+Define the fixed resources for a target container(s). The CPU requests and limits of selected
+container(s) will be set to the given values. Note that specified requests and limits have to be
+higher than the ones in the container.
+
+```yaml
+spec:
+  containerPolicies:
+   - containerName: spring-rest-jpa
+     fixedResources:
+       requests: "1"
+       limits: "2"
 ```
 
 ### [Boost duration] fixed time

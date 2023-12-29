@@ -123,9 +123,29 @@ spec:
                           description: ContainerName specifies the name of container
                             for a given policy
                           type: string
+                        fixedResources:
+                          description: FixedResources specifies the CPU resource policy
+                            that sets the CPU resources to the given values
+                          properties:
+                            limits:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Limits specifies the CPU requests
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            requests:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Requests specifies the CPU requests
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
                         percentageIncrease:
-                          description: PercentageIncrease specifies the percentage
-                            increase policy for a container
+                          description: PercentageIncrease specifies the CPU resource
+                            policy that increases CPU resources by the given percentage
+                            value
                           properties:
                             value:
                               description: Value specifies the percentage value

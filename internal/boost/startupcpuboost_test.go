@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
+	apiResource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,7 +45,9 @@ var _ = Describe("StartupCPUBoost", func() {
 	Describe("Instantiates from the API specification", func() {
 		JustBeforeEach(func() {
 			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
-			Expect(err).ShouldNot(HaveOccurred())
+		})
+		It("does not error", func() {
+			Expect(err).NotTo(HaveOccurred())
 		})
 		It("returns valid name", func() {
 			Expect(boost.Name()).To(Equal(spec.Name))
@@ -52,19 +55,79 @@ var _ = Describe("StartupCPUBoost", func() {
 		It("returns valid namespace", func() {
 			Expect(boost.Namespace()).To(Equal(spec.Namespace))
 		})
-		It("returns valid resource policy for container one", func() {
-			p, ok := boost.ResourcePolicy(containerOneName)
-			Expect(ok).To(BeTrue())
-			Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
-			percPolicy, _ := p.(*resource.PercentageContainerPolicy)
-			Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
+		When("the spec has resource policy for containers", func() {
+			var (
+				containerOneName            = "container-one"
+				containerTwoName            = "container-two"
+				containerOnePercValue int64 = 120
+				containerTwoFixedReq        = apiResource.MustParse("1")
+				containerTwoFixedLim        = apiResource.MustParse("2")
+			)
+			BeforeEach(func() {
+				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						{
+							ContainerName: containerOneName,
+							PercentageIncrease: &autoscaling.PercentageIncrease{
+								Value: containerOnePercValue,
+							},
+						},
+						{
+							ContainerName: containerTwoName,
+							FixedResources: &autoscaling.FixedResources{
+								Requests: containerTwoFixedReq,
+								Limits:   containerTwoFixedLim,
+							},
+						},
+					},
+				}
+			})
+			It("does not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns valid resource policy for container one", func() {
+				p, ok := boost.ResourcePolicy(containerOneName)
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+				percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+				Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
+			})
+			It("returns valid resource policy for container two", func() {
+				p, ok := boost.ResourcePolicy(containerTwoName)
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
+			})
 		})
-		It("returns valid resource policy for container two", func() {
-			p, ok := boost.ResourcePolicy(containerTwoName)
-			Expect(ok).To(BeTrue())
-			Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
-			percPolicy, _ := p.(*resource.PercentageContainerPolicy)
-			Expect(percPolicy.Percentage()).To(Equal(containerTwoPercValue))
+		When("the spec has container policy without resource policy", func() {
+			BeforeEach(func() {
+				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						{
+							ContainerName: "container-one",
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("the spec has container policy with two resource policies", func() {
+			BeforeEach(func() {
+				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						{
+							ContainerName: "container-one",
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				Expect(err).To(HaveOccurred())
+			})
 		})
 		When("the spec has fixed duration policy", func() {
 			BeforeEach(func() {
