@@ -45,7 +45,7 @@ enabled.**
 To install the latest release of Kube Startup CPU Boost in your cluster, run the following command:
 
 ```sh
-kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.2.0/manifests.yaml
+kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.3.0/manifests.yaml
 ```
 
 The Kube Startup CPU Boost components run in `kube-startup-cpu-boost-system` namespace.
