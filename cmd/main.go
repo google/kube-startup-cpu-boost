@@ -90,8 +90,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	namespace, ok := os.LookupEnv("POD_NAMESPACE")
+	if !ok {
+		namespace = "kube-startup-cpu-boost-system"
+	}
+
 	certsReady := make(chan struct{})
-	if err = util.ManageCerts(mgr, "kube-startup-cpu-boost-system", certsReady); err != nil {
+	if err = util.ManageCerts(mgr, namespace, certsReady); err != nil {
 		setupLog.Error(err, "Unable to set up certificates")
 		os.Exit(1)
 	}
