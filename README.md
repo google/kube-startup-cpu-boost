@@ -44,11 +44,30 @@ enabled.**
 
 To install the latest release of Kube Startup CPU Boost in your cluster, run the following command:
 
+ <!-- x-release-please-start-version -->
 ```sh
-kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.3.0/manifests.yaml
+kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.4.0/manifests.yaml
 ```
+ <!-- x-release-please-end -->
 
 The Kube Startup CPU Boost components run in `kube-startup-cpu-boost-system` namespace.
+
+### Install with Kustomize
+
+You can use [Kustomize](https://github.com/kubernetes-sigs/kustomize) to install the Kube Startup CPU
+Boost with your own kustomization file.
+
+ <!-- x-release-please-start-version -->
+```sh
+cat <<EOF > kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- https://github.com/google/kube-startup-cpu-boost?ref=v0.4.0
+EOF
+kubectl kustomize | kubectl apply -f -
+```
+ <!-- x-release-please-end -->
 
 ### Installation on Kind cluster
 
