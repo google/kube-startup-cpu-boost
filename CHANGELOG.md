@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.3.0...v0.4.0) (2024-02-09)
+
+
+### Features
+
+* support running in non-default namespace ([#20](https://github.com/google/kube-startup-cpu-boost/issues/20)) ([f3cdc46](https://github.com/google/kube-startup-cpu-boost/commit/f3cdc46d262c18d591dd7d565655060d0d10ee89))
+
 ## 0.3.0 (Dec 29, 2023)
 
 FEATURES:
