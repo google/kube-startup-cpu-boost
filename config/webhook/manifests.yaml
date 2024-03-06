@@ -11,7 +11,7 @@ webhooks:
       name: webhook-service
       namespace: system
       path: /mutate-v1-pod
-  failurePolicy: Fail
+  failurePolicy: Ignore
   name: cpuboost.autoscaling.x-k8s.io
   rules:
   - apiGroups:
@@ -23,6 +23,7 @@ webhooks:
     resources:
     - pods
   sideEffects: None
+  timeoutSeconds: 2
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
