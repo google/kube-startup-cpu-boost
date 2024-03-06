@@ -9,12 +9,13 @@ spec:
       containers:
       - name: manager
         args:
-        - --health-probe-bind-address=:8081
-        - --metrics-bind-address=127.0.0.1:8080
-        - --leader-elect
         - --zap-log-level=5
         env:
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: "LEADER_ELECTION"
+          value: "true"
+        - name: METRICS_PROBE_BIND_ADDR
+          value: "127.0.0.1:8080"

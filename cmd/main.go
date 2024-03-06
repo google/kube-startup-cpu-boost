@@ -31,6 +31,7 @@ import (
 
 	autoscalingv1alpha1 "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	"github.com/google/kube-startup-cpu-boost/internal/config"
 	"github.com/google/kube-startup-cpu-boost/internal/controller"
 	"github.com/google/kube-startup-cpu-boost/internal/util"
 	boostWebhook "github.com/google/kube-startup-cpu-boost/internal/webhook"
@@ -38,8 +39,9 @@ import (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme           = runtime.NewScheme()
+	setupLog         = ctrl.Log.WithName("setup")
+	leaderElectionID = "8fd077db.x-k8s.io"
 )
 
 func init() {
@@ -50,14 +52,11 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+	cfg, err := config.NewEnvConfigProvider(os.LookupEnv).LoadConfig()
+	if err != nil {
+		setupLog.Error(err, "unable to load configuration")
+		os.Exit(1)
+	}
 	opts := zap.Options{
 		Development: true,
 	}
@@ -68,11 +67,11 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		MetricsBindAddress:     cfg.MetricsProbeBindAddr,
 		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "8fd077db.x-k8s.io",
+		HealthProbeBindAddress: cfg.HealthProbeBindAddr,
+		LeaderElection:         cfg.LeaderElection,
+		LeaderElectionID:       leaderElectionID,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -90,13 +89,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	namespace, ok := os.LookupEnv("POD_NAMESPACE")
-	if !ok {
-		namespace = "kube-startup-cpu-boost-system"
-	}
-
 	certsReady := make(chan struct{})
-	if err = util.ManageCerts(mgr, namespace, certsReady); err != nil {
+	if err = util.ManageCerts(mgr, cfg.Namespace, certsReady); err != nil {
 		setupLog.Error(err, "Unable to set up certificates")
 		os.Exit(1)
 	}
