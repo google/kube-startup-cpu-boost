@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.4.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.4.0...v0.4.1) (2024-03-06)
+
+
+### Bug Fixes
+
+* pod webhook cfg blocks scheduling on failure ([#28](https://github.com/google/kube-startup-cpu-boost/issues/28)) ([1f48f53](https://github.com/google/kube-startup-cpu-boost/commit/1f48f5337ab23af6b7421df95f2ebc99111c1b17))
+
 ## [0.4.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.3.0...v0.4.0) (2024-02-09)
 
 
