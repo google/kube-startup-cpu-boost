@@ -21,3 +21,4 @@
 go.work
 
 bin/
+demo-app/target

@@ -15,7 +15,7 @@
 package main
 
 import (
-	"flag"
+	"crypto/tls"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -28,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	autoscalingv1alpha1 "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
@@ -35,6 +36,7 @@ import (
 	"github.com/google/kube-startup-cpu-boost/internal/controller"
 	"github.com/google/kube-startup-cpu-boost/internal/util"
 	boostWebhook "github.com/google/kube-startup-cpu-boost/internal/webhook"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -60,15 +62,22 @@ func main() {
 	opts := zap.Options{
 		Development: true,
 	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	tlsOpts := []func(*tls.Config){}
+
+	webhookServer := webhook.NewServer(webhook.Options{
+		TLSOpts: tlsOpts,
+		Port:    9443,
+	})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     cfg.MetricsProbeBindAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress:   cfg.MetricsProbeBindAddr,
+			SecureServing: cfg.SecureMetrics,
+			TLSOpts:       tlsOpts,
+		},
+		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: cfg.HealthProbeBindAddr,
 		LeaderElection:         cfg.LeaderElection,
 		LeaderElectionID:       leaderElectionID,

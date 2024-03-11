@@ -44,5 +44,8 @@ var _ = Describe("Config", func() {
 		It("has valid health probe bind address", func() {
 			Expect(cfg.MetricsProbeBindAddr).To(Equal(config.MetricsProbeBindAddrDefault))
 		})
+		It("has valid secure metrics", func() {
+			Expect(cfg.SecureMetrics).To(Equal(config.SecureMetricsDefault))
+		})
 	})
 })
