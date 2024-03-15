@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.5.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.4.1...v0.5.0) (2024-03-15)
+
+
+### Features
+
+* adding config abstraction ([#31](https://github.com/google/kube-startup-cpu-boost/issues/31)) ([ac47461](https://github.com/google/kube-startup-cpu-boost/commit/ac47461f23d3d59cc93bed4b0ef3a1ee59fe3af6))
+* zap log level as environment variable ([#35](https://github.com/google/kube-startup-cpu-boost/issues/35)) ([d019b7a](https://github.com/google/kube-startup-cpu-boost/commit/d019b7ae5bfbee017a4a155a42fb28a4fccb33a8))
+
 ## [0.4.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.4.0...v0.4.1) (2024-03-06)
 
 
