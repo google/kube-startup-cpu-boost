@@ -47,5 +47,8 @@ var _ = Describe("Config", func() {
 		It("has valid secure metrics", func() {
 			Expect(cfg.SecureMetrics).To(Equal(config.SecureMetricsDefault))
 		})
+		It("has valid ZAP log level", func() {
+			Expect(cfg.ZapLogLevel).To(Equal(config.ZapLogLevelDefault))
+		})
 	})
 })

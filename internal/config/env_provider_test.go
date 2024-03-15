@@ -105,5 +105,15 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.SecureMetrics).To(BeTrue())
 			})
 		})
+		When("zap log level variable is set", func() {
+			var logLevel int
+			BeforeEach(func() {
+				logLevel = -5
+				lookupFuncMap[config.ZapLogLevelEnvVar] = fmt.Sprintf("%d", logLevel)
+			})
+			It("has valid check manager interval", func() {
+				Expect(cfg.ZapLogLevel).To(Equal(logLevel))
+			})
+		})
 	})
 })
