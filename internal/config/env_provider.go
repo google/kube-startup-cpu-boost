@@ -26,6 +26,7 @@ const (
 	LeaderElectionEnvVar       = "LEADER_ELECTION"
 	MetricsProbeBindAddrEnvVar = "METRICS_PROBE_BIND_ADDR"
 	HealthProbeBindAddrEnvVar  = "HEALTH_PROBE_BIND_ADDR"
+	SecureMetricsEnvVar        = "SECURE_METRICS"
 )
 
 type LookupEnvFunc func(key string) (string, bool)
@@ -67,6 +68,13 @@ func (p *EnvConfigProvider) LoadConfig() (*Config, error) {
 	}
 	if v, ok := p.lookupFunc(HealthProbeBindAddrEnvVar); ok {
 		config.HealthProbeBindAddr = v
+	}
+	if v, ok := p.lookupFunc(SecureMetricsEnvVar); ok {
+		boolVal, err := strconv.ParseBool(v)
+		config.SecureMetrics = boolVal
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s value is not a bool: %s", SecureMetricsEnvVar, err))
+		}
 	}
 	var err error
 	if len(errs) > 0 {

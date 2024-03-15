@@ -97,5 +97,13 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.HealthProbeBindAddr).To(Equal(bindAddr))
 			})
 		})
+		When("secure metrics env variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.SecureMetricsEnvVar] = "true"
+			})
+			It("has valid secure metrics", func() {
+				Expect(cfg.SecureMetrics).To(BeTrue())
+			})
+		})
 	})
 })
