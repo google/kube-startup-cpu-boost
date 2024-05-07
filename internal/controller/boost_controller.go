@@ -17,6 +17,9 @@ package controller
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,6 +32,14 @@ import (
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	BoostActiveConditionTrueReason   = "Ready"
+	BoostActiveConditionTrueMessage  = "Can boost new containers"
+	BoostActiveConditionFalseReason  = "NotFound"
+	BoostActiveConditionFalseMessage = "StartupCPUBoost not found"
 )
 
 // StartupCPUBoostReconciler reconciles a StartupCPUBoost object
@@ -46,20 +57,44 @@ type StartupCPUBoostReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the StartupCPUBoost object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.4/pkg/reconcile
 func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var boostObj autoscaling.StartupCPUBoost
-	if err := r.Client.Get(ctx, req.NamespacedName, &boostObj); err != nil {
+	var err error
+	if err = r.Client.Get(ctx, req.NamespacedName, &boostObj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	log := ctrl.LoggerFrom(ctx)
-	log.V(2).Info("Reconciling StartupCPUBoost")
+	log := r.Log.WithName("reconcile").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(2).Info("reconciling")
+	newBoostObj := boostObj.DeepCopy()
+	activeCondition := metav1.Condition{
+		Type:    "Active",
+		Status:  metav1.ConditionFalse,
+		Reason:  BoostActiveConditionFalseReason,
+		Message: BoostActiveConditionFalseMessage,
+	}
+	boost, ok := r.Manager.StartupCPUBoost(boostObj.Namespace, boostObj.Name)
+	if ok {
+		log.V(5).Info("found boost in a manager")
+		stats := boost.Stats()
+		activeCondition.Status = metav1.ConditionTrue
+		activeCondition.Reason = BoostActiveConditionTrueReason
+		activeCondition.Message = BoostActiveConditionTrueMessage
+		newBoostObj.Status.ActiveContainerBoosts = int32(stats.ActiveContainerBoosts)
+		newBoostObj.Status.TotalContainerBoosts = int32(stats.TotalContainerBoosts)
+	}
+	meta.SetStatusCondition(&newBoostObj.Status.Conditions, activeCondition)
+	if !equality.Semantic.DeepEqual(newBoostObj.Status, boostObj.Status) {
+		log.V(5).Info("updating status")
+		err = r.Client.Status().Update(ctx, newBoostObj)
+	}
+	if err != nil {
+		if apierrors.IsConflict(err) {
+			log.V(5).Info("status update conflict, requeueing")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		log.V(5).Error(err, "failed to update status")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -80,14 +115,14 @@ func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
-	spec, ok := e.Object.(*autoscaling.StartupCPUBoost)
+	boostObj, ok := e.Object.(*autoscaling.StartupCPUBoost)
 	if !ok {
 		return true
 	}
-	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(spec))
-	log.V(2).Info("handling startup-cpu-boost create")
+	log := r.Log.WithName("create").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(2).Info("creating")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	boost, err := boost.NewStartupCPUBoost(r.Client, spec)
+	boost, err := boost.NewStartupCPUBoost(r.Client, boostObj)
 	if err != nil {
 		log.Error(err, "failed to create startup-cpu-boost from spec")
 	}
@@ -102,21 +137,25 @@ func (r *StartupCPUBoostReconciler) Delete(e event.DeleteEvent) bool {
 	if !ok {
 		return true
 	}
-	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(e.Object))
-	log.V(2).Info("handling startup-cpu-boost delete")
+	log := r.Log.WithName("delete").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(2).Info("deleting")
 	ctx := ctrl.LoggerInto(context.Background(), log)
 	r.Manager.RemoveStartupCPUBoost(ctx, boostObj.Namespace, boostObj.Name)
 	return true
 }
 
 func (r *StartupCPUBoostReconciler) Update(e event.UpdateEvent) bool {
-	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(e.ObjectNew))
-	log.V(2).Info("handling startup-cpu-boost update")
+	boostObj, ok := e.ObjectNew.(*autoscaling.StartupCPUBoost)
+	if !ok {
+		return true
+	}
+	log := r.Log.WithName("update").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(2).Info("updating")
 	return true
 }
 
 func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
-	log := r.Log.WithValues("StartupCPUBoost", klog.KObj(e.Object))
-	log.V(2).Info("handling startup-cpu-boost generic event")
+	log := r.Log.WithName("generic").WithValues("object", klog.KObj(e.Object))
+	log.V(2).Info("handling generic event")
 	return true
 }

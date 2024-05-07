@@ -117,8 +117,23 @@ type StartupCPUBoostSpec struct {
 
 // StartupCPUBoostStatus defines the observed state of StartupCPUBoost
 type StartupCPUBoostStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// activeContainerBoosts is the number of containers which CPU
+	// resources were increased by the StartupCPUBoost and not yet
+	// reverted back to the original values
+	// +kubebuilder:validation:Optional
+	ActiveContainerBoosts int32 `json:"activeContainerBoosts,omitempty"`
+	// totalContainerBoosts is the number of containers which CPU
+	// resources were increased by the StartupCPUBoost
+	// +kubebuilder:validation:Optional
+	TotalContainerBoosts int32 `json:"totalContainerBoosts,omitempty"`
+	// Conditions hold the latest available observations of the StartupCPUBoost
+	// current state.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +patchStrategy=merge
+	// +patchMergeKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 //+kubebuilder:object:root=true

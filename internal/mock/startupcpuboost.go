@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	boost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	duration "github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	resource "github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	gomock "go.uber.org/mock/gomock"
@@ -168,6 +169,20 @@ func (m *MockStartupCPUBoost) RevertResources(arg0 context.Context, arg1 *v1.Pod
 func (mr *MockStartupCPUBoostMockRecorder) RevertResources(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevertResources", reflect.TypeOf((*MockStartupCPUBoost)(nil).RevertResources), arg0, arg1)
+}
+
+// Stats mocks base method.
+func (m *MockStartupCPUBoost) Stats() boost.StartupCPUBoostStats {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stats")
+	ret0, _ := ret[0].(boost.StartupCPUBoostStats)
+	return ret0
+}
+
+// Stats indicates an expected call of Stats.
+func (mr *MockStartupCPUBoostMockRecorder) Stats() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stats", reflect.TypeOf((*MockStartupCPUBoost)(nil).Stats))
 }
 
 // UpsertPod mocks base method.

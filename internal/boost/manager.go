@@ -22,7 +22,9 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
@@ -47,7 +49,7 @@ type Manager interface {
 	StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool)
 	// StartupCPUBoostForPod returns a startup-cpu-boost that matches a given pod
 	StartupCPUBoost(namespace, name string) (StartupCPUBoost, bool)
-	// Start runs the manager's control loop
+	SetStartupCPUBoostReconciler(reconciler reconcile.Reconciler)
 	Start(ctx context.Context) error
 }
 
@@ -77,6 +79,7 @@ func newTimeTickerImpl(d time.Duration) TimeTicker {
 type managerImpl struct {
 	sync.RWMutex
 	client           client.Client
+	reconciler       reconcile.Reconciler
 	ticker           TimeTicker
 	checkInterval    time.Duration
 	startupCPUBoosts map[string]map[string]StartupCPUBoost
@@ -158,7 +161,10 @@ func (m *managerImpl) StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod
 	return nil, false
 }
 
-// Start runs the manager's control loop
+func (m *managerImpl) SetStartupCPUBoostReconciler(reconciler reconcile.Reconciler) {
+	m.reconciler = reconciler
+}
+
 func (m *managerImpl) Start(ctx context.Context) error {
 	log := m.loggerFromContext(ctx)
 	defer m.ticker.Stop()
@@ -209,6 +215,7 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 	m.RLock()
 	defer m.RUnlock()
 	revertTasks := make(chan *podRevertTask, m.maxGoroutines)
+	reconcileTasks := make(chan *reconcile.Request, m.maxGoroutines)
 	errors := make(chan error, m.maxGoroutines)
 	log := m.loggerFromContext(ctx)
 
@@ -235,15 +242,33 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 					log.V(5).Info("updating pod with initial resources")
 					if err := task.boost.RevertResources(ctx, task.pod); err != nil {
 						errors <- fmt.Errorf("pod %s/%s: %w", task.pod.Namespace, task.pod.Name, err)
+					} else {
+						reconcileTasks <- &reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      task.boost.Name(),
+								Namespace: task.boost.Namespace(),
+							},
+						}
 					}
 				}
 			}()
 		}
 		wg.Wait()
+		close(reconcileTasks)
 		close(errors)
 	}()
-	for err := range errors {
-		log.Error(err, "failed to revert resources")
+
+	go func() {
+		for err := range errors {
+			log.Error(err, "failed to revert resources")
+		}
+	}()
+
+	reconcileRequests := dedupeReconcileRequests(reconcileTasks)
+	if m.reconciler != nil {
+		for _, req := range reconcileRequests {
+			m.reconciler.Reconcile(ctx, req)
+		}
 	}
 }
 
@@ -251,4 +276,16 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 func (m *managerImpl) loggerFromContext(ctx context.Context) logr.Logger {
 	return ctrl.LoggerFrom(ctx).
 		WithName("boost-manager")
+}
+
+func dedupeReconcileRequests(reconcileTasks chan *reconcile.Request) []reconcile.Request {
+	result := make([]reconcile.Request, 0, len(reconcileTasks))
+	requests := make(map[reconcile.Request]bool)
+	for task := range reconcileTasks {
+		requests[*task] = true
+	}
+	for k := range requests {
+		result = append(result, k)
+	}
+	return result
 }

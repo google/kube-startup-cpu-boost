@@ -21,9 +21,12 @@ import (
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type BoostPodHandler interface {
@@ -58,10 +61,17 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq wo
 		log.V(5).Info("failed to get boost for pod")
 		return
 	}
-	log.WithValues("boost", boost.Name())
+	boostName := boost.Name()
+	log.WithValues("boost", boostName)
 	if err := boost.UpsertPod(ctx, pod); err != nil {
 		log.Error(err, "failed to handle pod create")
 	}
+	wq.Add(reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      boostName,
+			Namespace: boost.Namespace(),
+		},
+	})
 }
 
 func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq workqueue.RateLimitingInterface) {
@@ -79,16 +89,25 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq wo
 	if err := boost.DeletePod(ctx, pod); err != nil {
 		log.Error(err, "failed to handle pod delete")
 	}
+	wq.Add(reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      boost.Name(),
+			Namespace: boost.Namespace(),
+		},
+	})
 }
 
 func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq workqueue.RateLimitingInterface) {
 	pod, ok := e.ObjectNew.(*corev1.Pod)
-	if !ok {
+	oldPod, ok_ := e.ObjectOld.(*corev1.Pod)
+	if !ok || !ok_ {
 		return
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod update")
-	//TODO react only on POD or container condition updates
+	if equality.Semantic.DeepEqual(pod.Status.Conditions, oldPod.Status.Conditions) {
+		return
+	}
 	boost, ok := h.boostForPod(pod)
 	if !ok {
 		log.V(5).Info("failed to get boost for pod")
@@ -97,6 +116,12 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 	if err := boost.UpsertPod(ctx, pod); err != nil {
 		log.Error(err, "failed to handle pod update")
 	}
+	wq.Add(reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      boost.Name(),
+			Namespace: boost.Namespace(),
+		},
+	})
 }
 
 func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent, wq workqueue.RateLimitingInterface) {

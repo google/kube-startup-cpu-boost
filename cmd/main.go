@@ -139,13 +139,14 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, certsReady chan 
 	}
 	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme)
 	mgr.GetWebhookServer().Register("/mutate-v1-pod", cpuBoostWebHook)
-
-	if err := (&controller.StartupCPUBoostReconciler{
+	boostCtrl := &controller.StartupCPUBoostReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
-		Log:     ctrl.Log.WithName("startup-cpu-boost-reconciler"),
+		Log:     ctrl.Log.WithName("boost-reconciler"),
 		Manager: boostMgr,
-	}).SetupWithManager(mgr); err != nil {
+	}
+	boostMgr.SetStartupCPUBoostReconciler(boostCtrl)
+	if err := boostCtrl.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StartupCPUBoost")
 		os.Exit(1)
 	}

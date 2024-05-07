@@ -26,6 +26,8 @@ import (
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("Manager", func() {
@@ -192,11 +194,12 @@ var _ = Describe("Manager", func() {
 		})
 		When("There are startup-cpu-boosts with fixed duration policy", func() {
 			var (
-				spec       *autoscaling.StartupCPUBoost
-				boost      cpuboost.StartupCPUBoost
-				pod        *corev1.Pod
-				mockClient *mock.MockClient
-				c          chan time.Time
+				spec           *autoscaling.StartupCPUBoost
+				boost          cpuboost.StartupCPUBoost
+				pod            *corev1.Pod
+				mockClient     *mock.MockClient
+				mockReconciler *mock.MockReconciler
+				c              chan time.Time
 			)
 			BeforeEach(func() {
 				spec = specTemplate.DeepCopy()
@@ -209,13 +212,17 @@ var _ = Describe("Manager", func() {
 				creationTimestamp := time.Now().Add(-1 * time.Duration(seconds) * time.Second).Add(-1 * time.Minute)
 				pod.CreationTimestamp = metav1.NewTime(creationTimestamp)
 				mockClient = mock.NewMockClient(mockCtrl)
+				mockReconciler = mock.NewMockReconciler(mockCtrl)
 
 				c = make(chan time.Time, 1)
 				mockTicker.EXPECT().Tick().MinTimes(1).Return(c)
 				mockTicker.EXPECT().Stop().Return()
 				mockClient.EXPECT().Update(gomock.Any(), gomock.Eq(pod)).MinTimes(1).Return(nil)
+				reconcileReq := reconcile.Request{NamespacedName: types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}}
+				mockReconciler.EXPECT().Reconcile(gomock.Any(), gomock.Eq(reconcileReq)).Times(1)
 			})
 			JustBeforeEach(func() {
+				manager.SetStartupCPUBoostReconciler(mockReconciler)
 				boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec)
 				Expect(err).ShouldNot(HaveOccurred())
 				err = boost.UpsertPod(ctx, pod)
