@@ -4,7 +4,7 @@ Kube Startup CPU Boost is a controller that increases CPU resource requests and 
 Kubernetes workload startup time. Once the workload is up and running,
 the resources are set back to their original values.
 
-[![Build](https://github.com/google/kube-startup-cpu-boost/actions/workflows/build.yml/badge.svg)](https://github.com/google/kube-startup-cpu-boost/actions/workflows/build.yml)
+[![Build](https://github.com/google/kube-startup-cpu-boost/actions/workflows/build.yaml/badge.svg)](https://github.com/google/kube-startup-cpu-boost/actions/workflows/build.yaml)
 [![Version](https://img.shields.io/github/v/release/google/kube-startup-cpu-boost?label=version)](https://img.shields.io/github/v/release/google/kube-startup-cpu-boost?label=version)
 [![Go Report Card](https://goreportcard.com/badge/github.com/google/kube-startup-cpu-boost)](https://goreportcard.com/report/github.com/google/kube-startup-cpu-boost)
 ![GitHub](https://img.shields.io/github/license/google/kube-startup-cpu-boost)
