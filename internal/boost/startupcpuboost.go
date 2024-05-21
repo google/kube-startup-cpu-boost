@@ -36,16 +36,52 @@ import (
 
 // StartupCPUBoost is an implementation of a StartupCPUBoost CRD
 type StartupCPUBoost interface {
+	// Name returns startup-cpu-boost name
 	Name() string
+	// Namespace returns startup-cpu-boost namespace
 	Namespace() string
+	// ResourcePolicy returns the resource policy for a given container
 	ResourcePolicy(containerName string) (resource.ContainerPolicy, bool)
+	// DurationPolicies returns configured duration policies
 	DurationPolicies() map[string]duration.Policy
+	// Pod returns a POD if tracked by startup-cpu-boost
 	Pod(name string) (*corev1.Pod, bool)
+	// UpsertPod inserts new or updates existing POD to startup-cpu-boost tracking
 	UpsertPod(ctx context.Context, pod *corev1.Pod) error
+	// DeletePod removes the POD from the startup-cpu-boost tracking
 	DeletePod(ctx context.Context, pod *corev1.Pod) error
+	// ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
 	ValidatePolicy(ctx context.Context, name string) []*corev1.Pod
+	// RevertResources updates POD's container resource requests and limits to their original
+	// values using the data from StartupCPUBoost annotation
 	RevertResources(ctx context.Context, pod *corev1.Pod) error
+	// Matches verifies if a boost selector matches the given POD
 	Matches(pod *corev1.Pod) bool
+	// Stats returns the StartupCPUBoost usage statistics
+	Stats() StartupCPUBoostStats
+}
+
+const (
+	StartupCPUBoostStatsPodCreateEvent = 1
+	StartupCPUBoostStatsPodUpdateEvent = 2
+	StartupCPUBoostStatsPodDeleteEvent = 3
+)
+
+type StartupCPUBoostStatsEventType int32
+
+type StartupCPUBoostStatsEvent struct {
+	Type   StartupCPUBoostStatsEventType
+	Object interface{}
+}
+
+// StartupCPUBoostStats holds the StartupCPUBoost usage statistics
+type StartupCPUBoostStats struct {
+	// activeContainerBoosts is a number of a containers which CPU resources
+	// were increased (boosted) and not yet reverted to their original values
+	ActiveContainerBoosts int
+	// totalContainerBoosts is a number of a containers which CPU resources
+	// were increased (boosted)
+	TotalContainerBoosts int
 }
 
 // StartupCPUBoostImpl is an implementation of a StartupCPUBoost CRD
@@ -56,8 +92,9 @@ type StartupCPUBoostImpl struct {
 	selector         labels.Selector
 	durationPolicies map[string]duration.Policy
 	resourcePolicies map[string]resource.ContainerPolicy
-	pods             sync.Map
+	pods             map[string]*corev1.Pod
 	client           client.Client
+	stats            StartupCPUBoostStats
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
@@ -76,7 +113,9 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 		selector:         selector,
 		durationPolicies: mapDurationPolicy(boost.Spec.DurationPolicy),
 		resourcePolicies: resourcePolicies,
+		pods:             make(map[string]*corev1.Pod),
 		client:           client,
+		stats:            StartupCPUBoostStats{},
 	}, nil
 }
 
@@ -103,22 +142,27 @@ func (b *StartupCPUBoostImpl) DurationPolicies() map[string]duration.Policy {
 
 // Pod returns a POD if tracked by startup-cpu-boost.
 func (b *StartupCPUBoostImpl) Pod(name string) (*corev1.Pod, bool) {
-	if v, ok := b.pods.Load(name); ok {
-		return v.(*corev1.Pod), ok
-	}
-	return nil, false
+	b.RLock()
+	defer b.RUnlock()
+	pod, ok := b.pods[name]
+	return pod, ok
 }
 
 // UpsertPod inserts new or updates existing POD to startup-cpu-boost tracking
 // The update of existing POD triggers validation logic and may result in POD update
 func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) error {
+	b.Lock()
+	defer b.Unlock()
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("upserting a pod")
-	if _, loaded := b.pods.Swap(pod.Name, pod); !loaded {
-		log.V(5).Info("inserted non-existing pod")
-		return nil
+	_, existing := b.pods[pod.Name]
+	b.pods[pod.Name] = pod
+	statsEvent := StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodCreateEvent, pod}
+	if existing {
+		statsEvent.Type = StartupCPUBoostStatsPodUpdateEvent
 	}
-	log.V(5).Info("updating existing pod")
+	b.updateStats(statsEvent)
+
 	condPolicy, ok := b.durationPolicies[duration.PodConditionPolicyName]
 	if !ok {
 		log.V(5).Info("skipping pod update as podCondition policy is missing")
@@ -126,7 +170,7 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 	}
 	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
 		log.V(2).Info("updating pod with initial resources")
-		if err := b.RevertResources(ctx, pod); err != nil {
+		if err := b.revertResources(ctx, pod); err != nil {
 			return fmt.Errorf("failed to update pod: %s", err)
 		}
 	}
@@ -135,43 +179,39 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 
 // DeletePod removes the POD from the startup-cpu-boost tracking
 func (b *StartupCPUBoostImpl) DeletePod(ctx context.Context, pod *corev1.Pod) error {
+	b.Lock()
+	defer b.Unlock()
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("handling pod delete")
-	if _, loaded := b.pods.LoadAndDelete(pod.Name); loaded {
-		log.Info("deletion of untracked pod")
-	}
+	delete(b.pods, pod.Name)
+	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
 	return nil
 }
 
 // ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
 // The function returns slice of PODs that violated the policy.
 func (b *StartupCPUBoostImpl) ValidatePolicy(ctx context.Context, name string) (violated []*corev1.Pod) {
+	b.RLock()
+	defer b.RUnlock()
 	violated = make([]*corev1.Pod, 0)
 	policy, ok := b.durationPolicies[name]
 	if !ok {
 		return
 	}
-	b.pods.Range(func(key, value any) bool {
-		pod := value.(*corev1.Pod)
+	for _, pod := range b.pods {
 		if !b.validatePolicyOnPod(ctx, policy, pod) {
 			violated = append(violated, pod)
 		}
-		return true
-	})
+	}
 	return
 }
 
 // RevertResources updates POD's container resource requests and limits to their original
 // values using the data from StartupCPUBoost annotation
 func (b *StartupCPUBoostImpl) RevertResources(ctx context.Context, pod *corev1.Pod) error {
-	if err := bpod.RevertResourceBoost(pod); err != nil {
-		return fmt.Errorf("failed to update pod spec: %s", err)
-	}
-	if err := b.client.Update(ctx, pod); err != nil {
-		return err
-	}
-	b.pods.Delete(pod.Name)
-	return nil
+	b.Lock()
+	defer b.Unlock()
+	return b.revertResources(ctx, pod)
 }
 
 // Matches verifies if a boost selector matches the given POD
@@ -179,11 +219,16 @@ func (b *StartupCPUBoostImpl) Matches(pod *corev1.Pod) bool {
 	return b.selector.Matches(labels.Set(pod.Labels))
 }
 
+// Stats returns the StartupCPUBoost usage statistics
+func (b *StartupCPUBoostImpl) Stats() StartupCPUBoostStats {
+	return b.stats
+}
+
 // loggerFromContext provides Logger from a current context with configured
 // values common for startup-cpu-boost like name or namespace
 func (b *StartupCPUBoostImpl) loggerFromContext(ctx context.Context) logr.Logger {
 	return ctrl.LoggerFrom(ctx).
-		WithName("startup-cpu-boost").
+		WithName("boost").
 		WithValues(
 			"name", b.name,
 			"namespace", b.namespace,
@@ -196,6 +241,44 @@ func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p duratio
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	if valid = p.Valid(pod); !valid {
 		log.WithValues("policy", p.Name()).V(5).Info("policy is not valid")
+	}
+	return
+}
+
+// revertResources updates POD's container resource requests and limits to their original
+// values using the data from StartupCPUBoost annotation
+func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.Pod) error {
+	if err := bpod.RevertResourceBoost(pod); err != nil {
+		return fmt.Errorf("failed to update pod spec: %s", err)
+	}
+	if err := b.client.Update(ctx, pod); err != nil {
+		return err
+	}
+	delete(b.pods, pod.Name)
+	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
+	return nil
+}
+
+// updateStats updates the StartupCPUBoost usage statistics based on the
+// received update event
+func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
+	var activeCnt int
+	for _, pod := range b.pods {
+		activeCnt += boostContainersLen(pod)
+	}
+	b.stats.ActiveContainerBoosts = activeCnt
+	switch e.Type {
+	case StartupCPUBoostStatsPodCreateEvent:
+		pod := e.Object.(*corev1.Pod)
+		b.stats.TotalContainerBoosts += boostContainersLen(pod)
+	}
+}
+
+// boostContainersLen returns the number of containers that were boosted
+// by StartupCPUBoost in a given Pod
+func boostContainersLen(pod *corev1.Pod) (cnt int) {
+	if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil {
+		return len(annot.InitCPURequests)
 	}
 	return
 }

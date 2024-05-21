@@ -170,7 +170,6 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 	})
-
 	Describe("Upserts a POD", func() {
 		var (
 			mockCtrl   *gomock.Controller
@@ -196,6 +195,11 @@ var _ = Describe("StartupCPUBoost", func() {
 				Expect(ok).To(BeTrue())
 				Expect(p.Name).To(Equal(pod.Name))
 			})
+			It("updates statistics", func() {
+				stats := boost.Stats()
+				Expect(stats.ActiveContainerBoosts).To(Equal(2))
+				Expect(stats.TotalContainerBoosts).To(Equal(2))
+			})
 		})
 		When("POD exists", func() {
 			var existingPod *corev1.Pod
@@ -218,6 +222,11 @@ var _ = Describe("StartupCPUBoost", func() {
 				Expect(found).To(BeTrue())
 				Expect(p.Name).To(Equal(pod.Name))
 				Expect(p.CreationTimestamp).To(Equal(createTimestamp))
+			})
+			It("updates statistics", func() {
+				stats := boost.Stats()
+				Expect(stats.ActiveContainerBoosts).To(Equal(2))
+				Expect(stats.TotalContainerBoosts).To(Equal(2))
 			})
 			When("boost spec has pod condition policy", func() {
 				BeforeEach(func() {
@@ -269,6 +278,11 @@ var _ = Describe("StartupCPUBoost", func() {
 			It("removes stored pod", func() {
 				_, found := boost.Pod(pod.Name)
 				Expect(found).To(BeFalse())
+			})
+			It("updates statistics", func() {
+				stats := boost.Stats()
+				Expect(stats.ActiveContainerBoosts).To(Equal(0))
+				Expect(stats.TotalContainerBoosts).To(Equal(2))
 			})
 		})
 	})
