@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.6.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.5.0...v0.6.0) (2024-05-21)
+
+
+### Features
+
+* status and conditions for StartupCPUBoost ([#39](https://github.com/google/kube-startup-cpu-boost/issues/39)) ([8678a00](https://github.com/google/kube-startup-cpu-boost/commit/8678a00d3e8e2fbb3362c6e35be1b419cd0e437d))
+* time policy based pod revert done in parallel ([#41](https://github.com/google/kube-startup-cpu-boost/issues/41)) ([e04806a](https://github.com/google/kube-startup-cpu-boost/commit/e04806ae357001a5978c6aad695597c53d0cc0ef))
+
 ## [0.5.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.4.1...v0.5.0) (2024-03-15)
 
 
