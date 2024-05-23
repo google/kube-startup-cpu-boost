@@ -50,5 +50,8 @@ var _ = Describe("Config", func() {
 		It("has valid ZAP log level", func() {
 			Expect(cfg.ZapLogLevel).To(Equal(config.ZapLogLevelDefault))
 		})
+		It("has valid ZAP development ", func() {
+			Expect(cfg.ZapDevelopment).To(Equal(config.ZapDevelopmentDefault))
+		})
 	})
 })

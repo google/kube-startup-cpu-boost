@@ -28,6 +28,7 @@ const (
 	HealthProbeBindAddrEnvVar  = "HEALTH_PROBE_BIND_ADDR"
 	SecureMetricsEnvVar        = "SECURE_METRICS"
 	ZapLogLevelEnvVar          = "ZAP_LOG_LEVEL"
+	ZapDevelopmentEnvVar       = "ZAP_DEVELOPMENT"
 )
 
 type LookupEnvFunc func(key string) (string, bool)
@@ -89,6 +90,13 @@ func (p *EnvConfigProvider) LoadConfig() (*Config, error) {
 		config.ZapLogLevel = intVal
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s value is not an int: %s", ZapLogLevelEnvVar, err))
+		}
+	}
+	if v, ok := p.lookupFunc(ZapDevelopmentEnvVar); ok {
+		boolVal, err := strconv.ParseBool(v)
+		config.ZapDevelopment = boolVal
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s value is not a bool: %s", ZapDevelopmentEnvVar, err))
 		}
 	}
 	var err error
