@@ -23,6 +23,7 @@ const (
 	HealthProbeBindAddrDefault  = ":8081"
 	SecureMetricsDefault        = false
 	ZapLogLevelDefault          = 0 // zapcore.InfoLevel
+	ZapDevelopmentDefault       = false
 )
 
 // ConfigProvider provides the Kube Startup CPU Boost configuration
@@ -48,6 +49,8 @@ type Config struct {
 	SecureMetrics bool
 	// ZapLogLevel determines the log level for the ZAP logger
 	ZapLogLevel int
+	// ZapDevelopment determines if the ZAP logger is in development mode
+	ZapDevelopment bool
 }
 
 // LoadDefaults loads the default configuration values
@@ -59,4 +62,5 @@ func (c *Config) LoadDefaults() {
 	c.HealthProbeBindAddr = HealthProbeBindAddrDefault
 	c.SecureMetrics = SecureMetricsDefault
 	c.ZapLogLevel = ZapLogLevelDefault
+	c.ZapDevelopment = ZapDevelopmentDefault
 }

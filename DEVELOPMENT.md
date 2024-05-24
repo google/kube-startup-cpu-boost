@@ -39,7 +39,18 @@ kind create cluster --config kind-poc-cluster.yaml
    kind load docker-image --name poc kube-startup-cpu-boost:dev
    ```
 
-4. Deploy controller on a cluster
+4. Enable development logging and other options if needed
+  
+   In `config/default/kustomization.yaml` uncomment the dev patch:
+
+   ```yaml
+   # Uncomment below for development
+   - manager_config_dev_patch.yaml
+   ```
+
+   Adapt the `config/default/manager_config_dev_patch.yaml` if needed.
+
+5. Deploy controller on a cluster
 
    ```sh
    make deploy IMG=docker.io/library/kube-startup-cpu-boost:dev

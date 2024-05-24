@@ -13,8 +13,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: ZAP_LOG_LEVEL
-          value: "-5"
         - name: "LEADER_ELECTION"
           value: "true"
         - name: METRICS_PROBE_BIND_ADDR

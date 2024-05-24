@@ -115,5 +115,13 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.ZapLogLevel).To(Equal(logLevel))
 			})
 		})
+		When("zap development variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.ZapDevelopmentEnvVar] = "true"
+			})
+			It("has valid zap development", func() {
+				Expect(cfg.ZapDevelopment).To(BeTrue())
+			})
+		})
 	})
 })
