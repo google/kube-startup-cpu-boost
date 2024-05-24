@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.7.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.6.0...v0.7.0) (2024-05-24)
+
+
+### Features
+
+* structured logging ([#43](https://github.com/google/kube-startup-cpu-boost/issues/43)) ([f3d08c9](https://github.com/google/kube-startup-cpu-boost/commit/f3d08c90c74106c0d3ac5cd6a8e7e8fcff6516d1))
+
 ## [0.6.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.5.0...v0.6.0) (2024-05-21)
 
 
