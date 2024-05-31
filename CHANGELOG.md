@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.7.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.7.0...v0.7.1) (2024-05-31)
+
+
+### Bug Fixes
+
+* kustomize tag typo ([#45](https://github.com/google/kube-startup-cpu-boost/issues/45)) ([992f00d](https://github.com/google/kube-startup-cpu-boost/commit/992f00d594305781e846e934817ba09036f6919f))
+
 ## [0.7.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.6.0...v0.7.0) (2024-05-24)
 
 
