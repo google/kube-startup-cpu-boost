@@ -34,6 +34,7 @@ import (
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
 	"github.com/google/kube-startup-cpu-boost/internal/config"
 	"github.com/google/kube-startup-cpu-boost/internal/controller"
+	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/util"
 	boostWebhook "github.com/google/kube-startup-cpu-boost/internal/webhook"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -60,8 +61,9 @@ func main() {
 		os.Exit(1)
 	}
 	ctrl.SetLogger(config.Logger(cfg.ZapDevelopment, cfg.ZapLogLevel))
-	tlsOpts := []func(*tls.Config){}
+	metrics.Register()
 
+	tlsOpts := []func(*tls.Config){}
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: tlsOpts,
 		Port:    9443,

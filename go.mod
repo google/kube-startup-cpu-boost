@@ -7,6 +7,11 @@ require (
 	github.com/onsi/ginkgo/v2 v2.16.0
 	github.com/onsi/gomega v1.31.1
 	github.com/open-policy-agent/cert-controller v0.10.1
+	github.com/prometheus/client_golang v1.19.0
+	github.com/prometheus/client_model v0.6.0
+	go.uber.org/mock v0.4.0
+	go.uber.org/zap v1.27.0
+	gomodules.xyz/jsonpatch/v2 v2.4.0
 	gopkg.in/inf.v0 v0.9.1
 	k8s.io/api v0.29.2
 	k8s.io/apimachinery v0.29.2
@@ -43,15 +48,11 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v1.19.0 // indirect
-	github.com/prometheus/client_model v0.6.0 // indirect
 	github.com/prometheus/common v0.50.0 // indirect
 	github.com/prometheus/procfs v0.13.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
@@ -60,7 +61,6 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.19.0 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.4.0
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
