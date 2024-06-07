@@ -26,6 +26,7 @@ import (
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
+	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -267,10 +268,13 @@ func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
 		activeCnt += boostContainersLen(pod)
 	}
 	b.stats.ActiveContainerBoosts = activeCnt
+	metrics.SetBoostContainersActive(b.namespace, b.name, float64(activeCnt))
 	switch e.Type {
 	case StartupCPUBoostStatsPodCreateEvent:
 		pod := e.Object.(*corev1.Pod)
-		b.stats.TotalContainerBoosts += boostContainersLen(pod)
+		boostContainersLen := boostContainersLen(pod)
+		b.stats.TotalContainerBoosts += boostContainersLen
+		metrics.AddBoostContainersTotal(b.namespace, b.name, float64(boostContainersLen))
 	}
 }
 

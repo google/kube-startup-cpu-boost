@@ -22,6 +22,7 @@ import (
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
+	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -41,6 +42,7 @@ var _ = Describe("StartupCPUBoost", func() {
 	BeforeEach(func() {
 		pod = podTemplate.DeepCopy()
 		spec = specTemplate.DeepCopy()
+		metrics.ClearBoostMetrics(spec.Namespace, spec.Name)
 	})
 	Describe("Instantiates from the API specification", func() {
 		JustBeforeEach(func() {
@@ -200,6 +202,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				Expect(stats.ActiveContainerBoosts).To(Equal(2))
 				Expect(stats.TotalContainerBoosts).To(Equal(2))
 			})
+			It("updates metrics", func() {
+				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+			})
 		})
 		When("POD exists", func() {
 			var existingPod *corev1.Pod
@@ -227,6 +233,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				stats := boost.Stats()
 				Expect(stats.ActiveContainerBoosts).To(Equal(2))
 				Expect(stats.TotalContainerBoosts).To(Equal(2))
+			})
+			It("updates metrics", func() {
+				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
 			})
 			When("boost spec has pod condition policy", func() {
 				BeforeEach(func() {
@@ -263,7 +273,6 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 	})
-
 	Describe("Deletes a pod", func() {
 		JustBeforeEach(func() {
 			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
@@ -283,6 +292,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				stats := boost.Stats()
 				Expect(stats.ActiveContainerBoosts).To(Equal(0))
 				Expect(stats.TotalContainerBoosts).To(Equal(2))
+			})
+			It("updates metrics", func() {
+				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(0)))
+				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
 			})
 		})
 	})

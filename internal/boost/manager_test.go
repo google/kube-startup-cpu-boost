@@ -20,6 +20,7 @@ import (
 
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
+	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,6 +33,9 @@ import (
 
 var _ = Describe("Manager", func() {
 	var manager cpuboost.Manager
+	BeforeEach(func() {
+		metrics.ClearSystemMetrics()
+	})
 	Describe("Registers startup-cpu-boost", func() {
 		var (
 			spec  *autoscaling.StartupCPUBoost
@@ -69,8 +73,10 @@ var _ = Describe("Manager", func() {
 				Expect(stored.Name()).To(Equal(spec.Name))
 				Expect(stored.Namespace()).To(Equal(spec.Namespace))
 			})
+			It("updates boost configurations metric", func() {
+				Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(1)))
+			})
 		})
-
 	})
 	Describe("De-registers startup-cpu-boost", func() {
 		var (
@@ -95,6 +101,9 @@ var _ = Describe("Manager", func() {
 			It("removes the startup-cpu-boost", func() {
 				_, ok := manager.StartupCPUBoost(spec.Namespace, spec.Name)
 				Expect(ok).To(BeFalse())
+			})
+			It("updates boost configurations metric", func() {
+				Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(0)))
 			})
 		})
 	})

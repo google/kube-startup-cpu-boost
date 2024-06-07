@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -118,6 +119,7 @@ func (m *managerImpl) AddStartupCPUBoost(ctx context.Context, boost StartupCPUBo
 	log := m.loggerFromContext(ctx).WithValues("boost", boost.Name, "namespace", boost.Namespace)
 	log.V(5).Info("handling startup-cpu-boost create")
 	m.addStartupCPUBoost(boost)
+	metrics.NewBoostConfiguration(boost.Namespace())
 	return nil
 }
 
@@ -132,6 +134,7 @@ func (m *managerImpl) RemoveStartupCPUBoost(ctx context.Context, namespace, name
 	}
 	key := boostKey{name: name, namespace: namespace}
 	delete(m.timePolicyBoosts, key)
+	metrics.DeleteBoostConfiguration(namespace)
 }
 
 // StartupCPUBoost returns a startup-cpu-boost with a given name and namespace
