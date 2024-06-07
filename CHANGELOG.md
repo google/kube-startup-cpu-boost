@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.8.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.7.1...v0.8.0) (2024-06-07)
+
+
+### Features
+
+* metrics ([#47](https://github.com/google/kube-startup-cpu-boost/issues/47)) ([a051f05](https://github.com/google/kube-startup-cpu-boost/commit/a051f05ffb2e81d8dd57e57e73773321f101a0a5))
+
 ## [0.7.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.7.0...v0.7.1) (2024-05-31)
 
 
