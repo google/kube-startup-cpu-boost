@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.8.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.8.0...v0.8.1) (2024-06-11)
+
+
+### Bug Fixes
+
+* metrics endpoint not accesible from remote hosts ([#49](https://github.com/google/kube-startup-cpu-boost/issues/49)) ([f36dcea](https://github.com/google/kube-startup-cpu-boost/commit/f36dcea22111ec1b0e821741d4ed087468587a8d))
+
 ## [0.8.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.7.1...v0.8.0) (2024-06-07)
 
 
