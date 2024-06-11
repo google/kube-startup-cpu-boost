@@ -22,6 +22,9 @@ spec:
     spec:
       containers:
       - name: manager
+        ports:
+        - containerPort: 8080
+          name: metrics
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -29,5 +32,3 @@ spec:
               fieldPath: metadata.namespace
         - name: "LEADER_ELECTION"
           value: "true"
-        - name: METRICS_PROBE_BIND_ADDR
-          value: "127.0.0.1:8080"

@@ -31,5 +31,5 @@ spec:
     matchLabels:
       control-plane: controller-manager
   endpoints:
-  - port: 8080
+  - port: metrics
     interval: 30s
