@@ -28,7 +28,7 @@ metadata:
   namespace: system
 spec:
   endpoints:
-    - targetPort: 8080
+    - port: metrics
   selector:
     matchLabels:
       control-plane: controller-manager
