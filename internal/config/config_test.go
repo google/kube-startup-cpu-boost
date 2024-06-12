@@ -53,5 +53,8 @@ var _ = Describe("Config", func() {
 		It("has valid ZAP development ", func() {
 			Expect(cfg.ZapDevelopment).To(Equal(config.ZapDevelopmentDefault))
 		})
+		It("has valid HTTP2 ", func() {
+			Expect(cfg.HTTP2).To(Equal(config.HTTP2Default))
+		})
 	})
 })

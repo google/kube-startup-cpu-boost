@@ -123,5 +123,13 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.ZapDevelopment).To(BeTrue())
 			})
 		})
+		When("http2 variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.HTTP2EnvVar] = "true"
+			})
+			It("has valid http2", func() {
+				Expect(cfg.HTTP2).To(BeTrue())
+			})
+		})
 	})
 })

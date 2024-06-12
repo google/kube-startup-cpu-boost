@@ -64,6 +64,13 @@ func main() {
 	metrics.Register()
 
 	tlsOpts := []func(*tls.Config){}
+	if !cfg.HTTP2 {
+		setupLog.Info("Disabling HTTP/2")
+		tlsOpts = append(tlsOpts, func(cfg *tls.Config) {
+			cfg.NextProtos = append(cfg.NextProtos, "http/1.1")
+		})
+	}
+
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: tlsOpts,
 		Port:    9443,

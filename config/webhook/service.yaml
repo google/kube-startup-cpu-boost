@@ -15,6 +15,7 @@ spec:
   ports:
     - port: 443
       protocol: TCP
+      appProtocol: https
       targetPort: 9443
   selector:
     control-plane: controller-manager
