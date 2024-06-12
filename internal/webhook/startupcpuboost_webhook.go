@@ -45,16 +45,16 @@ func setupWebhookForStartupCPUBoost(mgr ctrl.Manager) error {
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (w *StartupCPUBoostWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	boost := obj.(*v1alpha1.StartupCPUBoost)
-	log := ctrl.LoggerFrom(ctx).WithName("startupcpuboost-webhook")
-	log.V(5).Info("validating create", "startupcpuboost", klog.KObj(boost))
+	log := ctrl.LoggerFrom(ctx).WithName("boost-validate-webhook")
+	log.V(5).Info("handling create validation", "boos", klog.KObj(boost))
 	return nil, validate(boost)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (w *StartupCPUBoostWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	boost := newObj.(*v1alpha1.StartupCPUBoost)
-	log := ctrl.LoggerFrom(ctx).WithName("startupcpuboost-webhook")
-	log.V(5).Info("validating update", "startupcpuboost", klog.KObj(boost))
+	log := ctrl.LoggerFrom(ctx).WithName("boost-validate-webhook")
+	log.V(5).Info("handling update validation", "startupcpuboost", klog.KObj(boost))
 	return nil, validate(boost)
 }
 

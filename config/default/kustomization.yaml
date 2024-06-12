@@ -31,4 +31,4 @@ patches:
 - path: manager_webhook_patch.yaml
 
 # Uncomment below for local development
-#- manager_config_dev_patch.yaml
+#- path: manager_config_dev_patch.yaml

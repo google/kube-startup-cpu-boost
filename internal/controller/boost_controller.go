@@ -63,8 +63,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err = r.Client.Get(ctx, req.NamespacedName, &boostObj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	log := r.Log.WithName("reconcile").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
-	log.V(2).Info("reconciling")
+	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	newBoostObj := boostObj.DeepCopy()
 	activeCondition := metav1.Condition{
 		Type:    "Active",
@@ -84,15 +83,15 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	meta.SetStatusCondition(&newBoostObj.Status.Conditions, activeCondition)
 	if !equality.Semantic.DeepEqual(newBoostObj.Status, boostObj.Status) {
-		log.V(5).Info("updating status")
+		log.V(5).Info("updating boost status")
 		err = r.Client.Status().Update(ctx, newBoostObj)
 	}
 	if err != nil {
 		if apierrors.IsConflict(err) {
-			log.V(5).Info("status update conflict, requeueing")
+			log.V(5).Info("boost status update conflict, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		log.V(5).Error(err, "failed to update status")
+		log.Error(err, "boost status update error")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	return ctrl.Result{}, nil
@@ -100,7 +99,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	boostPodHandler := NewBoostPodHandler(r.Manager, r.Log.WithName("pod-handler"))
+	boostPodHandler := NewBoostPodHandler(r.Manager, ctrl.Log.WithName("pod-handler"))
 	lsPredicate, err := predicate.LabelSelectorPredicate(*boostPodHandler.GetPodLabelSelector())
 	if err != nil {
 		return err
@@ -119,15 +118,15 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	if !ok {
 		return true
 	}
-	log := r.Log.WithName("create").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
-	log.V(2).Info("creating")
+	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(5).Info("handling boost create event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
 	boost, err := boost.NewStartupCPUBoost(r.Client, boostObj)
 	if err != nil {
-		log.Error(err, "failed to create startup-cpu-boost from spec")
+		log.Error(err, "boost creation error")
 	}
 	if err := r.Manager.AddStartupCPUBoost(ctx, boost); err != nil {
-		log.Error(err, "failed to register startup-cpu-boost in manager")
+		log.Error(err, "boost registration error")
 	}
 	return true
 }
@@ -137,8 +136,8 @@ func (r *StartupCPUBoostReconciler) Delete(e event.DeleteEvent) bool {
 	if !ok {
 		return true
 	}
-	log := r.Log.WithName("delete").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
-	log.V(2).Info("deleting")
+	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(5).Info("handling boost delete event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
 	r.Manager.RemoveStartupCPUBoost(ctx, boostObj.Namespace, boostObj.Name)
 	return true
@@ -149,13 +148,13 @@ func (r *StartupCPUBoostReconciler) Update(e event.UpdateEvent) bool {
 	if !ok {
 		return true
 	}
-	log := r.Log.WithName("update").WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
-	log.V(2).Info("updating")
+	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
+	log.V(5).Info("handling boost update event")
 	return true
 }
 
 func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
-	log := r.Log.WithName("generic").WithValues("object", klog.KObj(e.Object))
-	log.V(2).Info("handling generic event")
+	log := r.Log.WithValues("object", klog.KObj(e.Object))
+	log.V(5).Info("handling generic event")
 	return true
 }

@@ -155,7 +155,7 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 	b.Lock()
 	defer b.Unlock()
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
-	log.V(5).Info("upserting a pod")
+	log.V(5).Info("handling pod upsert")
 	_, existing := b.pods[pod.Name]
 	b.pods[pod.Name] = pod
 	statsEvent := StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodCreateEvent, pod}
@@ -163,17 +163,18 @@ func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) er
 		statsEvent.Type = StartupCPUBoostStatsPodUpdateEvent
 	}
 	b.updateStats(statsEvent)
-
+	log.V(5).Info("pod upserted successfully")
 	condPolicy, ok := b.durationPolicies[duration.PodConditionPolicyName]
 	if !ok {
-		log.V(5).Info("skipping pod update as podCondition policy is missing")
+		log.V(5).Info("pod duration policy not found, skipping resource reversion")
 		return nil
 	}
 	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
-		log.V(2).Info("updating pod with initial resources")
+		log.V(5).Info("reverting pod resources")
 		if err := b.revertResources(ctx, pod); err != nil {
-			return fmt.Errorf("failed to update pod: %s", err)
+			return fmt.Errorf("pod resources reversion failed: %s", err)
 		}
+		log.Info("pod resources reverted successfully")
 	}
 	return nil
 }
