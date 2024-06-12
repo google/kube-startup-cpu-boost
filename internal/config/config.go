@@ -24,6 +24,7 @@ const (
 	SecureMetricsDefault        = false
 	ZapLogLevelDefault          = 0 // zapcore.InfoLevel
 	ZapDevelopmentDefault       = false
+	HTTP2Default                = false
 )
 
 // ConfigProvider provides the Kube Startup CPU Boost configuration
@@ -51,6 +52,8 @@ type Config struct {
 	ZapLogLevel int
 	// ZapDevelopment determines if the ZAP logger is in development mode
 	ZapDevelopment bool
+	// HTTP2 determines if the HTTP/2 protocol is used for webhook and metrics servers
+	HTTP2 bool
 }
 
 // LoadDefaults loads the default configuration values
@@ -63,4 +66,5 @@ func (c *Config) LoadDefaults() {
 	c.SecureMetrics = SecureMetricsDefault
 	c.ZapLogLevel = ZapLogLevelDefault
 	c.ZapDevelopment = ZapDevelopmentDefault
+	c.HTTP2 = HTTP2Default
 }
