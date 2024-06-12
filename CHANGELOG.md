@@ -1,6 +1,18 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.9.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.8.1...v0.9.0) (2024-06-12)
+
+
+### Features
+
+* option to disable (def) HTTP2 for servers ([#53](https://github.com/google/kube-startup-cpu-boost/issues/53)) ([ad27fa9](https://github.com/google/kube-startup-cpu-boost/commit/ad27fa9ea855c9b17657bf4ab373285337995430))
+
+
+### Bug Fixes
+
+* adjusted log levels, logger names ans msgs ([#51](https://github.com/google/kube-startup-cpu-boost/issues/51)) ([f0ed258](https://github.com/google/kube-startup-cpu-boost/commit/f0ed258c06e22a1a5ece1a123b3afb117424e936))
+
 ## [0.8.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.8.0...v0.8.1) (2024-06-11)
 
 
