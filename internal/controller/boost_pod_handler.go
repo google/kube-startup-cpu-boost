@@ -58,7 +58,7 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq wo
 	log.V(5).Info("handling pod create")
 	boost, ok := h.boostForPod(pod)
 	if !ok {
-		log.V(5).Info("failed to get boost for pod")
+		log.V(5).Info("pod create skipped: no boost for pod")
 		return
 	}
 	boostName := boost.Name()
@@ -83,7 +83,7 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq wo
 	log.V(5).Info("handling pod delete")
 	boost, ok := h.boostForPod(pod)
 	if !ok {
-		log.V(5).Info("failed to get boost for pod")
+		log.V(5).Info("pod delete skipped: no boost for pod")
 		return
 	}
 	if err := boost.DeletePod(ctx, pod); err != nil {
@@ -106,15 +106,16 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod update")
 	if equality.Semantic.DeepEqual(pod.Status.Conditions, oldPod.Status.Conditions) {
+		log.V(5).Info("pod update skipped: conditions did not change")
 		return
 	}
 	boost, ok := h.boostForPod(pod)
 	if !ok {
-		log.V(5).Info("failed to get boost for pod")
+		log.V(5).Info("pod update skipped: no boost for pod")
 		return
 	}
 	if err := boost.UpsertPod(ctx, pod); err != nil {
-		log.Error(err, "failed to handle pod update")
+		log.Error(err, "pod update failed")
 	}
 	wq.Add(reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -130,7 +131,7 @@ func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent, wq 
 		return
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
-	log.V(5).Info("got pod generic event")
+	log.V(5).Info("handling pod generic event")
 }
 
 func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {

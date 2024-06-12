@@ -51,13 +51,13 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	log := ctrl.LoggerFrom(ctx).WithName("cpuboost-webhook")
-	log.V(5).Info("handling Pod")
+	log := ctrl.LoggerFrom(ctx).WithName("boost-pod-webhook")
+	log.V(5).Info("handling pod")
 
 	boostImpl, ok := h.manager.StartupCPUBoostForPod(ctx, pod)
 	if !ok {
-		log.V(5).Info("no startupCPUBoost matched")
-		return admission.Allowed("no StartupCPUBoost matched")
+		log.V(5).Info("no boost matched")
+		return admission.Allowed("no boost matched")
 	}
 	log = log.WithValues("boost", boostImpl.Name())
 	h.boostContainerResources(ctx, boostImpl, pod, log)
@@ -76,8 +76,8 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 			continue
 		}
 		log = log.WithValues("container", container.Name,
-			"CPURequests", container.Resources.Requests.Cpu().String(),
-			"CPULimits", container.Resources.Limits.Cpu().String(),
+			"cpuRequests", container.Resources.Requests.Cpu().String(),
+			"cpuLimits", container.Resources.Limits.Cpu().String(),
 		)
 		if resizeRequiresRestart(container, corev1.ResourceCPU) {
 			log.Info("skipping container due to restart policy")
@@ -86,11 +86,11 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 		updateBoostAnnotation(annotation, container.Name, container.Resources)
 		resources := policy.NewResources(ctx, &container)
 		log = log.WithValues(
-			"newCPURequests", resources.Requests.Cpu().String(),
-			"newCPULimits", resources.Limits.Cpu().String(),
+			"newCpuRequests", resources.Requests.Cpu().String(),
+			"newCpuLimits", resources.Limits.Cpu().String(),
 		)
-		log.V(2).Info("increasing resources")
 		pod.Spec.Containers[i].Resources = *resources
+		log.Info("pod resources increased")
 	}
 	if len(annotation.InitCPULimits) > 0 || len(annotation.InitCPURequests) > 0 {
 		if pod.Annotations == nil {

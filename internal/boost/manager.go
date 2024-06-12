@@ -86,6 +86,7 @@ type managerImpl struct {
 	startupCPUBoosts map[string]map[string]StartupCPUBoost
 	timePolicyBoosts map[boostKey]StartupCPUBoost
 	maxGoroutines    int
+	log              logr.Logger
 }
 
 type boostKey struct {
@@ -105,6 +106,7 @@ func NewManagerWithTicker(client client.Client, ticker TimeTicker) Manager {
 		startupCPUBoosts: make(map[string]map[string]StartupCPUBoost),
 		timePolicyBoosts: make(map[boostKey]StartupCPUBoost),
 		maxGoroutines:    DefaultMaxGoroutines,
+		log:              ctrl.Log.WithName("boost-manager"),
 	}
 }
 
@@ -116,10 +118,11 @@ func (m *managerImpl) AddStartupCPUBoost(ctx context.Context, boost StartupCPUBo
 	if _, ok := m.getStartupCPUBoost(boost.Namespace(), boost.Name()); ok {
 		return errStartupCPUBoostAlreadyExists
 	}
-	log := m.loggerFromContext(ctx).WithValues("boost", boost.Name, "namespace", boost.Namespace)
-	log.V(5).Info("handling startup-cpu-boost create")
+	log := m.log.WithValues("boost", boost.Name(), "namespace", boost.Namespace())
+	log.V(5).Info("handling boost registration")
 	m.addStartupCPUBoost(boost)
 	metrics.NewBoostConfiguration(boost.Namespace())
+	log.Info("boost registered successfully")
 	return nil
 }
 
@@ -127,14 +130,15 @@ func (m *managerImpl) AddStartupCPUBoost(ctx context.Context, boost StartupCPUBo
 func (m *managerImpl) RemoveStartupCPUBoost(ctx context.Context, namespace, name string) {
 	m.Lock()
 	defer m.Unlock()
-	log := m.loggerFromContext(ctx).WithValues("boost", name, "namespace", namespace)
-	log.V(5).Info("handling startup-cpu-boost delete")
+	log := m.log.WithValues("boost", name, "namespace", namespace)
+	log.V(5).Info("handling boost deletion")
 	if boosts, ok := m.startupCPUBoosts[namespace]; ok {
 		delete(boosts, name)
 	}
 	key := boostKey{name: name, namespace: namespace}
 	delete(m.timePolicyBoosts, key)
 	metrics.DeleteBoostConfiguration(namespace)
+	log.Info("boost deleted successfully")
 }
 
 // StartupCPUBoost returns a startup-cpu-boost with a given name and namespace
@@ -150,8 +154,7 @@ func (m *managerImpl) StartupCPUBoost(namespace string, name string) (StartupCPU
 func (m *managerImpl) StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool) {
 	m.RLock()
 	defer m.RUnlock()
-	log := m.loggerFromContext(ctx).WithValues("pod", pod.Name, "namespace", pod.Namespace)
-	log.V(5).Info("handling startup-cpu-boost pod lookup")
+	m.log.V(5).Info("handling boost pod lookup")
 	nsBoosts, ok := m.startupCPUBoosts[pod.Namespace]
 	if !ok {
 		return nil, false
@@ -169,13 +172,12 @@ func (m *managerImpl) SetStartupCPUBoostReconciler(reconciler reconcile.Reconcil
 }
 
 func (m *managerImpl) Start(ctx context.Context) error {
-	log := m.loggerFromContext(ctx)
 	defer m.ticker.Stop()
-	log.V(2).Info("Starting")
+	m.log.Info("starting")
 	for {
 		select {
 		case <-m.ticker.Tick():
-			log.V(5).Info("tick...")
+			m.log.V(5).Info("tick...")
 			m.validateTimePolicyBoosts(ctx)
 		case <-ctx.Done():
 			return nil
@@ -220,7 +222,6 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 	revertTasks := make(chan *podRevertTask, m.maxGoroutines)
 	reconcileTasks := make(chan *reconcile.Request, m.maxGoroutines)
 	errors := make(chan error, m.maxGoroutines)
-	log := m.loggerFromContext(ctx)
 
 	go func() {
 		for _, boost := range m.timePolicyBoosts {
@@ -241,11 +242,12 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 			go func() {
 				defer wg.Done()
 				for task := range revertTasks {
-					log = log.WithValues("boost", task.boost.Name(), "namespace", task.boost.Namespace(), "pod", task.pod.Name)
-					log.V(5).Info("updating pod with initial resources")
+					log := m.log.WithValues("boost", task.boost.Name(), "namespace", task.boost.Namespace(), "pod", task.pod.Name)
+					log.V(5).Info("reverting pod resources")
 					if err := task.boost.RevertResources(ctx, task.pod); err != nil {
 						errors <- fmt.Errorf("pod %s/%s: %w", task.pod.Namespace, task.pod.Name, err)
 					} else {
+						log.Info("pod resources reverted successfully")
 						reconcileTasks <- &reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Name:      task.boost.Name(),
@@ -263,7 +265,7 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 
 	go func() {
 		for err := range errors {
-			log.Error(err, "failed to revert resources")
+			m.log.Error(err, "pod resources reversion failed")
 		}
 	}()
 
@@ -273,12 +275,6 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 			m.reconciler.Reconcile(ctx, req)
 		}
 	}
-}
-
-// loggerFromContext returns a pre-configured logger from the given context
-func (m *managerImpl) loggerFromContext(ctx context.Context) logr.Logger {
-	return ctrl.LoggerFrom(ctx).
-		WithName("boost-manager")
 }
 
 func dedupeReconcileRequests(reconcileTasks chan *reconcile.Request) []reconcile.Request {
