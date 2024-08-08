@@ -32,7 +32,7 @@ import (
 // +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,timeoutSeconds=2,groups="",resources=pods,verbs=create,versions=v1,name=cpuboost.autoscaling.x-k8s.io,admissionReviewVersions=v1
 
 type podCPUBoostHandler struct {
-	decoder *admission.Decoder
+	decoder admission.Decoder
 	manager boost.Manager
 }
 
