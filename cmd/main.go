@@ -87,17 +87,6 @@ func main() {
 		HealthProbeBindAddress: cfg.HealthProbeBindAddr,
 		LeaderElection:         cfg.LeaderElection,
 		LeaderElectionID:       leaderElectionID,
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -111,7 +100,7 @@ func main() {
 	}
 
 	boostMgr := boost.NewManager(mgr.GetClient())
-	go setupControllers(mgr, boostMgr, certsReady)
+	go setupControllers(mgr, boostMgr, cfg, certsReady)
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -131,7 +120,7 @@ func main() {
 	}
 }
 
-func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, certsReady chan struct{}) {
+func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config, certsReady chan struct{}) {
 	setupLog.Info("Waiting for certificate generation to complete")
 	<-certsReady
 	setupLog.Info("Certificate generation has completed")
@@ -140,7 +129,7 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, certsReady chan 
 		setupLog.Error(err, "Unable to create webhook", "webhook", failedWebhook)
 		os.Exit(1)
 	}
-	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme)
+	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme, cfg.RemoveLimits)
 	mgr.GetWebhookServer().Register("/mutate-v1-pod", cpuBoostWebHook)
 	boostCtrl := &controller.StartupCPUBoostReconciler{
 		Client:  mgr.GetClient(),
@@ -153,11 +142,5 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, certsReady chan 
 		setupLog.Error(err, "unable to create controller", "controller", "StartupCPUBoost")
 		os.Exit(1)
 	}
-	/*
-		if err = (&autoscalingv1alpha1.StartupCPUBoost{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "StartupCPUBoost")
-			os.Exit(1)
-		}
-	*/
 	//+kubebuilder:scaffold:builder
 }

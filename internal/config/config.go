@@ -25,6 +25,7 @@ const (
 	ZapLogLevelDefault          = 0 // zapcore.InfoLevel
 	ZapDevelopmentDefault       = false
 	HTTP2Default                = false
+	RemoveLimitsDefault         = true
 )
 
 // ConfigProvider provides the Kube Startup CPU Boost configuration
@@ -42,9 +43,9 @@ type Config struct {
 	// LeaderElection enables leader election for controller manager
 	// Enabling this will ensure there is only one active controller manager
 	LeaderElection bool
-	// MetricsProbeBindAddr is the address the metric endpoint binds to
+	// MetricsProbeBindAddr is the address the metrics endpoint binds to
 	MetricsProbeBindAddr string
-	// HeathProbeBindAddr is the address the probe endpoint binds to
+	// HeathProbeBindAddr is the address the health probe endpoint binds to
 	HealthProbeBindAddr string
 	// SecureMetrics determines if the metrics endpoint is served securely
 	SecureMetrics bool
@@ -54,6 +55,8 @@ type Config struct {
 	ZapDevelopment bool
 	// HTTP2 determines if the HTTP/2 protocol is used for webhook and metrics servers
 	HTTP2 bool
+	// RemoveLimits determines if CPU resource limits should be removed during boost
+	RemoveLimits bool
 }
 
 // LoadDefaults loads the default configuration values
@@ -67,4 +70,5 @@ func (c *Config) LoadDefaults() {
 	c.ZapLogLevel = ZapLogLevelDefault
 	c.ZapDevelopment = ZapDevelopmentDefault
 	c.HTTP2 = HTTP2Default
+	c.RemoveLimits = RemoveLimitsDefault
 }

@@ -131,5 +131,13 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.HTTP2).To(BeTrue())
 			})
 		})
+		When("removeLimits variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.RemoveLimitsEnvVar] = "false"
+			})
+			It("has valid remove limits", func() {
+				Expect(cfg.RemoveLimits).To(BeFalse())
+			})
+		})
 	})
 })

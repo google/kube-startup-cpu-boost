@@ -30,6 +30,7 @@ const (
 	ZapLogLevelEnvVar          = "ZAP_LOG_LEVEL"
 	ZapDevelopmentEnvVar       = "ZAP_DEVELOPMENT"
 	HTTP2EnvVar                = "HTTP2"
+	RemoveLimitsEnvVar         = "REMOVE_LIMITS"
 )
 
 type LookupEnvFunc func(key string) (string, bool)
@@ -57,6 +58,7 @@ func (p *EnvConfigProvider) LoadConfig() (*Config, error) {
 	errs = p.loadZapLogLevel(&config, errs)
 	errs = p.loadZapDevelopment(&config, errs)
 	errs = p.loadHTTP2(&config, errs)
+	errs = p.loadRemoveLimits(&config, errs)
 	var err error
 	if len(errs) > 0 {
 		err = errors.Join(errs...)
@@ -142,7 +144,18 @@ func (p *EnvConfigProvider) loadHTTP2(config *Config, curErrs []error) (errs []e
 		boolVal, err := strconv.ParseBool(v)
 		config.HTTP2 = boolVal
 		if err != nil {
-			errs = append(curErrs, fmt.Errorf("%s value is not a bool: %s", LeaderElectionEnvVar, err))
+			errs = append(curErrs, fmt.Errorf("%s value is not a bool: %s", HTTP2EnvVar, err))
+		}
+	}
+	return
+}
+
+func (p *EnvConfigProvider) loadRemoveLimits(config *Config, curErrs []error) (errs []error) {
+	if v, ok := p.lookupFunc(RemoveLimitsEnvVar); ok {
+		boolVal, err := strconv.ParseBool(v)
+		config.RemoveLimits = boolVal
+		if err != nil {
+			errs = append(curErrs, fmt.Errorf("%s value is not a bool: %s", RemoveLimitsEnvVar, err))
 		}
 	}
 	return
