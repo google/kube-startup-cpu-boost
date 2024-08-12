@@ -41,11 +41,12 @@ import (
 var _ = Describe("Pod CPU Boost Webhook", func() {
 	Describe("Handles admission requests", func() {
 		var (
-			mockCtrl    *gomock.Controller
-			manager     *mock.MockManager
-			managerCall *gomock.Call
-			pod         *corev1.Pod
-			response    webhook.AdmissionResponse
+			mockCtrl     *gomock.Controller
+			manager      *mock.MockManager
+			managerCall  *gomock.Call
+			pod          *corev1.Pod
+			response     webhook.AdmissionResponse
+			removeLimits bool
 		)
 		BeforeEach(func() {
 			pod = podTemplate.DeepCopy()
@@ -72,7 +73,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 					},
 				},
 			}
-			hook := bwebhook.NewPodCPUBoostWebHook(manager, scheme.Scheme)
+			hook := bwebhook.NewPodCPUBoostWebHook(manager, scheme.Scheme, removeLimits)
 			response = hook.Handle(context.TODO(), admissionReq)
 		})
 		When("there is no matching Startup CPU Boost", func() {
@@ -130,6 +131,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 					resPolicyCallOne = boost.EXPECT().ResourcePolicy(gomock.Eq(containerOneName)).Return(resPolicy, true)
 					resPolicyCallTwo = boost.EXPECT().ResourcePolicy(gomock.Eq(containerTwoName)).Return(nil, false)
 					managerCall.Return(boost, true)
+					removeLimits = true
 				})
 				It("retrieves resource policy for containers", func() {
 					resPolicyCallOne.Times(1)
@@ -162,9 +164,27 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 					patch := containerResourcePatch(pod, resPolicy, "requests", 0)
 					Expect(response.Patches).To(ContainElement(patch))
 				})
-				It("returns admission with container-one limits patch", func() {
-					patch := containerResourcePatch(pod, resPolicy, "limits", 0)
+				It("returns admission with container-one remove limits patch", func() {
+					patch := containerRemoveRequirementPatch("limits", 0)
 					Expect(response.Patches).To(ContainElement(patch))
+				})
+				When("container has memory limits set", func() {
+					BeforeEach(func() {
+						pod.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory] = apiResource.MustParse("100Mi")
+					})
+					It("returns admission with container-one remove CPU limits patch", func() {
+						patch := containerRemoveCPURequirementPatch("limits", 0)
+						Expect(response.Patches).To(ContainElement(patch))
+					})
+				})
+				When("removeLimits is not set", func() {
+					BeforeEach(func() {
+						removeLimits = false
+					})
+					It("returns admission with container-one limits patch", func() {
+						patch := containerResourcePatch(pod, resPolicy, "limits", 0)
+						Expect(response.Patches).To(ContainElement(patch))
+					})
 				})
 				When("container has no request and no limits set", func() {
 					BeforeEach(func() {
@@ -292,5 +312,19 @@ func containerResourcePatch(pod *corev1.Pod, policy resource.ContainerPolicy, re
 		Operation: "replace",
 		Path:      path,
 		Value:     newQuantity.String(),
+	}
+}
+
+func containerRemoveCPURequirementPatch(requirement string, containerIdx int) jsonpatch.Operation {
+	return jsonpatch.Operation{
+		Operation: "remove",
+		Path:      fmt.Sprintf("/spec/containers/%d/resources/%s/cpu", containerIdx, requirement),
+	}
+}
+
+func containerRemoveRequirementPatch(requirement string, containerIdx int) jsonpatch.Operation {
+	return jsonpatch.Operation{
+		Operation: "remove",
+		Path:      fmt.Sprintf("/spec/containers/%d/resources/%s", containerIdx, requirement),
 	}
 }

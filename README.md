@@ -24,6 +24,7 @@ Note: this is not an officially supported Google product.
   * [[Boost resources] fixed target](#boost-resources-fixed-target)
   * [[Boost duration] fixed time](#boost-duration-fixed-time)
   * [[Boost duration] POD condition](#boost-duration-pod-condition)
+* [Configuration](#configuration)
 * [License](#license)
 
 ## Description
@@ -35,7 +36,9 @@ The Kube Startup CPU Boost leverages [In-place Resource Resize for Kubernetes Po
 feature introduced in Kubernetes 1.27. It allows to revert workload's CPU resource requests and limits
 back to their original values without the need to recreate the Pods.
 
-The increase of resources is achieved by Mutating Admission Webhook.
+The increase of resources is achieved by Mutating Admission Webhook. By default, the webhook also
+removes CPU resource limits if present. The original resource values are set by operator after given
+period of time or when the POD condition is met.
 
 ## Installation
 
@@ -202,6 +205,23 @@ Define the POD condition, the resource boost effect will last until the conditio
        type: Ready
        status: "True" 
   ```
+
+## Configuration
+
+Kube Startup CPU Boost operator can be configured with environmental variables.
+
+| Variable | Type | Default | Description |
+| --- | --- | --- | --- |
+| `POD_NAMESPACE` | `string` | `kube-startup-cpu-boost-system` |  Kube Startup CPU Boost operator namespace |
+| `MGR_CHECK_INTERVAL` | `int` | `5` | Duration in seconds between boost manager checks for time based boost duration policy |
+| `LEADER_ELECTION` | `bool` | `false` | Enables leader election for controller manager |
+| `METRICS_PROBE_BIND_ADDR` | `string` | `:8080` | Address the metrics endpoint binds to |
+| `HEALTH_PROBE_BIND_ADDR` | `string` | `:8081` | Address the health probe endpoint binds to |
+| `SECURE_METRICS` | `bool` | `false` | Determines if the metrics endpoint is served securely |
+| `ZAP_LOG_LEVEL` | `int` | `0` | Log level for ZAP logger |
+| `ZAP_DEVELOPMENT` | `bool` | `false` | Enables development mode for ZAP logger |
+| `HTTP2` | `bool` | `false` | Determines if the HTTP/2 protocol is used for webhook and metrics servers|
+| `REMOVE_LIMITS` | `bool` | `true` | Enables operator to remove container CPU limits during the boost time |
 
 ## License
 

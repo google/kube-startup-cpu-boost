@@ -50,11 +50,14 @@ var _ = Describe("Config", func() {
 		It("has valid ZAP log level", func() {
 			Expect(cfg.ZapLogLevel).To(Equal(config.ZapLogLevelDefault))
 		})
-		It("has valid ZAP development ", func() {
+		It("has valid ZAP development", func() {
 			Expect(cfg.ZapDevelopment).To(Equal(config.ZapDevelopmentDefault))
 		})
-		It("has valid HTTP2 ", func() {
+		It("has valid HTTP2", func() {
 			Expect(cfg.HTTP2).To(Equal(config.HTTP2Default))
+		})
+		It("has valid RemoveLimits", func() {
+			Expect(cfg.RemoveLimits).To(Equal(config.RemoveLimitsDefault))
 		})
 	})
 })
