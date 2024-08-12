@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.10.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.9.0...v0.10.0) (2024-08-12)
+
+
+### Features
+
+* cpu resource limits removed during boost ([#59](https://github.com/google/kube-startup-cpu-boost/issues/59)) ([d4ffdad](https://github.com/google/kube-startup-cpu-boost/commit/d4ffdad779a83af0b7f5fac3c495fa6e6116f606))
+
 ## [0.9.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.8.1...v0.9.0) (2024-06-12)
 
 
