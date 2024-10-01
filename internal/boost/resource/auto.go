@@ -1,0 +1,126 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package resource
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	apiResource "k8s.io/apimachinery/pkg/api/resource"
+	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+type AutoPolicy struct {
+	apiEndpoint string
+}
+
+type ResourcePrediction struct {
+	CPURequests string `json:"cpuRequests"`
+	CPULimits   string `json:"cpuLimits"`
+}
+
+func NewAutoPolicy(apiEndpoint string) ContainerPolicy {
+	return &AutoPolicy{
+		apiEndpoint: apiEndpoint,
+	}
+}
+
+func (p *AutoPolicy) Requests(ctx context.Context) (apiResource.Quantity, error) {
+	prediction, err := p.getPrediction(ctx)
+	if err != nil {
+		return apiResource.Quantity{}, err
+	}
+	return apiResource.ParseQuantity(prediction.CPURequests)
+}
+
+func (p *AutoPolicy) Limits(ctx context.Context) (apiResource.Quantity, error) {
+	prediction, err := p.getPrediction(ctx)
+	if err != nil {
+		return apiResource.Quantity{}, err
+	}
+	return apiResource.ParseQuantity(prediction.CPULimits)
+}
+
+func (p *AutoPolicy) NewResources(ctx context.Context, container *corev1.Container) *corev1.ResourceRequirements {
+	log := ctrl.LoggerFrom(ctx).WithName("auto-cpu-policy")
+	prediction, err := p.getPrediction(ctx)
+	if err != nil {
+		return nil
+	}
+
+	cpuRequests, err := apiResource.ParseQuantity(prediction.CPURequests)
+	if err != nil {
+		return nil
+	}
+	cpuLimits, err := apiResource.ParseQuantity(prediction.CPULimits)
+	if err != nil {
+		return nil
+	}
+
+	log = log.WithValues("newCPURequests", cpuRequests.String(), "newCPULimits", cpuLimits.String())
+	result := container.Resources.DeepCopy()
+	p.setResource(corev1.ResourceCPU, result.Requests, cpuRequests, log)
+	p.setResource(corev1.ResourceCPU, result.Limits, cpuLimits, log)
+	return result
+}
+
+func (p *AutoPolicy) setResource(resource corev1.ResourceName, resources corev1.ResourceList, target apiResource.Quantity, log logr.Logger) {
+	if target.IsZero() {
+		return
+	}
+	current, ok := resources[resource]
+	if !ok {
+		return
+	}
+	if target.Cmp(current) < 0 {
+		log.V(2).Info("container has higher CPU requests than policy")
+		return
+	}
+	resources[resource] = target
+}
+
+func (p *AutoPolicy) getPrediction(ctx context.Context) (*ResourcePrediction, error) {
+	log := ctrl.LoggerFrom(ctx).WithName("auto-cpu-policy").WithValues("apiEndpoint", p.apiEndpoint)
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiEndpoint, nil)
+	if err != nil {
+		log.Error(err, "failed to create request")
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Error(err, "failed to call API")
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Error(err, "unexpected status code from API", "statusCode", resp.StatusCode)
+		return nil, err
+	}
+
+	var prediction ResourcePrediction
+	if err := json.NewDecoder(resp.Body).Decode(&prediction); err != nil {
+		log.Error(err, "failed to decode API response")
+		return nil, err
+	}
+
+	return &prediction, nil
+}
