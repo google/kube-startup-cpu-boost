@@ -50,6 +50,12 @@ type PodConditionDurationPolicy struct {
 	Status corev1.ConditionStatus `json:"status,omitempty"`
 }
 
+// AutoDurationPolicy defines the autoPolicy based duration policy
+type AutoDurationPolicy struct {
+	// Metric specifies the metric to be used for automatic adjustment
+	Value string `json:"metric"`
+}
+
 // DurationPolicy defines the policy used to determine the duration
 // time of a resource boost
 type DurationPolicy struct {
@@ -59,6 +65,9 @@ type DurationPolicy struct {
 	// podCondition based duration policy
 	// +kubebuilder:validation:Optional
 	PodCondition *PodConditionDurationPolicy `json:"podCondition,omitempty"`
+	// autoPolicy based duration policy
+	// +kubebuilder:validation:Optional
+	AutoPolicy *AutoDurationPolicy `json:"autoPolicy,omitempty"`
 }
 
 // FixedResources defines the CPU resource policy that sets CPU resources
@@ -81,6 +90,13 @@ type PercentageIncrease struct {
 	Value int64 `json:"value,omitempty"`
 }
 
+// AutoPolicy defines the CPU resource policy that automatically adjusts
+// CPU resources based on certain metrics or conditions
+type AutoResourcePolicy struct {
+	// Metric specifies the metric to be used for automatic adjustment
+	Value string `json:"metric"`
+}
+
 // ContainerPolicy defines the policy used to determine the target
 // resources for a container
 type ContainerPolicy struct {
@@ -95,6 +111,10 @@ type ContainerPolicy struct {
 	// resources to the given values
 	// +kubebuilder:validation:Optional
 	FixedResources *FixedResources `json:"fixedResources,omitempty"`
+	// AutoPolicy specifies the CPU resource policy that automatically adjusts
+	// CPU resources based on certain metrics or conditions
+	// +kubebuilder:validation:Optional
+	AutoPolicy *AutoResourcePolicy `json:"autoPolicy,omitempty"`
 }
 
 // ResourcePolicy defines the policy used to determine the target

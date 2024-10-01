@@ -182,6 +182,19 @@ spec:
        limits: "2"
 ```
 
+### [Boost resources] auto
+
+Define the percentage increase for a target container(s). The CPU requests and limits of selected
+container(s) will be increase by the given percentage value.
+
+```yaml
+spec:
+  containerPolicies:
+   - containerName: spring-rest-jpa
+     autoPolicy: 
+       metric: "auto"
+```
+
 ### [Boost duration] fixed time
 
 Define the fixed amount of time, the resource boost effect will last for it since the POD creation.
@@ -204,6 +217,17 @@ Define the POD condition, the resource boost effect will last until the conditio
      podCondition:
        type: Ready
        status: "True" 
+  ```
+
+### [Boost duration] auto
+
+Define the POD condition, the resource boost effect will last for the predicted duration.
+
+  ```yaml
+  spec:
+   durationPolicy:
+     autoPolicy: 
+       metric: "auto"
   ```
 
 ## Configuration
