@@ -15,10 +15,12 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -66,10 +68,12 @@ func (p *AutoPolicy) NewResources(ctx context.Context, container *corev1.Contain
 
 	cpuRequests, err := apiResource.ParseQuantity(prediction.CPURequests)
 	if err != nil {
+		log.Error(err, "failed to parse CPU requests")
 		return nil
 	}
 	cpuLimits, err := apiResource.ParseQuantity(prediction.CPULimits)
 	if err != nil {
+		log.Error(err, "failed to parse CPU limits")
 		return nil
 	}
 
@@ -96,30 +100,35 @@ func (p *AutoPolicy) setResource(resource corev1.ResourceName, resources corev1.
 }
 
 func (p *AutoPolicy) getPrediction(ctx context.Context) (*ResourcePrediction, error) {
-	log := ctrl.LoggerFrom(ctx).WithName("auto-cpu-policy").WithValues("apiEndpoint", p.apiEndpoint)
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiEndpoint, nil)
-	if err != nil {
-		log.Error(err, "failed to create request")
-		return nil, err
+	pod := ctx.Value("pod").(*corev1.Pod)
+	if pod == nil {
+		return nil, errors.New("pod information is missing in context")
 	}
 
-	resp, err := client.Do(req)
+	reqBody, err := json.Marshal(pod)
 	if err != nil {
-		log.Error(err, "failed to call API")
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal pod information: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiEndpoint+"cpu", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error(err, "unexpected status code from API", "statusCode", resp.StatusCode)
-		return nil, err
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var prediction ResourcePrediction
 	if err := json.NewDecoder(resp.Body).Decode(&prediction); err != nil {
-		log.Error(err, "failed to decode API response")
-		return nil, err
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	return &prediction, nil

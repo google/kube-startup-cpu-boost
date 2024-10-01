@@ -15,16 +15,36 @@
 package duration
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"time"
 
-	ctrl "sigs.k8s.io/controller-runtime"
+	v1 "k8s.io/api/core/v1"
+)
+
+const (
+	AutoDurationPolicyName = "AutoDuration"
 )
 
 type AutoDurationPolicy struct {
 	apiEndpoint string
+}
+
+func (p *AutoDurationPolicy) Name() string {
+	return AutoDurationPolicyName
+}
+
+// Valid returns true if the pod is still within the duration
+func (p *AutoDurationPolicy) Valid(pod *v1.Pod) bool {
+	now := time.Now()
+	duration, err := p.GetDuration(pod)
+
+	if err != nil {
+		return false
+	}
+
+	return pod.CreationTimestamp.Add(duration).After(now)
 }
 
 type DurationPrediction struct {
@@ -37,40 +57,29 @@ func NewAutoDurationPolicy(apiEndpoint string) *AutoDurationPolicy {
 	}
 }
 
-func (p *AutoDurationPolicy) GetDuration(ctx context.Context) (time.Duration, error) {
-	prediction, err := p.getPrediction(ctx)
+func (p *AutoDurationPolicy) GetDuration(pod *v1.Pod) (time.Duration, error) {
+	prediction, err := p.getPrediction(pod)
 	if err != nil {
 		return 0, err
 	}
 	return time.ParseDuration(prediction.Duration)
 }
 
-func (p *AutoDurationPolicy) getPrediction(ctx context.Context) (*DurationPrediction, error) {
-	log := ctrl.LoggerFrom(ctx).WithName("auto-duration-policy").WithValues("apiEndpoint", p.apiEndpoint)
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiEndpoint, nil)
+func (p *AutoDurationPolicy) getPrediction(pod *v1.Pod) (*DurationPrediction, error) {
+	podData, err := json.Marshal(pod)
 	if err != nil {
-		log.Error(err, "failed to create request")
 		return nil, err
 	}
 
-	resp, err := client.Do(req)
+	resp, err := http.Post(p.apiEndpoint+"/duration", "application/json", bytes.NewBuffer(podData))
 	if err != nil {
-		log.Error(err, "failed to call API")
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Error(err, "unexpected status code from API", "statusCode", resp.StatusCode)
-		return nil, err
-	}
-
 	var prediction DurationPrediction
 	if err := json.NewDecoder(resp.Body).Decode(&prediction); err != nil {
-		log.Error(err, "failed to decode API response")
 		return nil, err
 	}
-
 	return &prediction, nil
 }

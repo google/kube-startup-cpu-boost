@@ -299,6 +299,9 @@ func mapDurationPolicy(policiesSpec autoscaling.DurationPolicy) map[string]durat
 	if condPolicy := policiesSpec.PodCondition; condPolicy != nil {
 		policies[duration.PodConditionPolicyName] = duration.NewPodConditionPolicy(condPolicy.Type, condPolicy.Status)
 	}
+	if autoPolicy := policiesSpec.AutoPolicy; autoPolicy != nil {
+		policies[duration.AutoDurationPolicyName] = duration.NewAutoDurationPolicy(autoPolicy.ApiEndpoint)
+	}
 	return policies
 }
 
@@ -316,6 +319,10 @@ func mapResourcePolicy(spec autoscaling.ResourcePolicy) (map[string]resource.Con
 		}
 		if percIncrease := policySpec.PercentageIncrease; percIncrease != nil {
 			policy = resource.NewPercentageContainerPolicy(percIncrease.Value)
+			cnt++
+		}
+		if autoPolicy := policySpec.AutoPolicy; autoPolicy != nil {
+			policy = resource.NewAutoPolicy(autoPolicy.ApiEndpoint)
 			cnt++
 		}
 		if cnt != 1 {

@@ -192,7 +192,7 @@ spec:
   containerPolicies:
    - containerName: spring-rest-jpa
      autoPolicy: 
-       metric: "auto"
+       apiEndpoint: "http://exampleUrl:examplePort"
 ```
 
 ### [Boost duration] fixed time
@@ -227,7 +227,7 @@ Define the POD condition, the resource boost effect will last for the predicted 
   spec:
    durationPolicy:
      autoPolicy: 
-       metric: "auto"
+       apiEndpoint: "http://exampleUrl:examplePort"
   ```
 
 ## Configuration

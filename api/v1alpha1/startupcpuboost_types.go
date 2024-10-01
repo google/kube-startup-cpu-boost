@@ -53,7 +53,7 @@ type PodConditionDurationPolicy struct {
 // AutoDurationPolicy defines the autoPolicy based duration policy
 type AutoDurationPolicy struct {
 	// Metric specifies the metric to be used for automatic adjustment
-	Value string `json:"metric"`
+	ApiEndpoint string `json:"apiEndpoint,omitempty"`
 }
 
 // DurationPolicy defines the policy used to determine the duration
@@ -94,7 +94,7 @@ type PercentageIncrease struct {
 // CPU resources based on certain metrics or conditions
 type AutoResourcePolicy struct {
 	// Metric specifies the metric to be used for automatic adjustment
-	Value string `json:"metric"`
+	ApiEndpoint string `json:"apiEndpoint,omitempty"`
 }
 
 // ContainerPolicy defines the policy used to determine the target
