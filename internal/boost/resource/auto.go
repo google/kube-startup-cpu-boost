@@ -100,32 +100,38 @@ func (p *AutoPolicy) setResource(resource corev1.ResourceName, resources corev1.
 }
 
 func (p *AutoPolicy) getPrediction(ctx context.Context) (*ResourcePrediction, error) {
-	pod := ctx.Value("pod").(*corev1.Pod)
-	if pod == nil {
-		return nil, errors.New("pod information is missing in context")
+	// Retrieve the pod information from the context
+	pod, ok := ctx.Value("pod").(*corev1.Pod)
+	if !ok || pod == nil {
+		return nil, errors.New("pod information is missing or invalid in context")
 	}
 
+	// Marshal the pod information to JSON
 	reqBody, err := json.Marshal(pod)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal pod information: %w", err)
 	}
 
+	// Create a new HTTP request with the pod information
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiEndpoint+"cpu", bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	// Send the HTTP request
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Check for a successful response status code
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
+	// Decode the response body into a ResourcePrediction struct
 	var prediction ResourcePrediction
 	if err := json.NewDecoder(resp.Body).Decode(&prediction); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
