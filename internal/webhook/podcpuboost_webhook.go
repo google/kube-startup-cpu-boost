@@ -71,6 +71,15 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 }
 
 func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
+
+	type contextKey string
+
+	podName := pod.Name
+	podNamespace := pod.Namespace
+
+	ctx = context.WithValue(ctx, contextKey("podName"), podName)
+	ctx = context.WithValue(ctx, contextKey("podNamespace"), podNamespace)
+
 	annotation := bpod.NewBoostAnnotation()
 	for i, container := range pod.Spec.Containers {
 		policy, found := b.ResourcePolicy(container.Name)
@@ -107,6 +116,9 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 		}
 		pod.Labels[bpod.BoostLabelKey] = b.Name()
 	}
+
+	ctx = context.WithValue(ctx, "podName", nil)
+	_ = context.WithValue(ctx, "podNamespace", nil)
 }
 
 func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string, resources corev1.ResourceRequirements) {

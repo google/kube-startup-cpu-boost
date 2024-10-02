@@ -92,6 +92,14 @@ spec:
                 description: DurationPolicy specifies policies for resource boost
                   duration
                 properties:
+                  autoPolicy:
+                    description: autoPolicy based duration policy
+                    properties:
+                      apiEndpoint:
+                        description: Metric specifies the metric to be used for automatic
+                          adjustment
+                        type: string
+                    type: object
                   fixedDuration:
                     description: fixed time duration policy
                     properties:
@@ -130,6 +138,16 @@ spec:
                         ContainerPolicy defines the policy used to determine the target
                         resources for a container
                       properties:
+                        autoPolicy:
+                          description: |-
+                            AutoPolicy specifies the CPU resource policy that automatically adjusts
+                            CPU resources based on certain metrics or conditions
+                          properties:
+                            apiEndpoint:
+                              description: Metric specifies the metric to be used
+                                for automatic adjustment
+                              type: string
+                          type: object
                         containerName:
                           description: ContainerName specifies the name of container
                             for a given policy
