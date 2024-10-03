@@ -59,8 +59,16 @@ func (p *AutoPolicy) Limits(ctx context.Context) (apiResource.Quantity, error) {
 }
 
 func (p *AutoPolicy) NewResources(ctx context.Context, container *corev1.Container) *corev1.ResourceRequirements {
+	fmt.Printf("container : %+v\n", container)
+
 	log := ctrl.LoggerFrom(ctx).WithName("auto-cpu-policy")
 	prediction, err := p.getPrediction(ctx)
+
+	if prediction == nil {
+		log.Error(err, "failed to get prediction")
+		return nil
+	}
+
 	if err != nil {
 		log.Error(err, "failed to get prediction")
 		return nil
@@ -77,10 +85,14 @@ func (p *AutoPolicy) NewResources(ctx context.Context, container *corev1.Contain
 		return nil
 	}
 
+	fmt.Printf("newCPURequests: %s, newCPULimits: %s\n", cpuRequests.String(), cpuLimits.String())
+
 	log = log.WithValues("newCPURequests", cpuRequests.String(), "newCPULimits", cpuLimits.String())
 	result := container.Resources.DeepCopy()
 	p.setResource(corev1.ResourceCPU, result.Requests, cpuRequests, log)
 	p.setResource(corev1.ResourceCPU, result.Limits, cpuLimits, log)
+
+	fmt.Printf("result: %+v\n", result)
 	return result
 }
 

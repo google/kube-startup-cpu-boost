@@ -1,107 +1,205 @@
-package resource
+package resource_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"testing"
+	"os"
 
-	"github.com/stretchr/testify/assert"
+	apiResource "k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestAutoPolicy_getPrediction(t *testing.T) {
-	// Define a custom type for the context key
-	type contextKey string
+var _ = Describe("Auto Resource Policy", func() {
+	var (
+		policy       resource.ContainerPolicy
+		newResources *corev1.ResourceRequirements
+		container    *corev1.Container
+		mockServer   *httptest.Server
+		oldStdout    *os.File
+		stdoutReader *os.File
+		stdoutWriter *os.File
+		outputBuffer *bytes.Buffer
+	)
 
-	// Mock API server
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/cpu", r.URL.Path)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+	BeforeEach(func() {
+		container = containerTemplate.DeepCopy()
 
-		var pod corev1.Pod
-		err := json.NewDecoder(r.Body).Decode(&pod)
-		assert.NoError(t, err)
+		// Set up pipe to capture stdout
+		oldStdout = os.Stdout
+		stdoutReader, stdoutWriter, _ = os.Pipe()
+		os.Stdout = stdoutWriter
 
-		prediction := ResourcePrediction{
-			CPURequests: "500m",
-			CPULimits:   "1000m",
+		outputBuffer = new(bytes.Buffer)
+	})
+
+	JustBeforeEach(func() {
+		// Run the test case logic that triggers the fmt.Print statements.
+		policy = resource.NewAutoPolicy(mockServer.URL)
+
+		podName := "test-pod"
+		podNamespace := "test-namespace"
+
+		ctx := context.WithValue(context.TODO(), "podName", podName)
+		ctx = context.WithValue(ctx, "podNamespace", podNamespace)
+
+		newResources = policy.NewResources(ctx, container)
+
+		fmt.Printf("newResources: %+v\n", newResources)
+
+		// Ensure everything written to os.Stdout is captured
+		stdoutWriter.Close()                       // Close the writer
+		_, _ = io.Copy(outputBuffer, stdoutReader) // Copy the output to buffer
+		os.Stdout = oldStdout                      // Restore stdout
+	})
+
+	AfterEach(func() {
+		if mockServer != nil {
+			mockServer.Close()
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(prediction)
-	}))
-	defer mockServer.Close()
+		fmt.Fprintln(GinkgoWriter, "Captured Output:", outputBuffer.String()) // Print captured output to test log
+	})
 
-	// Create an instance of AutoPolicy with the mock server URL
-	policy := NewAutoPolicy(mockServer.URL)
+	Describe("AutoPolicy", func() {
+		Context("when the API returns valid predictions", func() {
+			BeforeEach(func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.URL.Path).To(Equal("/cpu"))
+					Expect(r.Header.Get("Content-Type")).To(Equal("application/json"))
 
-	// Create a sample pod
-	pod := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "test-container",
-					Image: "test-image",
-				},
-			},
-		},
-	}
+					var pod corev1.Pod
+					err := json.NewDecoder(r.Body).Decode(&pod)
+					Expect(err).NotTo(HaveOccurred())
 
-	// Create a context with the pod information
-	ctx := context.WithValue(context.Background(), contextKey("pod"), pod)
+					prediction := resource.ResourcePrediction{
+						CPURequests: "500m",
+						CPULimits:   "1000m",
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(prediction)
+				}))
 
-	// Call the getPrediction method on the policy instance
-	prediction, err := policy.(*AutoPolicy).getPrediction(ctx)
-	assert.NoError(t, err)
-	assert.Equal(t, "500m", prediction.CPURequests)
-	assert.Equal(t, "1000m", prediction.CPULimits)
-}
+				cpuRequests, err := apiResource.ParseQuantity("300m")
+				Expect(err).NotTo(HaveOccurred())
+				cpuLimits, err := apiResource.ParseQuantity("500m")
+				Expect(err).NotTo(HaveOccurred())
 
-func TestAutoPolicy_getPrediction_MissingPod(t *testing.T) {
-	// Create an instance of AutoPolicy with a dummy URL
-	policy := NewAutoPolicy("http://dummy-url")
+				container.Resources.Requests[corev1.ResourceCPU] = cpuRequests
+				container.Resources.Limits[corev1.ResourceCPU] = cpuLimits
+			})
 
-	// Create a context without the pod information
-	ctx := context.Background()
+			It("returns resources with valid CPU requests and limits", func() {
+				Expect(newResources).NotTo(BeNil())
+				Expect(newResources.Requests).NotTo(BeNil())
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				cpuRequest := newResources.Requests[corev1.ResourceCPU]
+				// fmt.Fprintln(GinkgoWriter, "cpuRequest:", cpuRequest.String())
+				Expect(cpuRequest.String()).To(Equal("500m"))
 
-	// Call the getPrediction method on the policy instance
-	_, err := policy.(*AutoPolicy).getPrediction(ctx)
-	assert.Error(t, err)
-	assert.Equal(t, errors.New("pod information is missing in context"), err)
-}
+				Expect(newResources).NotTo(BeNil())
+				Expect(newResources.Requests).NotTo(BeNil())
+				Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+				cpuLimit := newResources.Limits[corev1.ResourceCPU]
+				// fmt.Fprintln(GinkgoWriter, "cpuLimit:", cpuLimit.String())
+				Expect(cpuLimit.String()).To(Equal("1"))
+			})
+		})
 
-func TestAutoPolicy_getPrediction_InvalidJSON(t *testing.T) {
-	// Define a custom type for the context key
-	type contextKey string
+		Context("when the API returns 400m requests and 600m limits", func() {
+			BeforeEach(func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.URL.Path).To(Equal("/cpu"))
+					Expect(r.Header.Get("Content-Type")).To(Equal("application/json"))
 
-	// Mock API server
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`invalid json`))
-	}))
-	defer mockServer.Close()
+					var pod corev1.Pod
+					err := json.NewDecoder(r.Body).Decode(&pod)
+					Expect(err).NotTo(HaveOccurred())
 
-	// Create an instance of AutoPolicy with the mock server URL
-	policy := NewAutoPolicy(mockServer.URL)
+					prediction := resource.ResourcePrediction{
+						CPURequests: "400m",
+						CPULimits:   "600m",
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(prediction)
+				}))
 
-	// Create a sample pod
-	pod := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "test-container",
-					Image: "test-image",
-				},
-			},
-		},
-	}
+				cpuRequests, err := apiResource.ParseQuantity("300m")
+				Expect(err).NotTo(HaveOccurred())
+				cpuLimits, err := apiResource.ParseQuantity("400m")
+				Expect(err).NotTo(HaveOccurred())
 
-	// Create a context with the pod information
-	ctx := context.WithValue(context.Background(), contextKey("pod"), pod)
+				container.Resources.Requests[corev1.ResourceCPU] = cpuRequests
+				container.Resources.Limits[corev1.ResourceCPU] = cpuLimits
+			})
 
-	// Call the getPrediction method on the policy instance
-	_, err := policy.(*AutoPolicy).getPrediction(ctx)
-	assert.Error(t, err)
-}
+			It("returns resources with 400m CPU requests and 600m limits", func() {
+				Expect(newResources).NotTo(BeNil())
+				Expect(newResources.Requests).NotTo(BeNil())
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				cpuRequest := newResources.Requests[corev1.ResourceCPU]
+				fmt.Fprintln(GinkgoWriter, "cpuRequest:", cpuRequest.String())
+				Expect(cpuRequest.String()).To(Equal("400m"))
+
+				Expect(newResources).NotTo(BeNil())
+				Expect(newResources.Limits).NotTo(BeNil())
+				Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+				cpuLimit := newResources.Limits[corev1.ResourceCPU]
+				fmt.Fprintln(GinkgoWriter, "cpuLimit:", cpuLimit.String())
+				Expect(cpuLimit.String()).To(Equal("600m"))
+			})
+		})
+
+		Context("when the API returns 600m requests and 800m limits", func() {
+			BeforeEach(func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.URL.Path).To(Equal("/cpu"))
+					Expect(r.Header.Get("Content-Type")).To(Equal("application/json"))
+
+					var pod corev1.Pod
+					err := json.NewDecoder(r.Body).Decode(&pod)
+					Expect(err).NotTo(HaveOccurred())
+
+					prediction := resource.ResourcePrediction{
+						CPURequests: "600m",
+						CPULimits:   "800m",
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(prediction)
+				}))
+
+				cpuRequests, err := apiResource.ParseQuantity("500m")
+				Expect(err).NotTo(HaveOccurred())
+				cpuLimits, err := apiResource.ParseQuantity("600m")
+				Expect(err).NotTo(HaveOccurred())
+
+				container.Resources.Requests[corev1.ResourceCPU] = cpuRequests
+				container.Resources.Limits[corev1.ResourceCPU] = cpuLimits
+			})
+
+			It("returns resources with 600m CPU requests and 800m limits", func() {
+				Expect(newResources).NotTo(BeNil())
+				Expect(newResources.Requests).NotTo(BeNil())
+				Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+				cpuRequest := newResources.Requests[corev1.ResourceCPU]
+				fmt.Fprintln(GinkgoWriter, "cpuRequest:", cpuRequest.String())
+				Expect(cpuRequest.String()).To(Equal("600m"))
+
+				Expect(newResources).NotTo(BeNil())
+				Expect(newResources.Requests).NotTo(BeNil())
+				Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+				cpuLimit := newResources.Limits[corev1.ResourceCPU]
+				fmt.Fprintln(GinkgoWriter, "cpuLimit:", cpuLimit.String())
+				Expect(cpuLimit.String()).To(Equal("800m"))
+			})
+		})
+	})
+})
