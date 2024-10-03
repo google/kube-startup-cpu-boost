@@ -27,6 +27,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+type ContextKey string
+
 type AutoPolicy struct {
 	apiEndpoint string
 }
@@ -59,8 +61,6 @@ func (p *AutoPolicy) Limits(ctx context.Context) (apiResource.Quantity, error) {
 }
 
 func (p *AutoPolicy) NewResources(ctx context.Context, container *corev1.Container) *corev1.ResourceRequirements {
-	fmt.Printf("container : %+v\n", container)
-
 	log := ctrl.LoggerFrom(ctx).WithName("auto-cpu-policy")
 	prediction, err := p.getPrediction(ctx)
 
@@ -84,8 +84,6 @@ func (p *AutoPolicy) NewResources(ctx context.Context, container *corev1.Contain
 		log.Error(err, "failed to parse CPU limits")
 		return nil
 	}
-
-	fmt.Printf("newCPURequests: %s, newCPULimits: %s\n", cpuRequests.String(), cpuLimits.String())
 
 	log = log.WithValues("newCPURequests", cpuRequests.String(), "newCPULimits", cpuLimits.String())
 	result := container.Resources.DeepCopy()
@@ -113,11 +111,15 @@ func (p *AutoPolicy) setResource(resource corev1.ResourceName, resources corev1.
 
 func (p *AutoPolicy) getPrediction(ctx context.Context) (*ResourcePrediction, error) {
 
+	ctx = context.WithValue(ctx, ContextKey("testing"), "HIIIIIIIIIIIi")
+	fmt.Printf("ctx: %+v\n", ctx)
 	// Retrieve the pod information from the context
-	podName := ctx.Value("podName")
-	podNamespace := ctx.Value("podNamespace")
+	podName := ctx.Value(ContextKey("podName"))
+	podNamespace := ctx.Value(ContextKey("podNamespace"))
 
-	fmt.Printf("podName: %s, podNamespace: %s\n", podName, podNamespace)
+	if podName == nil || podNamespace == nil {
+		return nil, fmt.Errorf("pod information not found in context")
+	}
 
 	// Marshal the pod information to JSON
 	reqBody, err := json.Marshal(map[string]string{

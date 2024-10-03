@@ -12,7 +12,7 @@ import (
 
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
+	resource "github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -49,8 +49,8 @@ var _ = Describe("Auto Resource Policy", func() {
 		podName := "test-pod"
 		podNamespace := "test-namespace"
 
-		ctx := context.WithValue(context.TODO(), "podName", podName)
-		ctx = context.WithValue(ctx, "podNamespace", podNamespace)
+		ctx := context.WithValue(context.TODO(), resource.ContextKey("podName"), podName)
+		ctx = context.WithValue(ctx, resource.ContextKey("podNamespace"), podNamespace)
 
 		newResources = policy.NewResources(ctx, container)
 
