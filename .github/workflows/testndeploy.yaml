@@ -12,18 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Test and Deploy
+name: Build, Test and Push
 on:
   push:
     branches:
       - main
     paths-ignore:
       - 'demo-app/**'
-  pull_request:
-    branches:
-      - main
-    paths-ignore:
-      - 'demo-app/**'
+  workflow_dispatch:
 
 jobs:
   build:
