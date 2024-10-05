@@ -17,6 +17,7 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -72,6 +73,8 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 }
 
 func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
+
+	fmt.Printf("pod Info: %v", pod)
 
 	podName := pod.Name
 	podNamespace := pod.Namespace

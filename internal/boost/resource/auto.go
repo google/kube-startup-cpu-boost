@@ -111,7 +111,6 @@ func (p *AutoPolicy) setResource(resource corev1.ResourceName, resources corev1.
 
 func (p *AutoPolicy) getPrediction(ctx context.Context) (*ResourcePrediction, error) {
 
-	ctx = context.WithValue(ctx, ContextKey("testing"), "HIIIIIIIIIIIi")
 	fmt.Printf("ctx: %+v\n", ctx)
 	// Retrieve the pod information from the context
 	podName := ctx.Value(ContextKey("podName"))
