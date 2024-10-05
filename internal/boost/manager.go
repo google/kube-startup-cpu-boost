@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -231,6 +232,12 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 					pod:   pod,
 				}
 			}
+			for _, pod := range boost.ValidatePolicy(ctx, duration.AutoDurationPolicyName) {
+				revertTasks <- &podRevertTask{
+					boost: boost,
+					pod:   pod,
+				}
+			}
 		}
 		close(revertTasks)
 	}()
@@ -247,6 +254,15 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 					if err := task.boost.RevertResources(ctx, task.pod); err != nil {
 						errors <- fmt.Errorf("pod %s/%s: %w", task.pod.Namespace, task.pod.Name, err)
 					} else {
+						if autoPolicy, ok := task.boost.DurationPolicies()[duration.AutoDurationPolicyName]; ok {
+							log.Info("notifying about pod resource reversion under auto policy")
+							if autoPolicy, ok := autoPolicy.(*duration.AutoDurationPolicy); ok {
+								autoPolicy.NotifyReversion(task.pod)
+							} else {
+								log.Info("auto policy not found")
+							}
+						}
+
 						log.Info("pod resources reverted successfully")
 						reconcileTasks <- &reconcile.Request{
 							NamespacedName: types.NamespacedName{

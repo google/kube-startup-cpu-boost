@@ -17,6 +17,7 @@ package duration
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -66,7 +67,14 @@ func (p *AutoDurationPolicy) GetDuration(pod *v1.Pod) (time.Duration, error) {
 }
 
 func (p *AutoDurationPolicy) getPrediction(pod *v1.Pod) (*DurationPrediction, error) {
-	podData, err := json.Marshal(pod)
+	podName := pod.Name
+	podNamespace := pod.Namespace
+
+	podData, err := json.Marshal(map[string]string{
+		"podName":      podName,
+		"podNamespace": podNamespace,
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -82,4 +90,32 @@ func (p *AutoDurationPolicy) getPrediction(pod *v1.Pod) (*DurationPrediction, er
 		return nil, err
 	}
 	return &prediction, nil
+}
+
+func (p *AutoDurationPolicy) NotifyReversion(pod *v1.Pod) error {
+
+	podName := pod.Name
+	podNamespace := pod.Namespace
+
+	podData, err := json.Marshal(map[string]string{
+		"podName":      podName,
+		"podNamespace": podNamespace,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(p.apiEndpoint+"/notify", "application/json", bytes.NewBuffer(podData))
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
 }
