@@ -37,12 +37,12 @@ var _ = Describe("BoostPodHandler", func() {
 		mgrMock     *mock.MockManager
 		mgrMockCall *gomock.Call
 		podHandler  controller.BoostPodHandler
-		wq          workqueue.RateLimitingInterface
+		wq          workqueue.TypedRateLimitingInterface[reconcile.Request]
 	)
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mgrMock = mock.NewMockManager(mockCtrl)
-		wq = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
+		wq = workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
 	})
 	JustBeforeEach(func() {
 		podHandler = controller.NewBoostPodHandler(mgrMock, logr.Discard())
@@ -99,8 +99,7 @@ var _ = Describe("BoostPodHandler", func() {
 			})
 			It("sends reconciliation request", func() {
 				Expect(wq.Len()).To(Equal(1))
-				r, _ := wq.Get()
-				req := r.(reconcile.Request)
+				req, _ := wq.Get()
 				Expect(req.Name).To(Equal(specTemplate.Name))
 				Expect(req.Namespace).To(Equal(specTemplate.Namespace))
 			})
@@ -158,8 +157,7 @@ var _ = Describe("BoostPodHandler", func() {
 			})
 			It("sends reconciliation request", func() {
 				Expect(wq.Len()).To(Equal(1))
-				r, _ := wq.Get()
-				req := r.(reconcile.Request)
+				req, _ := wq.Get()
 				Expect(req.Name).To(Equal(specTemplate.Name))
 				Expect(req.Namespace).To(Equal(specTemplate.Namespace))
 			})
@@ -243,8 +241,7 @@ var _ = Describe("BoostPodHandler", func() {
 				})
 				It("sends reconciliation request", func() {
 					Expect(wq.Len()).To(Equal(1))
-					r, _ := wq.Get()
-					req := r.(reconcile.Request)
+					req, _ := wq.Get()
 					Expect(req.Name).To(Equal(specTemplate.Name))
 					Expect(req.Namespace).To(Equal(specTemplate.Namespace))
 				})

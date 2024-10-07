@@ -30,10 +30,10 @@ import (
 )
 
 type BoostPodHandler interface {
-	Create(context.Context, event.CreateEvent, workqueue.RateLimitingInterface)
-	Delete(context.Context, event.DeleteEvent, workqueue.RateLimitingInterface)
-	Update(context.Context, event.UpdateEvent, workqueue.RateLimitingInterface)
-	Generic(context.Context, event.GenericEvent, workqueue.RateLimitingInterface)
+	Create(context.Context, event.CreateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Update(context.Context, event.UpdateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Delete(context.Context, event.DeleteEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Generic(context.Context, event.GenericEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
 	GetPodLabelSelector() *metav1.LabelSelector
 }
 
@@ -49,7 +49,7 @@ func NewBoostPodHandler(manager boost.Manager, log logr.Logger) BoostPodHandler 
 	}
 }
 
-func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		return
@@ -74,7 +74,7 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq wo
 	})
 }
 
-func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		return
@@ -97,7 +97,7 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq wo
 	})
 }
 
-func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.ObjectNew.(*corev1.Pod)
 	oldPod, ok_ := e.ObjectOld.(*corev1.Pod)
 	if !ok || !ok_ {
@@ -125,7 +125,7 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 	})
 }
 
-func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent, wq workqueue.RateLimitingInterface) {
+func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		return
