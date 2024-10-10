@@ -25,6 +25,7 @@ Note: this is not an officially supported Google product.
   * [[Boost duration] fixed time](#boost-duration-fixed-time)
   * [[Boost duration] POD condition](#boost-duration-pod-condition)
 * [Configuration](#configuration)
+* [Metrics](#metrics)
 * [License](#license)
 
 ## Description
@@ -222,6 +223,46 @@ Kube Startup CPU Boost operator can be configured with environmental variables.
 | `ZAP_DEVELOPMENT` | `bool` | `false` | Enables development mode for ZAP logger |
 | `HTTP2` | `bool` | `false` | Determines if the HTTP/2 protocol is used for webhook and metrics servers|
 | `REMOVE_LIMITS` | `bool` | `true` | Enables operator to remove container CPU limits during the boost time |
+
+## Metrics
+
+Kube Startup CPU Boost exposes [prometheus](https://prometheus.io) metrics to monitor the health of
+the system and the status of Startup CPU Boosts.
+
+| Metric name | Type | Description | Labels |
+| --- | --- | --- | --- |
+| `boost_configurations` | Gauge | Number of registered Kube Startup CPU Boost configuration | `namespace`: the namespace of a Kube Startup CPU Boost |
+| `boost_containers_total` | Counter | Number of a containers which CPU resources were increased | `namespace`: the namespace of container's POD, `boost`: name of a Kube Startup CPU Boost that increased container resources  |
+| `boost_containers_active` | Gauge | Number of a containers which CPU resources and not yet reverted to their original values | `namespace`: the namespace of container's POD, `boost`: name of a Kube Startup CPU Boost that increased container resources  |
+
+### Scraping: Google Cloud Managed Service for Prometheus
+
+The below [PodMonitoring](https://github.com/GoogleCloudPlatform/prometheus-engine/blob/main/doc/api.md#monitoring.googleapis.com/v1.PodMonitoring)
+example can be used to scrape Kube Startup CPU Boost metrics with
+[Google Managed Service for Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus).
+
+```yaml
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: controller-manager-metrics-monitor
+    app.kubernetes.io/instance: controller-manager-metrics-monitor
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/created-by: kube-startup-cpu-boost
+    app.kubernetes.io/part-of: kube-startup-cpu-boost
+  name: controller-manager-metrics-monitor
+  namespace: kube-startup-cpu-boost-system
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  endpoints:
+  - port: metrics
+    interval: 15s
+
+```
 
 ## License
 
