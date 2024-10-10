@@ -1,6 +1,15 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.10.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.10.0...v0.10.1) (2024-10-10)
+
+
+### Bug Fixes
+
+* envtest version with available kubebuilder tools ([d3819e0](https://github.com/google/kube-startup-cpu-boost/commit/d3819e0440f7768b720ec274ff4c654ed6fa4083))
+* improved logging when no resources are boosted ([bee8920](https://github.com/google/kube-startup-cpu-boost/commit/bee89206fa95247ef937a1d56019e66d4316db21))
+* resource revert paniced when no limits were defined at all ([34cd968](https://github.com/google/kube-startup-cpu-boost/commit/34cd9686658f42978d6a9a46b6720c6ef548a15c))
+
 ## [0.10.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.9.0...v0.10.0) (2024-08-12)
 
 
