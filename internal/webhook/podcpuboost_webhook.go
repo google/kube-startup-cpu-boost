@@ -85,17 +85,27 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 			log.Info("skipping container due to restart policy")
 			continue
 		}
-		updateBoostAnnotation(annotation, container.Name, container.Resources)
-		resources := policy.NewResources(ctx, &container)
-		log = log.WithValues(
-			"newCpuRequests", resources.Requests.Cpu().String(),
-			"newCpuLimits", resources.Limits.Cpu().String(),
-		)
-		if h.removeLimits {
-			delete(resources.Limits, corev1.ResourceCPU)
+		if !hasResourcesToIncrease(container) {
+			log.Info("skipping container due to lack of resources to increase")
+			continue
 		}
+		resources := policy.NewResources(ctx, &container)
+		if !resources.Requests.Cpu().IsZero() {
+			log = log.WithValues(
+				"newCpuRequests", resources.Requests.Cpu().String(),
+			)
+		}
+		if !resources.Limits.Cpu().IsZero() {
+			if h.removeLimits {
+				delete(resources.Limits, corev1.ResourceCPU)
+				log = log.WithValues("newCpuLimits", "<removed>")
+			} else {
+				log = log.WithValues("newCpuLimits", resources.Limits.Cpu().String())
+			}
+		}
+		updateBoostAnnotation(annotation, container.Name, container.Resources)
 		pod.Spec.Containers[i].Resources = *resources
-		log.Info("pod resources increased")
+		log.Info("container resources increased")
 	}
 	if len(annotation.InitCPULimits) > 0 || len(annotation.InitCPURequests) > 0 {
 		if pod.Annotations == nil {
@@ -107,6 +117,10 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 		}
 		pod.Labels[bpod.BoostLabelKey] = b.Name()
 	}
+}
+
+func hasResourcesToIncrease(c corev1.Container) bool {
+	return !c.Resources.Requests.Cpu().IsZero() || !c.Resources.Limits.Cpu().IsZero()
 }
 
 func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string, resources corev1.ResourceRequirements) {
