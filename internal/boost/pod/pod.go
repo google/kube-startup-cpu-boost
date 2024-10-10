@@ -72,9 +72,13 @@ func RevertResourceBoost(pod *corev1.Pod) error {
 	}
 	delete(pod.Labels, BoostLabelKey)
 	delete(pod.Annotations, BoostAnnotationKey)
-	for _, container := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
 		if request, ok := annotation.InitCPURequests[container.Name]; ok {
 			if reqQuantity, err := apiResource.ParseQuantity(request); err == nil {
+				if container.Resources.Requests == nil {
+					container.Resources.Requests = corev1.ResourceList{}
+				}
 				container.Resources.Requests[corev1.ResourceCPU] = reqQuantity
 			} else {
 				return fmt.Errorf("failed to parse CPU request: %s", err)
@@ -82,6 +86,9 @@ func RevertResourceBoost(pod *corev1.Pod) error {
 		}
 		if limit, ok := annotation.InitCPULimits[container.Name]; ok {
 			if limitQuantity, err := apiResource.ParseQuantity(limit); err == nil {
+				if container.Resources.Limits == nil {
+					container.Resources.Limits = corev1.ResourceList{}
+				}
 				container.Resources.Limits[corev1.ResourceCPU] = limitQuantity
 			} else {
 				return fmt.Errorf("failed to parse CPU limit: %s", err)
