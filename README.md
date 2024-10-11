@@ -31,19 +31,19 @@ Note: this is not an officially supported Google product.
 ## Description
 
 The primary use cases for Kube Startup CPU Boosts are workloads that require extra CPU resources during
-startup phase - typically JVM based applications.
+the startup phase - typically JVM based applications.
 
 The Kube Startup CPU Boost leverages [In-place Resource Resize for Kubernetes Pods](https://kubernetes.io/blog/2023/05/12/in-place-pod-resize-alpha/)
 feature introduced in Kubernetes 1.27. It allows to revert workload's CPU resource requests and limits
 back to their original values without the need to recreate the Pods.
 
 The increase of resources is achieved by Mutating Admission Webhook. By default, the webhook also
-removes CPU resource limits if present. The original resource values are set by operator after given
+removes CPU resource limits if present. The original resource values are set by operator after a given
 period of time or when the POD condition is met.
 
 ## Installation
 
-**Requires Kubernetes 1.27 on newer with `InPlacePodVerticalScaling` feature gate
+**Requires Kubernetes 1.27 or newer with `InPlacePodVerticalScaling` feature gate
 enabled.**
 
 To install the latest release of Kube Startup CPU Boost in your cluster, run the following command:
@@ -54,7 +54,7 @@ kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/downl
 ```
  <!-- x-release-please-end -->
 
-The Kube Startup CPU Boost components run in `kube-startup-cpu-boost-system` namespace.
+The Kube Startup CPU Boost components run in the `kube-startup-cpu-boost-system` namespace.
 
 ### Install with Kustomize
 
@@ -185,7 +185,7 @@ spec:
 
 ### [Boost duration] fixed time
 
-Define the fixed amount of time, the resource boost effect will last for it since the POD creation.
+Define the fixed amount of time, the resource boost effect will last for it since the POD's creation.
 
 ```yaml
 spec:
