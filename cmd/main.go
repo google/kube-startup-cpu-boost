@@ -15,13 +15,16 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -41,15 +44,20 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
+const (
+	IN_PLACE_VERTICAL_POD_AUTOSCALING_FG_NAME = "InPlacePodVerticalScaling"
+)
+
 var (
 	scheme           = runtime.NewScheme()
 	setupLog         = ctrl.Log.WithName("setup")
 	leaderElectionID = "8fd077db.x-k8s.io"
 )
 
+//+kubebuilder:rbac:urls="/metrics",verbs=get
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(autoscalingv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
@@ -62,6 +70,22 @@ func main() {
 	}
 	ctrl.SetLogger(config.Logger(cfg.ZapDevelopment, cfg.ZapLogLevel))
 	metrics.Register()
+	restConfig := ctrl.GetConfigOrDie()
+
+	if cfg.ValidateFeatureEnabled {
+		setupLog.Info("validating required feature gates")
+		featureGates, err := getFeatureGatesFromMetrics(context.Background(), restConfig)
+		if err == nil {
+			if !featureGates.IsEnabledAnyStage(IN_PLACE_VERTICAL_POD_AUTOSCALING_FG_NAME) {
+				setupLog.Error(
+					fmt.Errorf("%s is not enabled at any stage", IN_PLACE_VERTICAL_POD_AUTOSCALING_FG_NAME),
+					"required feature gates are not enabled")
+				os.Exit(1)
+			}
+		} else {
+			setupLog.Error(err, "failed to validate required feature gates, continuing...")
+		}
+	}
 
 	tlsOpts := []func(*tls.Config){}
 	if !cfg.HTTP2 {
@@ -76,7 +100,7 @@ func main() {
 		Port:    9443,
 	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress:   cfg.MetricsProbeBindAddr,
@@ -143,4 +167,12 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
+}
+
+func getFeatureGatesFromMetrics(ctx context.Context, cfg *rest.Config) (util.FeatureGates, error) {
+	fgValidator, err := util.NewMetricsFeatureGateValidatorFromConfig(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return fgValidator.GetFeatureGates()
 }

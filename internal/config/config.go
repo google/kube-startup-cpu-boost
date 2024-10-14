@@ -16,16 +16,17 @@
 package config
 
 const (
-	PodNamespaceDefault         = "kube-startup-cpu-boost-system"
-	MgrCheckIntervalSecDefault  = 5
-	LeaderElectionDefault       = false
-	MetricsProbeBindAddrDefault = ":8080"
-	HealthProbeBindAddrDefault  = ":8081"
-	SecureMetricsDefault        = false
-	ZapLogLevelDefault          = 0 // zapcore.InfoLevel
-	ZapDevelopmentDefault       = false
-	HTTP2Default                = false
-	RemoveLimitsDefault         = true
+	PodNamespaceDefault           = "kube-startup-cpu-boost-system"
+	MgrCheckIntervalSecDefault    = 5
+	LeaderElectionDefault         = false
+	MetricsProbeBindAddrDefault   = ":8080"
+	HealthProbeBindAddrDefault    = ":8081"
+	SecureMetricsDefault          = false
+	ZapLogLevelDefault            = 0 // zapcore.InfoLevel
+	ZapDevelopmentDefault         = false
+	HTTP2Default                  = false
+	RemoveLimitsDefault           = true
+	ValidateFeatureEnabledDefault = true
 )
 
 // ConfigProvider provides the Kube Startup CPU Boost configuration
@@ -57,6 +58,9 @@ type Config struct {
 	HTTP2 bool
 	// RemoveLimits determines if CPU resource limits should be removed during boost
 	RemoveLimits bool
+	// ValidateFeatureEnabled determines if InPlacePodVerticalScaling feature state
+	// is validated at operator's start
+	ValidateFeatureEnabled bool
 }
 
 // LoadDefaults loads the default configuration values
@@ -71,4 +75,5 @@ func (c *Config) LoadDefaults() {
 	c.ZapDevelopment = ZapDevelopmentDefault
 	c.HTTP2 = HTTP2Default
 	c.RemoveLimits = RemoveLimitsDefault
+	c.ValidateFeatureEnabled = ValidateFeatureEnabledDefault
 }

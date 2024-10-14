@@ -21,16 +21,17 @@ import (
 )
 
 const (
-	PodNamespaceEnvVar         = "POD_NAMESPACE"
-	MgrCheckIntervalSecEnvVar  = "MGR_CHECK_INTERVAL"
-	LeaderElectionEnvVar       = "LEADER_ELECTION"
-	MetricsProbeBindAddrEnvVar = "METRICS_PROBE_BIND_ADDR"
-	HealthProbeBindAddrEnvVar  = "HEALTH_PROBE_BIND_ADDR"
-	SecureMetricsEnvVar        = "SECURE_METRICS"
-	ZapLogLevelEnvVar          = "ZAP_LOG_LEVEL"
-	ZapDevelopmentEnvVar       = "ZAP_DEVELOPMENT"
-	HTTP2EnvVar                = "HTTP2"
-	RemoveLimitsEnvVar         = "REMOVE_LIMITS"
+	PodNamespaceEnvVar           = "POD_NAMESPACE"
+	MgrCheckIntervalSecEnvVar    = "MGR_CHECK_INTERVAL"
+	LeaderElectionEnvVar         = "LEADER_ELECTION"
+	MetricsProbeBindAddrEnvVar   = "METRICS_PROBE_BIND_ADDR"
+	HealthProbeBindAddrEnvVar    = "HEALTH_PROBE_BIND_ADDR"
+	SecureMetricsEnvVar          = "SECURE_METRICS"
+	ZapLogLevelEnvVar            = "ZAP_LOG_LEVEL"
+	ZapDevelopmentEnvVar         = "ZAP_DEVELOPMENT"
+	HTTP2EnvVar                  = "HTTP2"
+	RemoveLimitsEnvVar           = "REMOVE_LIMITS"
+	ValidateFeatureEnabledEnvVar = "VALIDATE_FEATURE_ENABLED"
 )
 
 type LookupEnvFunc func(key string) (string, bool)
@@ -59,6 +60,7 @@ func (p *EnvConfigProvider) LoadConfig() (*Config, error) {
 	errs = p.loadZapDevelopment(&config, errs)
 	errs = p.loadHTTP2(&config, errs)
 	errs = p.loadRemoveLimits(&config, errs)
+	errs = p.loadValidateFeatureEnabled(&config, errs)
 	var err error
 	if len(errs) > 0 {
 		err = errors.Join(errs...)
@@ -156,6 +158,17 @@ func (p *EnvConfigProvider) loadRemoveLimits(config *Config, curErrs []error) (e
 		config.RemoveLimits = boolVal
 		if err != nil {
 			errs = append(curErrs, fmt.Errorf("%s value is not a bool: %s", RemoveLimitsEnvVar, err))
+		}
+	}
+	return
+}
+
+func (p *EnvConfigProvider) loadValidateFeatureEnabled(config *Config, curErrs []error) (errs []error) {
+	if v, ok := p.lookupFunc(ValidateFeatureEnabledEnvVar); ok {
+		boolVal, err := strconv.ParseBool(v)
+		config.ValidateFeatureEnabled = boolVal
+		if err != nil {
+			errs = append(curErrs, fmt.Errorf("%s value is not a bool: %s", ValidateFeatureEnabledEnvVar, err))
 		}
 	}
 	return
