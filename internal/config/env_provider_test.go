@@ -139,5 +139,13 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.RemoveLimits).To(BeFalse())
 			})
 		})
+		When("validateFeatureEnabled variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.ValidateFeatureEnabledEnvVar] = "false"
+			})
+			It("has valid validateFeatureEnabled", func() {
+				Expect(cfg.ValidateFeatureEnabled).To(BeFalse())
+			})
+		})
 	})
 })

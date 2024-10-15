@@ -223,6 +223,7 @@ Kube Startup CPU Boost operator can be configured with environmental variables.
 | `ZAP_DEVELOPMENT` | `bool` | `false` | Enables development mode for ZAP logger |
 | `HTTP2` | `bool` | `false` | Determines if the HTTP/2 protocol is used for webhook and metrics servers|
 | `REMOVE_LIMITS` | `bool` | `true` | Enables operator to remove container CPU limits during the boost time |
+| `VALIDATE_FEATURE_ENABLED` | `bool` | `true` | Enables validation of required feature gate on operator's startup |
 
 ## Metrics
 

@@ -59,5 +59,8 @@ var _ = Describe("Config", func() {
 		It("has valid RemoveLimits", func() {
 			Expect(cfg.RemoveLimits).To(Equal(config.RemoveLimitsDefault))
 		})
+		It("has valid RemoveLimits", func() {
+			Expect(cfg.ValidateFeatureEnabled).To(Equal(config.ValidateFeatureEnabledDefault))
+		})
 	})
 })
