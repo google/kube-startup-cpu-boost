@@ -35,8 +35,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	RegularBoostTypeName   = "RegularBoost"
+	NamespaceBoostTypeName = "NamespaceBoost"
+	ClusterBoostTypeName   = "ClusterBoost"
+)
+
 // StartupCPUBoost is an implementation of a StartupCPUBoost CRD
+//
+// Deprecated: the legacy StartupCPUBoost interface is replaced with NamespacedBoost
+// and Boost interfaces as new boost types were introduced.
 type StartupCPUBoost interface {
+	// Type returns boost type name
+	Type() string
 	// Name returns startup-cpu-boost name
 	Name() string
 	// Namespace returns startup-cpu-boost namespace
@@ -60,6 +71,40 @@ type StartupCPUBoost interface {
 	Matches(pod *corev1.Pod) bool
 	// Stats returns the StartupCPUBoost usage statistics
 	Stats() StartupCPUBoostStats
+}
+
+// Boost is a generic startup-cpu-boost
+type Boost interface {
+	// Type returns boost type name
+	Type() string
+	// Name returns startup-cpu-boost name
+	Name() string
+	// ResourcePolicy returns the resource policy for a given container
+	ResourcePolicy(containerName string) (resource.ContainerPolicy, bool)
+	// DurationPolicies returns configured duration policies
+	DurationPolicies() map[string]duration.Policy
+	// Pod returns a POD if tracked by startup-cpu-boost
+	Pod(name string) (*corev1.Pod, bool)
+	// UpsertPod inserts new or updates existing POD to startup-cpu-boost tracking
+	UpsertPod(ctx context.Context, pod *corev1.Pod) error
+	// DeletePod removes the POD from the startup-cpu-boost tracking
+	DeletePod(ctx context.Context, pod *corev1.Pod) error
+	// ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
+	ValidatePolicy(ctx context.Context, name string) []*corev1.Pod
+	// RevertResources updates POD's container resource requests and limits to their original
+	// values using the data from StartupCPUBoost annotation
+	RevertResources(ctx context.Context, pod *corev1.Pod) error
+	// Matches verifies if a boost selector matches the given POD
+	Matches(pod *corev1.Pod) bool
+	// Stats returns the StartupCPUBoost usage statistics
+	Stats() StartupCPUBoostStats
+}
+
+// NamespacedBoost is namespaced startup-cpu-boost
+type NamespacedBoost interface {
+	Boost
+	// Namespace returns startup-cpu-boost namespace
+	Namespace() string
 }
 
 const (
@@ -118,6 +163,11 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 		client:           client,
 		stats:            StartupCPUBoostStats{},
 	}, nil
+}
+
+// Type returns startup-cpu-boost type name
+func (b *StartupCPUBoostImpl) Type() string {
+	return RegularBoostTypeName
 }
 
 // Name returns startup-cpu-boost name

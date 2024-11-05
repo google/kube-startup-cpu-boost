@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("BoostController", func() {
+var _ = Describe("Regular boost controller", func() {
 	var (
 		mockCtrl    *gomock.Controller
 		mockClient  *mock.MockClient
@@ -51,7 +51,7 @@ var _ = Describe("BoostController", func() {
 			Manager: mockManager,
 		}
 	})
-	Describe("Receives reconcile request", func() {
+	Describe("receives reconcile request", func() {
 		var (
 			req       ctrl.Request
 			name      string
@@ -69,7 +69,7 @@ var _ = Describe("BoostController", func() {
 		JustBeforeEach(func() {
 			result, err = boostCtrl.Reconcile(context.TODO(), req)
 		})
-		When("boost is registered in boost manager", func() {
+		When("regular boost is registered in boost manager", func() {
 			var (
 				totalContainerBoosts  = 10
 				activeContainerBoosts = 5
@@ -85,7 +85,7 @@ var _ = Describe("BoostController", func() {
 					TotalContainerBoosts:  totalContainerBoosts,
 					ActiveContainerBoosts: activeContainerBoosts,
 				}
-				mockManager.EXPECT().StartupCPUBoost(gomock.Eq(namespace), gomock.Eq(name)).Times(1).Return(mockBoost, true)
+				mockManager.EXPECT().GetRegularBoost(gomock.Any(), gomock.Eq(name), gomock.Eq(namespace)).Times(1).Return(mockBoost, true)
 				mockBoost.EXPECT().Stats().Times(1).Return(stats)
 			})
 			When("there existing status is up to date", func() {

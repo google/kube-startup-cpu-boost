@@ -19,6 +19,7 @@ import (
 	"time"
 
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
+	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -56,6 +57,7 @@ var _ = BeforeSuite(func() {
 
 	annotTemplate = &bpod.BoostPodAnnotation{
 		BoostTimestamp: time.Now(),
+		BoostType:      cpuboost.RegularBoostTypeName,
 		InitCPURequests: map[string]string{
 			"container-one": "500m",
 			"continer-two":  "500m",

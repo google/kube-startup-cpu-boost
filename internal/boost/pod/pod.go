@@ -27,19 +27,26 @@ import (
 )
 
 const (
-	BoostLabelKey      = "autoscaling.x-k8s.io/startup-cpu-boost"
+	// BoostLabelKey is a key for labels for Pods that are tracked
+	// by Kube Startup CPU boost. The value holds name of a boost
+	// configuration.
+	BoostLabelKey = "autoscaling.x-k8s.io/startup-cpu-boost"
+	// BoostAnnotationKey is a key for annotations for Pod that are tracked
+	// by Kube Startup CPU Boost. The value holds CPU boost details.
 	BoostAnnotationKey = "autoscaling.x-k8s.io/startup-cpu-boost"
 )
 
 type BoostPodAnnotation struct {
 	BoostTimestamp  time.Time         `json:"timestamp,omitempty"`
+	BoostType       string            `json:"type,omitempty"`
 	InitCPURequests map[string]string `json:"initCPURequests,omitempty"`
 	InitCPULimits   map[string]string `json:"initCPULimits,omitempty"`
 }
 
-func NewBoostAnnotation() *BoostPodAnnotation {
+func NewBoostAnnotation(boostType string) *BoostPodAnnotation {
 	return &BoostPodAnnotation{
 		BoostTimestamp:  time.Now(),
+		BoostType:       boostType,
 		InitCPURequests: make(map[string]string),
 		InitCPULimits:   make(map[string]string),
 	}
