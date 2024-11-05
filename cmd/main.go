@@ -161,7 +161,7 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		Log:     ctrl.Log.WithName("boost-reconciler"),
 		Manager: boostMgr,
 	}
-	boostMgr.SetStartupCPUBoostReconciler(boostCtrl)
+	boostMgr.SetBoostReconciler(boost.RegularBoostTypeName, boostCtrl)
 	if err := boostCtrl.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StartupCPUBoost")
 		os.Exit(1)

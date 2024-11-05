@@ -36,10 +36,10 @@ var _ = Describe("Manager", func() {
 	BeforeEach(func() {
 		metrics.ClearSystemMetrics()
 	})
-	Describe("Registers startup-cpu-boost", func() {
+	Describe("registers regular boost", func() {
 		var (
 			spec  *autoscaling.StartupCPUBoost
-			boost cpuboost.StartupCPUBoost
+			boost cpuboost.NamespacedBoost
 			err   error
 		)
 		BeforeEach(func() {
@@ -50,35 +50,35 @@ var _ = Describe("Manager", func() {
 			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
 			Expect(err).ToNot(HaveOccurred())
 		})
-		When("startup-cpu-boost exists", func() {
+		When("regular boost exists", func() {
 			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularBoost(context.TODO(), boost)
 				Expect(err).ToNot(HaveOccurred())
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularBoost(context.TODO(), boost)
 			})
 			It("errors", func() {
 				Expect(err).To(HaveOccurred())
 			})
 		})
-		When("startup-cpu-boost does not exist", func() {
+		When("regular boost does not exist", func() {
 			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularBoost(context.TODO(), boost)
 			})
 			It("does not error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
-			It("stores the startup-cpu-boost", func() {
-				stored, ok := manager.StartupCPUBoost(spec.Namespace, spec.Name)
+			It("stores the regular boost", func() {
+				stored, ok := manager.GetRegularBoost(context.TODO(), spec.Name, spec.Namespace)
 				Expect(ok).To(BeTrue())
 				Expect(stored.Name()).To(Equal(spec.Name))
 				Expect(stored.Namespace()).To(Equal(spec.Namespace))
 			})
-			It("updates boost configurations metric", func() {
-				Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(1)))
+			It("updates regular boost configurations metric", func() {
+				Expect(metrics.RegularBoostConfigurations(spec.Namespace)).To(Equal(float64(1)))
 			})
 		})
 	})
-	Describe("De-registers startup-cpu-boost", func() {
+	Describe("de-registers regular boost", func() {
 		var (
 			spec  *autoscaling.StartupCPUBoost
 			boost cpuboost.StartupCPUBoost
@@ -92,27 +92,27 @@ var _ = Describe("Manager", func() {
 			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
 			Expect(err).ToNot(HaveOccurred())
 		})
-		When("startup-cpu-boost exists", func() {
+		When("regular boost exists", func() {
 			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularBoost(context.TODO(), boost)
 				Expect(err).ToNot(HaveOccurred())
-				manager.RemoveStartupCPUBoost(context.TODO(), boost.Namespace(), boost.Name())
+				manager.DeleteRegularBoost(context.TODO(), boost.Name(), boost.Namespace())
 			})
-			It("removes the startup-cpu-boost", func() {
-				_, ok := manager.StartupCPUBoost(spec.Namespace, spec.Name)
+			It("removes the regular boost", func() {
+				_, ok := manager.GetRegularBoost(context.TODO(), spec.Name, spec.Namespace)
 				Expect(ok).To(BeFalse())
 			})
-			It("updates boost configurations metric", func() {
-				Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(0)))
+			It("updates regular boost configurations metric", func() {
+				Expect(metrics.RegularBoostConfigurations(spec.Namespace)).To(Equal(float64(0)))
 			})
 		})
 	})
-	Describe("retrieves startup-cpu-boost for a POD", func() {
+	Describe("retrieves boost for a POD", func() {
 		var (
 			pod               *corev1.Pod
 			podNameLabel      string
 			podNameLabelValue string
-			boost             cpuboost.StartupCPUBoost
+			boost             cpuboost.Boost
 			found             bool
 		)
 		BeforeEach(func() {
@@ -124,9 +124,9 @@ var _ = Describe("Manager", func() {
 		JustBeforeEach(func() {
 			manager = cpuboost.NewManager(nil)
 		})
-		When("matching startup-cpu-boost does not exist", func() {
+		When("no matching boost exists", func() {
 			JustBeforeEach(func() {
-				boost, found = manager.StartupCPUBoostForPod(context.TODO(), pod)
+				boost, found = manager.GetBoostForPod(context.TODO(), pod)
 			})
 			It("returns false", func() {
 				Expect(found).To(BeFalse())
@@ -135,7 +135,7 @@ var _ = Describe("Manager", func() {
 				Expect(boost).To(BeNil())
 			})
 		})
-		When("matching startup-cpu-boost exists", func() {
+		When("matching regular boost exists", func() {
 			var (
 				spec *autoscaling.StartupCPUBoost
 				err  error
@@ -147,17 +147,18 @@ var _ = Describe("Manager", func() {
 			JustBeforeEach(func() {
 				boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
 				Expect(err).NotTo(HaveOccurred())
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularBoost(context.TODO(), boost.(cpuboost.NamespacedBoost))
 				Expect(err).NotTo(HaveOccurred())
-				boost, found = manager.StartupCPUBoostForPod(context.TODO(), pod)
+				boost, found = manager.GetBoostForPod(context.TODO(), pod)
 			})
 			It("returns true", func() {
 				Expect(found).To(BeTrue())
 			})
-			It("returns valid boost", func() {
+			It("returns regular boost", func() {
 				Expect(boost).NotTo(BeNil())
 				Expect(boost.Name()).To(Equal(spec.Name))
-				Expect(boost.Namespace()).To(Equal(spec.Namespace))
+				namespacedBoost := boost.(cpuboost.NamespacedBoost)
+				Expect(namespacedBoost.Namespace()).To(Equal(spec.Namespace))
 			})
 		})
 	})
@@ -184,7 +185,7 @@ var _ = Describe("Manager", func() {
 				done <- 1
 			}()
 		})
-		When("There are no startup-cpu-boosts with fixed duration policy", func() {
+		When("There are no boosts with fixed duration policy", func() {
 			var c chan time.Time
 			BeforeEach(func() {
 				c = make(chan time.Time, 1)
@@ -201,7 +202,7 @@ var _ = Describe("Manager", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
-		When("There are startup-cpu-boosts with fixed duration policy", func() {
+		When("There is a regular boosts with fixed duration policy", func() {
 			var (
 				spec           *autoscaling.StartupCPUBoost
 				boost          cpuboost.StartupCPUBoost
@@ -231,12 +232,12 @@ var _ = Describe("Manager", func() {
 				mockReconciler.EXPECT().Reconcile(gomock.Any(), gomock.Eq(reconcileReq)).Times(1)
 			})
 			JustBeforeEach(func() {
-				manager.SetStartupCPUBoostReconciler(mockReconciler)
+				manager.SetBoostReconciler(cpuboost.RegularBoostTypeName, mockReconciler)
 				boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec)
 				Expect(err).ShouldNot(HaveOccurred())
 				err = boost.UpsertPod(ctx, pod)
 				Expect(err).ShouldNot(HaveOccurred())
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularBoost(context.TODO(), boost)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				c <- time.Now()

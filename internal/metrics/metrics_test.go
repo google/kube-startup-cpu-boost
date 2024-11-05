@@ -29,11 +29,11 @@ var _ = Describe("Metrics", func() {
 			metrics.ClearSystemMetrics()
 		})
 		JustBeforeEach(func() {
-			metrics.NewBoostConfiguration(namespace)
-			metrics.NewBoostConfiguration(namespace)
+			metrics.NewRegularBoostConfiguration(namespace)
+			metrics.NewRegularBoostConfiguration(namespace)
 		})
 		It("updates the boost configurations metric", func() {
-			Expect(metrics.BoostConfigurations(namespace)).To(Equal(float64(2)))
+			Expect(metrics.RegularBoostConfigurations(namespace)).To(Equal(float64(2)))
 		})
 	})
 	Describe("deletes boost configuration", func() {
@@ -44,12 +44,12 @@ var _ = Describe("Metrics", func() {
 			metrics.ClearSystemMetrics()
 		})
 		JustBeforeEach(func() {
-			metrics.NewBoostConfiguration(namespace)
-			metrics.NewBoostConfiguration(namespace)
-			metrics.DeleteBoostConfiguration(namespace)
+			metrics.NewRegularBoostConfiguration(namespace)
+			metrics.NewRegularBoostConfiguration(namespace)
+			metrics.DeleteRegularBoostConfiguration(namespace)
 		})
 		It("updates the boost configurations metric", func() {
-			Expect(metrics.BoostConfigurations(namespace)).To(Equal(float64(1)))
+			Expect(metrics.RegularBoostConfigurations(namespace)).To(Equal(float64(1)))
 		})
 	})
 	Describe("sets active container boost metric", func() {

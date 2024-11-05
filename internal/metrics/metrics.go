@@ -24,9 +24,9 @@ import (
 const KubeStartupCPUBoostSubsystem = "boost"
 
 var (
-	// boostConfigurations is a number of the container
+	// regularBoostConfigurations is a number of the container
 	// boost configurations registered in a boost manager.
-	boostConfigurations *prometheus.GaugeVec
+	regularBoostConfigurations *prometheus.GaugeVec
 	// boostContainersTotal is a number of a containers which
 	// CPU resources were increased.
 	boostContainersTotal *prometheus.CounterVec
@@ -37,10 +37,10 @@ var (
 
 // init initializes all of the Kube Startup CPU Boost metrics.
 func init() {
-	boostConfigurations = prometheus.NewGaugeVec(
+	regularBoostConfigurations = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: KubeStartupCPUBoostSubsystem,
-			Name:      "configurations",
+			Name:      "regular_boosts",
 			Help:      "Number of registered Kube Startup CPU Boost configurations",
 		}, []string{"namespace"},
 	)
@@ -64,24 +64,24 @@ func init() {
 // in the Prometheus registry.
 func Register() {
 	metrics.Registry.MustRegister(
-		boostConfigurations,
+		regularBoostConfigurations,
 		boostContainersTotal,
 		boostContainersActive,
 	)
 }
 
-// NewBoostConfiguration updates all of the relevant metrics when
+// NewRegularBoostConfiguration updates all of the relevant metrics when
 // a new boost configuration is created
-func NewBoostConfiguration(namespace string) {
-	boostConfigurations.With(
+func NewRegularBoostConfiguration(namespace string) {
+	regularBoostConfigurations.With(
 		prometheus.Labels{"namespace": namespace}).
 		Inc()
 }
 
-// DeleteBoostConfiguration updates all of the relevant metrics when
+// DeleteRegularBoostConfiguration updates all of the relevant metrics when
 // a boost configuration is deleted
-func DeleteBoostConfiguration(namespace string) {
-	boostConfigurations.With(
+func DeleteRegularBoostConfiguration(namespace string) {
+	regularBoostConfigurations.With(
 		prometheus.Labels{"namespace": namespace}).
 		Dec()
 }
@@ -104,7 +104,7 @@ func AddBoostContainersTotal(namespace string, boost string, value float64) {
 
 // ClearSystemMetrics clears all of the system metrics.
 func ClearSystemMetrics() {
-	boostConfigurations.Reset()
+	regularBoostConfigurations.Reset()
 }
 
 // ClearBoostMetrics clears all of relevant metrics for given
@@ -118,10 +118,10 @@ func ClearBoostMetrics(namespace string, boost string) {
 	)
 }
 
-// BoostConfigurations returns value for a totalBoostConfigurations
+// RegularBoostConfigurations returns value for a totalBoostConfigurations
 // metric for a given namespace.
-func BoostConfigurations(namespace string) float64 {
-	return gaugeVecValue(boostConfigurations, prometheus.Labels{
+func RegularBoostConfigurations(namespace string) float64 {
+	return gaugeVecValue(regularBoostConfigurations, prometheus.Labels{
 		"namespace": namespace,
 	})
 }
