@@ -16,6 +16,8 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - make manifests generate
+    - make release IMG=ghcr.io/google/{{ .ProjectName }}:{{ .Tag }} MANIFESTS=manifests.yaml
 builds:
   - id: kube-startup-cpu-boost
     main: ./cmd
@@ -32,11 +34,6 @@ builds:
     goarch:
       - amd64
       - arm64
-    hooks:
-      pre:
-        - cmd: make manifests generate 
-      post:
-        - cmd: make release IMG=ghcr.io/google/{{ .ProjectName }}:{{ .Tag }} MANIFESTS=manifests.yaml
 dockers:
   - goos: linux
     goarch: amd64
