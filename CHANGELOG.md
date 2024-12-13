@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.11.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.0...v0.11.1) (2024-12-13)
+
+
+### Bug Fixes
+
+* upgraded direct and transitive dependencies and go ([#80](https://github.com/google/kube-startup-cpu-boost/issues/80)) ([08fb82f](https://github.com/google/kube-startup-cpu-boost/commit/08fb82f3bb03e9db4ff65438f5610a3dc8ab5969))
+
 ## [0.11.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.10.1...v0.11.0) (2024-10-15)
 
 
