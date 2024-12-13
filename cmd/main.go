@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	IN_PLACE_VERTICAL_POD_AUTOSCALING_FG_NAME = "InPlacePodVerticalScaling"
+	InPlacePodVerticalScalingFeatureGateName = "InPlacePodVerticalScaling"
 )
 
 var (
@@ -76,9 +76,9 @@ func main() {
 		setupLog.Info("validating required feature gates")
 		featureGates, err := getFeatureGatesFromMetrics(context.Background(), restConfig)
 		if err == nil {
-			if !featureGates.IsEnabledAnyStage(IN_PLACE_VERTICAL_POD_AUTOSCALING_FG_NAME) {
+			if !featureGates.IsEnabledAnyStage(InPlacePodVerticalScalingFeatureGateName) {
 				setupLog.Error(
-					fmt.Errorf("%s is not enabled at any stage", IN_PLACE_VERTICAL_POD_AUTOSCALING_FG_NAME),
+					fmt.Errorf("%s is not enabled at any stage", InPlacePodVerticalScalingFeatureGateName),
 					"required feature gates are not enabled")
 				os.Exit(1)
 			}

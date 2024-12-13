@@ -29,15 +29,10 @@ type FeatureGates map[string]map[string]bool
 type FeatureGateStage string
 
 const (
-	METRICS_ENDPOINT                = "/metrics"
-	K8S_FEATURE_ENABLED_METRIC_NAME = "kubernetes_feature_enabled"
-	K8S_FEATURE_ENABLED_NAME_LABEL  = "name"
-	K8S_FEATURE_ENABLED_STAGE_LABEL = "stage"
-
-	FEATURE_GATE_STAGE_ALPHA      FeatureGateStage = "ALPHA"
-	FEATURE_GATE_STAGE_BETA       FeatureGateStage = "BETA"
-	FEATURE_GATE_STAGE_GA         FeatureGateStage = ""
-	FEATURE_GATE_STAGE_DEPRECATED FeatureGateStage = "DEPRECATED"
+	metricsEndpoint             = "/metrics"
+	k8sFeatureEnabledMetricName = "kubernetes_feature_enabled"
+	k8sFeatureEnabledNameLabel  = "name"
+	k8sFeatureEnabledStageLabel = "stage"
 )
 
 func (f FeatureGates) IsEnabled(featureGate string, stage FeatureGateStage) bool {
@@ -95,7 +90,7 @@ func NewMetricsFeatureGateValidator(ctx context.Context, RESTClient restclient.I
 }
 
 func (m *metricsFeatureGateValidator) GetFeatureGates() (FeatureGates, error) {
-	reader, err := m.client.Get().AbsPath(METRICS_ENDPOINT).Stream(m.ctx)
+	reader, err := m.client.Get().AbsPath(metricsEndpoint).Stream(m.ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +102,7 @@ func (m *metricsFeatureGateValidator) GetFeatureGates() (FeatureGates, error) {
 	}
 	featureGates := make(map[string]map[string]bool)
 	for name, family := range metricFamilies {
-		if name != K8S_FEATURE_ENABLED_METRIC_NAME {
+		if name != k8sFeatureEnabledMetricName {
 			continue
 		}
 		for _, metric := range family.Metric {
@@ -131,10 +126,10 @@ func getNameAndStage(labels []*promclient.LabelPair) (string, string, error) {
 	var name string
 	var stagePtr *string
 	for _, label := range labels {
-		if label.GetName() == K8S_FEATURE_ENABLED_NAME_LABEL {
+		if label.GetName() == k8sFeatureEnabledNameLabel {
 			name = label.GetValue()
 		}
-		if label.GetName() == K8S_FEATURE_ENABLED_STAGE_LABEL {
+		if label.GetName() == k8sFeatureEnabledStageLabel {
 			stagePtr = label.Value
 		}
 	}

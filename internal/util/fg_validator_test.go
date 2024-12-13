@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	K8S_FG_METRIC_HELP = "# HELP kubernetes_feature_enabled [BETA] This metric records the data about the stage and enablement of a k8s feature."
-	K8S_FG_METRIC_TYPE = "# TYPE kubernetes_feature_enabled gauge"
+	k8sFeatureGateMetricHelp = "# HELP kubernetes_feature_enabled [BETA] This metric records the data about the stage and enablement of a k8s feature."
+	k8sFeatureGateMetricType = "# TYPE kubernetes_feature_enabled gauge"
 )
 
 var _ = Describe("Feature Gate Validator", func() {
@@ -141,9 +141,9 @@ var _ = Describe("Feature Gate Validator", func() {
 
 func featureGateString(data map[string]map[string]int) string {
 	builder := strings.Builder{}
-	builder.WriteString(K8S_FG_METRIC_HELP)
+	builder.WriteString(k8sFeatureGateMetricHelp)
 	builder.WriteString("\n")
-	builder.WriteString(K8S_FG_METRIC_TYPE)
+	builder.WriteString(k8sFeatureGateMetricType)
 	builder.WriteString("\n")
 	if data == nil {
 		return builder.String()
