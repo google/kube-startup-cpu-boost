@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+version: 2
 before:
   hooks:
     - go mod tidy
@@ -89,4 +90,4 @@ release:
   extra_files:
     - glob: ./manifests.yaml
 changelog:
-  skip: true
+  disable: true
