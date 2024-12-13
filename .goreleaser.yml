@@ -30,6 +30,7 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     hooks:
       pre:
         - cmd: make manifests generate 
@@ -39,10 +40,38 @@ dockers:
   - goos: linux
     goarch: amd64
     dockerfile: goreleaser.dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
     image_templates:
-      - "ghcr.io/google/{{ .ProjectName }}:latest"
-      - "ghcr.io/google/{{ .ProjectName }}:{{ .Tag }}" 
-      - "ghcr.io/google/{{ .ProjectName }}:{{ .ShortCommit }}" 
+      - "ghcr.io/google/{{ .ProjectName }}:latest-amd64"
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .Tag }}-amd64" 
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .ShortCommit }}-amd64" 
+  - goos: linux
+    goarch: arm64
+    dockerfile: goreleaser.dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+    image_templates:
+      - "ghcr.io/google/{{ .ProjectName }}:latest-arm64"
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .Tag }}-arm64" 
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .ShortCommit }}-arm64" 
+docker_manifests:
+  - name_template: "ghcr.io/google/{{ .ProjectName }}:latest"
+    image_templates:
+      - "ghcr.io/google/{{ .ProjectName }}:latest-amd64"
+      - "ghcr.io/google/{{ .ProjectName }}:latest-arm64"
+  - name_template: "ghcr.io/google/{{ .ProjectName }}:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .Tag }}-amd64"
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/google/{{ .ProjectName }}:{{ .ShortCommit }}" 
+    image_templates:
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .ShortCommit }}-amd64"
+      - "ghcr.io/google/{{ .ProjectName }}:{{ .ShortCommit }}-arm64"
 archives:
   - format: zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
