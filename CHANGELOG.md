@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.11.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.1...v0.11.2) (2024-12-13)
+
+
+### Bug Fixes
+
+* moved goreleaser manifest gen to avoid race cond ([#82](https://github.com/google/kube-startup-cpu-boost/issues/82)) ([a3a5248](https://github.com/google/kube-startup-cpu-boost/commit/a3a5248a5c6579a4166fad3014277f12ccb02c53))
+
 ## [0.11.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.0...v0.11.1) (2024-12-13)
 
 
