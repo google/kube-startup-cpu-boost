@@ -56,7 +56,7 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq wo
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod create")
-	boost, ok := h.boostForPod(pod)
+	boost, ok := h.boostForPod(ctx, pod)
 	if !ok {
 		log.V(5).Info("pod create skipped: no boost for pod")
 		return
@@ -69,7 +69,7 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq wo
 	wq.Add(reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      boostName,
-			Namespace: boost.Namespace(),
+			Namespace: pod.Namespace,
 		},
 	})
 }
@@ -81,7 +81,7 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq wo
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod delete")
-	boost, ok := h.boostForPod(pod)
+	boost, ok := h.boostForPod(ctx, pod)
 	if !ok {
 		log.V(5).Info("pod delete skipped: no boost for pod")
 		return
@@ -92,7 +92,7 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq wo
 	wq.Add(reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      boost.Name(),
-			Namespace: boost.Namespace(),
+			Namespace: pod.Namespace,
 		},
 	})
 }
@@ -109,7 +109,7 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 		log.V(5).Info("pod update skipped: conditions did not change")
 		return
 	}
-	boost, ok := h.boostForPod(pod)
+	boost, ok := h.boostForPod(ctx, pod)
 	if !ok {
 		log.V(5).Info("pod update skipped: no boost for pod")
 		return
@@ -120,7 +120,7 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 	wq.Add(reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      boost.Name(),
-			Namespace: boost.Namespace(),
+			Namespace: pod.Namespace,
 		},
 	})
 }
@@ -146,10 +146,22 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 	}
 }
 
-func (h *boostPodHandler) boostForPod(pod *corev1.Pod) (boost.StartupCPUBoost, bool) {
+func (h *boostPodHandler) boostForPod(ctx context.Context, pod *corev1.Pod) (boost.Boost, bool) {
 	boostName, ok := pod.Labels[bpod.BoostLabelKey]
 	if !ok {
 		return nil, false
 	}
-	return h.manager.StartupCPUBoost(pod.Namespace, boostName)
+	boostAnnot, err := bpod.BoostAnnotationFromPod(pod)
+	if err != nil {
+		return nil, false
+	}
+	switch boostAnnot.BoostType {
+	case boost.ClusterBoostTypeName:
+		return h.manager.GetClusterBoost(ctx, boostName)
+	case boost.NamespaceBoostTypeName:
+		return h.manager.GetNamespaceBoost(ctx, boostName, pod.Namespace)
+	case boost.RegularBoostTypeName:
+		return h.manager.GetRegularBoost(ctx, boostName, pod.Namespace)
+	}
+	return nil, false
 }

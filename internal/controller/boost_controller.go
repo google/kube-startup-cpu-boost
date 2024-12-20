@@ -71,7 +71,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		Reason:  BoostActiveConditionFalseReason,
 		Message: BoostActiveConditionFalseMessage,
 	}
-	boost, ok := r.Manager.StartupCPUBoost(boostObj.Namespace, boostObj.Name)
+	boost, ok := r.Manager.GetRegularBoost(ctx, boostObj.Name, boostObj.Namespace)
 	if ok {
 		log.V(5).Info("found boost in a manager")
 		stats := boost.Stats()
@@ -125,7 +125,7 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	if err != nil {
 		log.Error(err, "boost creation error")
 	}
-	if err := r.Manager.AddStartupCPUBoost(ctx, boost); err != nil {
+	if err := r.Manager.AddRegularBoost(ctx, boost); err != nil {
 		log.Error(err, "boost registration error")
 	}
 	return true
@@ -139,7 +139,7 @@ func (r *StartupCPUBoostReconciler) Delete(e event.DeleteEvent) bool {
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost delete event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	r.Manager.RemoveStartupCPUBoost(ctx, boostObj.Namespace, boostObj.Name)
+	r.Manager.DeleteRegularBoost(ctx, boostObj.Name, boostObj.Namespace)
 	return true
 }
 

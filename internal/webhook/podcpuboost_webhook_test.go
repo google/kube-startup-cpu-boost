@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strconv"
 
+	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
@@ -52,7 +53,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 			pod = podTemplate.DeepCopy()
 			mockCtrl = gomock.NewController(GinkgoT())
 			manager = mock.NewMockManager(mockCtrl)
-			managerCall = manager.EXPECT().StartupCPUBoostForPod(
+			managerCall = manager.EXPECT().GetBoostForPod(
 				gomock.Any(),
 				gomock.Cond(func(x any) bool {
 					p, ok := x.(*corev1.Pod)
@@ -100,6 +101,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost = mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
+					boost.EXPECT().Type().AnyTimes().Return(cpuboost.RegularBoostTypeName)
 					resPolicyCallOne = boost.EXPECT().ResourcePolicy(gomock.Eq(containerOneName)).Return(nil, false)
 					resPolicyCallTwo = boost.EXPECT().ResourcePolicy(gomock.Eq(containerTwoName)).Return(nil, false)
 					managerCall.Return(boost, true)
@@ -118,6 +120,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 			When("there is a policy for one container", func() {
 				var (
 					boostName        string
+					boostType        string
 					boost            *mock.MockStartupCPUBoost
 					resPolicy        resource.ContainerPolicy
 					resPolicyCallOne *gomock.Call
@@ -126,7 +129,9 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost = mock.NewMockStartupCPUBoost(mockCtrl)
 					boostName = "boost-one"
+					boostType = cpuboost.RegularBoostTypeName
 					boost.EXPECT().Name().AnyTimes().Return(boostName)
+					boost.EXPECT().Type().AnyTimes().Return(cpuboost.RegularBoostTypeName)
 					resPolicy = resource.NewPercentageContainerPolicy(120)
 					resPolicyCallOne = boost.EXPECT().ResourcePolicy(gomock.Eq(containerOneName)).Return(resPolicy, true)
 					resPolicyCallTwo = boost.EXPECT().ResourcePolicy(gomock.Eq(containerTwoName)).Return(nil, false)
@@ -151,6 +156,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 					Expect(found).To(BeTrue())
 					annot, err := boostAnnotationFromPatch(annotPatch)
 					Expect(err).NotTo(HaveOccurred())
+					Expect(annot.BoostType).To(Equal(boostType))
 					Expect(annot.InitCPURequests).To(HaveKeyWithValue(
 						containerOneName,
 						pod.Spec.Containers[0].Resources.Requests.Cpu().String(),
@@ -234,6 +240,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
+					boost.EXPECT().Type().AnyTimes().Return(cpuboost.RegularBoostTypeName)
 					resPolicy := resource.NewPercentageContainerPolicy(120)
 					resPolicyCallOne = boost.EXPECT().ResourcePolicy(gomock.Eq(containerOneName)).Return(resPolicy, true)
 					resPolicyCallTwo = boost.EXPECT().ResourcePolicy(gomock.Eq(containerTwoName)).Return(resPolicy, true)

@@ -56,7 +56,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	log := ctrl.LoggerFrom(ctx).WithName("boost-pod-webhook")
 	log.V(5).Info("handling pod")
 
-	boostImpl, ok := h.manager.StartupCPUBoostForPod(ctx, pod)
+	boostImpl, ok := h.manager.GetBoostForPod(ctx, pod)
 	if !ok {
 		log.V(5).Info("no boost matched")
 		return admission.Allowed("no boost matched")
@@ -70,8 +70,8 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
-	annotation := bpod.NewBoostAnnotation()
+func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.Boost, pod *corev1.Pod, log logr.Logger) {
+	annotation := bpod.NewBoostAnnotation(b.Type())
 	for i, container := range pod.Spec.Containers {
 		policy, found := b.ResourcePolicy(container.Name)
 		if !found {
