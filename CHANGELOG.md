@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.11.3](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.2...v0.11.3) (2024-12-20)
+
+
+### Bug Fixes
+
+* deps upgrade for vulnerability in golang.org/x/net/html ([#84](https://github.com/google/kube-startup-cpu-boost/issues/84)) ([3f92d37](https://github.com/google/kube-startup-cpu-boost/commit/3f92d371dda79459a0827e29796bfa3c72aa0c18))
+
 ## [0.11.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.1...v0.11.2) (2024-12-13)
 
 
