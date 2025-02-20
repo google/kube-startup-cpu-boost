@@ -27,6 +27,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	v1alpha1 "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	boost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
@@ -37,6 +38,7 @@ import (
 type MockManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockManagerMockRecorder is the mock recorder for MockManager.
@@ -57,83 +59,97 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // AddStartupCPUBoost mocks base method.
-func (m *MockManager) AddStartupCPUBoost(arg0 context.Context, arg1 boost.StartupCPUBoost) error {
+func (m *MockManager) AddStartupCPUBoost(ctx context.Context, boost boost.StartupCPUBoost) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddStartupCPUBoost", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddStartupCPUBoost", ctx, boost)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddStartupCPUBoost indicates an expected call of AddStartupCPUBoost.
-func (mr *MockManagerMockRecorder) AddStartupCPUBoost(arg0, arg1 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) AddStartupCPUBoost(ctx, boost any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStartupCPUBoost", reflect.TypeOf((*MockManager)(nil).AddStartupCPUBoost), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStartupCPUBoost", reflect.TypeOf((*MockManager)(nil).AddStartupCPUBoost), ctx, boost)
 }
 
 // RemoveStartupCPUBoost mocks base method.
-func (m *MockManager) RemoveStartupCPUBoost(arg0 context.Context, arg1, arg2 string) {
+func (m *MockManager) RemoveStartupCPUBoost(ctx context.Context, namespace, name string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoveStartupCPUBoost", arg0, arg1, arg2)
+	m.ctrl.Call(m, "RemoveStartupCPUBoost", ctx, namespace, name)
 }
 
 // RemoveStartupCPUBoost indicates an expected call of RemoveStartupCPUBoost.
-func (mr *MockManagerMockRecorder) RemoveStartupCPUBoost(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) RemoveStartupCPUBoost(ctx, namespace, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveStartupCPUBoost", reflect.TypeOf((*MockManager)(nil).RemoveStartupCPUBoost), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveStartupCPUBoost", reflect.TypeOf((*MockManager)(nil).RemoveStartupCPUBoost), ctx, namespace, name)
 }
 
 // SetStartupCPUBoostReconciler mocks base method.
-func (m *MockManager) SetStartupCPUBoostReconciler(arg0 reconcile.Reconciler) {
+func (m *MockManager) SetStartupCPUBoostReconciler(reconciler reconcile.TypedReconciler[reconcile.Request]) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetStartupCPUBoostReconciler", arg0)
+	m.ctrl.Call(m, "SetStartupCPUBoostReconciler", reconciler)
 }
 
 // SetStartupCPUBoostReconciler indicates an expected call of SetStartupCPUBoostReconciler.
-func (mr *MockManagerMockRecorder) SetStartupCPUBoostReconciler(arg0 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) SetStartupCPUBoostReconciler(reconciler any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStartupCPUBoostReconciler", reflect.TypeOf((*MockManager)(nil).SetStartupCPUBoostReconciler), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStartupCPUBoostReconciler", reflect.TypeOf((*MockManager)(nil).SetStartupCPUBoostReconciler), reconciler)
 }
 
 // Start mocks base method.
-func (m *MockManager) Start(arg0 context.Context) error {
+func (m *MockManager) Start(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0)
+	ret := m.ctrl.Call(m, "Start", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockManagerMockRecorder) Start(arg0 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockManager)(nil).Start), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockManager)(nil).Start), ctx)
 }
 
 // StartupCPUBoost mocks base method.
-func (m *MockManager) StartupCPUBoost(arg0, arg1 string) (boost.StartupCPUBoost, bool) {
+func (m *MockManager) StartupCPUBoost(namespace, name string) (boost.StartupCPUBoost, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartupCPUBoost", arg0, arg1)
+	ret := m.ctrl.Call(m, "StartupCPUBoost", namespace, name)
 	ret0, _ := ret[0].(boost.StartupCPUBoost)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // StartupCPUBoost indicates an expected call of StartupCPUBoost.
-func (mr *MockManagerMockRecorder) StartupCPUBoost(arg0, arg1 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) StartupCPUBoost(namespace, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartupCPUBoost", reflect.TypeOf((*MockManager)(nil).StartupCPUBoost), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartupCPUBoost", reflect.TypeOf((*MockManager)(nil).StartupCPUBoost), namespace, name)
 }
 
 // StartupCPUBoostForPod mocks base method.
-func (m *MockManager) StartupCPUBoostForPod(arg0 context.Context, arg1 *v1.Pod) (boost.StartupCPUBoost, bool) {
+func (m *MockManager) StartupCPUBoostForPod(ctx context.Context, pod *v1.Pod) (boost.StartupCPUBoost, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartupCPUBoostForPod", arg0, arg1)
+	ret := m.ctrl.Call(m, "StartupCPUBoostForPod", ctx, pod)
 	ret0, _ := ret[0].(boost.StartupCPUBoost)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // StartupCPUBoostForPod indicates an expected call of StartupCPUBoostForPod.
-func (mr *MockManagerMockRecorder) StartupCPUBoostForPod(arg0, arg1 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) StartupCPUBoostForPod(ctx, pod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartupCPUBoostForPod", reflect.TypeOf((*MockManager)(nil).StartupCPUBoostForPod), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartupCPUBoostForPod", reflect.TypeOf((*MockManager)(nil).StartupCPUBoostForPod), ctx, pod)
+}
+
+// UpdateStartupCPUBoost mocks base method.
+func (m *MockManager) UpdateStartupCPUBoost(ctx context.Context, spec *v1alpha1.StartupCPUBoost) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateStartupCPUBoost", ctx, spec)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateStartupCPUBoost indicates an expected call of UpdateStartupCPUBoost.
+func (mr *MockManagerMockRecorder) UpdateStartupCPUBoost(ctx, spec any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStartupCPUBoost", reflect.TypeOf((*MockManager)(nil).UpdateStartupCPUBoost), ctx, spec)
 }

@@ -27,6 +27,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	v1alpha1 "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	boost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	duration "github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	resource "github.com/google/kube-startup-cpu-boost/internal/boost/resource"
@@ -38,6 +39,7 @@ import (
 type MockStartupCPUBoost struct {
 	ctrl     *gomock.Controller
 	recorder *MockStartupCPUBoostMockRecorder
+	isgomock struct{}
 }
 
 // MockStartupCPUBoostMockRecorder is the mock recorder for MockStartupCPUBoost.
@@ -58,17 +60,17 @@ func (m *MockStartupCPUBoost) EXPECT() *MockStartupCPUBoostMockRecorder {
 }
 
 // DeletePod mocks base method.
-func (m *MockStartupCPUBoost) DeletePod(arg0 context.Context, arg1 *v1.Pod) error {
+func (m *MockStartupCPUBoost) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeletePod", arg0, arg1)
+	ret := m.ctrl.Call(m, "DeletePod", ctx, pod)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeletePod indicates an expected call of DeletePod.
-func (mr *MockStartupCPUBoostMockRecorder) DeletePod(arg0, arg1 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) DeletePod(ctx, pod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePod", reflect.TypeOf((*MockStartupCPUBoost)(nil).DeletePod), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePod", reflect.TypeOf((*MockStartupCPUBoost)(nil).DeletePod), ctx, pod)
 }
 
 // DurationPolicies mocks base method.
@@ -86,17 +88,17 @@ func (mr *MockStartupCPUBoostMockRecorder) DurationPolicies() *gomock.Call {
 }
 
 // Matches mocks base method.
-func (m *MockStartupCPUBoost) Matches(arg0 *v1.Pod) bool {
+func (m *MockStartupCPUBoost) Matches(pod *v1.Pod) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Matches", arg0)
+	ret := m.ctrl.Call(m, "Matches", pod)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // Matches indicates an expected call of Matches.
-func (mr *MockStartupCPUBoostMockRecorder) Matches(arg0 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) Matches(pod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Matches", reflect.TypeOf((*MockStartupCPUBoost)(nil).Matches), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Matches", reflect.TypeOf((*MockStartupCPUBoost)(nil).Matches), pod)
 }
 
 // Name mocks base method.
@@ -128,47 +130,47 @@ func (mr *MockStartupCPUBoostMockRecorder) Namespace() *gomock.Call {
 }
 
 // Pod mocks base method.
-func (m *MockStartupCPUBoost) Pod(arg0 string) (*v1.Pod, bool) {
+func (m *MockStartupCPUBoost) Pod(name string) (*v1.Pod, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Pod", arg0)
+	ret := m.ctrl.Call(m, "Pod", name)
 	ret0, _ := ret[0].(*v1.Pod)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // Pod indicates an expected call of Pod.
-func (mr *MockStartupCPUBoostMockRecorder) Pod(arg0 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) Pod(name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pod", reflect.TypeOf((*MockStartupCPUBoost)(nil).Pod), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pod", reflect.TypeOf((*MockStartupCPUBoost)(nil).Pod), name)
 }
 
 // ResourcePolicy mocks base method.
-func (m *MockStartupCPUBoost) ResourcePolicy(arg0 string) (resource.ContainerPolicy, bool) {
+func (m *MockStartupCPUBoost) ResourcePolicy(containerName string) (resource.ContainerPolicy, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResourcePolicy", arg0)
+	ret := m.ctrl.Call(m, "ResourcePolicy", containerName)
 	ret0, _ := ret[0].(resource.ContainerPolicy)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // ResourcePolicy indicates an expected call of ResourcePolicy.
-func (mr *MockStartupCPUBoostMockRecorder) ResourcePolicy(arg0 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) ResourcePolicy(containerName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResourcePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ResourcePolicy), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResourcePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ResourcePolicy), containerName)
 }
 
 // RevertResources mocks base method.
-func (m *MockStartupCPUBoost) RevertResources(arg0 context.Context, arg1 *v1.Pod) error {
+func (m *MockStartupCPUBoost) RevertResources(ctx context.Context, pod *v1.Pod) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RevertResources", arg0, arg1)
+	ret := m.ctrl.Call(m, "RevertResources", ctx, pod)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RevertResources indicates an expected call of RevertResources.
-func (mr *MockStartupCPUBoostMockRecorder) RevertResources(arg0, arg1 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) RevertResources(ctx, pod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevertResources", reflect.TypeOf((*MockStartupCPUBoost)(nil).RevertResources), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevertResources", reflect.TypeOf((*MockStartupCPUBoost)(nil).RevertResources), ctx, pod)
 }
 
 // Stats mocks base method.
@@ -185,30 +187,44 @@ func (mr *MockStartupCPUBoostMockRecorder) Stats() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stats", reflect.TypeOf((*MockStartupCPUBoost)(nil).Stats))
 }
 
-// UpsertPod mocks base method.
-func (m *MockStartupCPUBoost) UpsertPod(arg0 context.Context, arg1 *v1.Pod) error {
+// UpdateFromSpec mocks base method.
+func (m *MockStartupCPUBoost) UpdateFromSpec(ctx context.Context, boost *v1alpha1.StartupCPUBoost) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpsertPod", arg0, arg1)
+	ret := m.ctrl.Call(m, "UpdateFromSpec", ctx, boost)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateFromSpec indicates an expected call of UpdateFromSpec.
+func (mr *MockStartupCPUBoostMockRecorder) UpdateFromSpec(ctx, boost any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFromSpec", reflect.TypeOf((*MockStartupCPUBoost)(nil).UpdateFromSpec), ctx, boost)
+}
+
+// UpsertPod mocks base method.
+func (m *MockStartupCPUBoost) UpsertPod(ctx context.Context, pod *v1.Pod) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertPod", ctx, pod)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpsertPod indicates an expected call of UpsertPod.
-func (mr *MockStartupCPUBoostMockRecorder) UpsertPod(arg0, arg1 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) UpsertPod(ctx, pod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPod", reflect.TypeOf((*MockStartupCPUBoost)(nil).UpsertPod), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPod", reflect.TypeOf((*MockStartupCPUBoost)(nil).UpsertPod), ctx, pod)
 }
 
 // ValidatePolicy mocks base method.
-func (m *MockStartupCPUBoost) ValidatePolicy(arg0 context.Context, arg1 string) []*v1.Pod {
+func (m *MockStartupCPUBoost) ValidatePolicy(ctx context.Context, name string) []*v1.Pod {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidatePolicy", arg0, arg1)
+	ret := m.ctrl.Call(m, "ValidatePolicy", ctx, name)
 	ret0, _ := ret[0].([]*v1.Pod)
 	return ret0
 }
 
 // ValidatePolicy indicates an expected call of ValidatePolicy.
-func (mr *MockStartupCPUBoostMockRecorder) ValidatePolicy(arg0, arg1 any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) ValidatePolicy(ctx, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ValidatePolicy), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ValidatePolicy), ctx, name)
 }
