@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 var _ = Describe("BoostController", func() {
@@ -139,6 +140,31 @@ var _ = Describe("BoostController", func() {
 					Expect(result).To(Equal(ctrl.Result{}))
 				})
 			})
+		})
+	})
+	Describe("receives update event", func() {
+		var (
+			updateEvent event.UpdateEvent
+			mgrMockCall *gomock.Call
+		)
+		BeforeEach(func() {
+			updateEvent = event.UpdateEvent{
+				ObjectNew: &autoscaling.StartupCPUBoost{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "boost-001",
+						Namespace: "demo",
+					},
+				},
+			}
+			mgrMockCall = mockManager.EXPECT().UpdateStartupCPUBoost(
+				gomock.Any(), gomock.Eq(updateEvent.ObjectNew))
+		})
+		JustBeforeEach(func() {
+			ok := boostCtrl.Update(updateEvent)
+			Expect(ok).To(BeTrue())
+		})
+		It("calls manager with valid update", func() {
+			mgrMockCall.Times(1)
 		})
 	})
 })

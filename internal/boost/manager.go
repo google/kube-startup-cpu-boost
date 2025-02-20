@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,6 +47,8 @@ type Manager interface {
 	AddStartupCPUBoost(ctx context.Context, boost StartupCPUBoost) error
 	// RemoveStartupCPUBoost removes a startup-cpu-boost from a manager
 	RemoveStartupCPUBoost(ctx context.Context, namespace, name string)
+	// UpdateStartupCPUBoost updates a startup-cpu-boost in a manager
+	UpdateStartupCPUBoost(ctx context.Context, spec *autoscaling.StartupCPUBoost) error
 	// StartupCPUBoost returns a startup-cpu-boost with a given name and namespace
 	StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool)
 	// StartupCPUBoostForPod returns a startup-cpu-boost that matches a given pod
@@ -139,6 +142,23 @@ func (m *managerImpl) RemoveStartupCPUBoost(ctx context.Context, namespace, name
 	delete(m.timePolicyBoosts, key)
 	metrics.DeleteBoostConfiguration(namespace)
 	log.Info("boost deleted successfully")
+}
+
+func (m *managerImpl) UpdateStartupCPUBoost(ctx context.Context, spec *autoscaling.StartupCPUBoost) error {
+	m.Lock()
+	defer m.Unlock()
+	log := m.log.WithValues("boost", spec.ObjectMeta.Name, "namespace", spec.ObjectMeta.Namespace)
+	log.V(5).Info("handling boost update")
+	boost, ok := m.getStartupCPUBoost(spec.ObjectMeta.Namespace, spec.ObjectMeta.Name)
+	if !ok {
+		log.V(5).Info("boost object not found")
+		return nil
+	}
+	if err := boost.UpdateFromSpec(ctx, spec); err != nil {
+		return err
+	}
+	log.Info("boost updated successfully")
+	return nil
 }
 
 // StartupCPUBoost returns a startup-cpu-boost with a given name and namespace

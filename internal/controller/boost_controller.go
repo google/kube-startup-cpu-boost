@@ -150,6 +150,10 @@ func (r *StartupCPUBoostReconciler) Update(e event.UpdateEvent) bool {
 	}
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost update event")
+	ctx := ctrl.LoggerInto(context.Background(), log)
+	if err := r.Manager.UpdateStartupCPUBoost(ctx, boostObj); err != nil {
+		log.Error(err, "boost update error")
+	}
 	return true
 }
 
