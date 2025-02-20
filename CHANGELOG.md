@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.12.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.3...v0.12.0) (2025-02-20)
+
+
+### Features
+
+* spec updates handled and reflected by boost manager ([#89](https://github.com/google/kube-startup-cpu-boost/issues/89)) ([0da9e7e](https://github.com/google/kube-startup-cpu-boost/commit/0da9e7e96bf95ba42ff8ccff3d893762f23a4dbb))
+
 ## [0.11.3](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.2...v0.11.3) (2024-12-20)
 
 
