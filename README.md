@@ -162,10 +162,11 @@ container(s) will be increase by the given percentage value.
 
 ```yaml
 spec:
-  containerPolicies:
-   - containerName: spring-rest-jpa
-     percentageIncrease:
-       value: 50
+  resourcePolicy:
+    containerPolicies:
+    - containerName: spring-rest-jpa
+      percentageIncrease:
+        value: 50
 ```
 
 ### [Boost resources] fixed target
@@ -176,11 +177,12 @@ higher than the ones in the container.
 
 ```yaml
 spec:
-  containerPolicies:
-   - containerName: spring-rest-jpa
-     fixedResources:
-       requests: "1"
-       limits: "2"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: spring-rest-jpa
+      fixedResources:
+        requests: "1"
+        limits: "2"
 ```
 
 ### [Boost duration] fixed time
