@@ -20,6 +20,7 @@ import (
 
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
@@ -104,6 +105,44 @@ var _ = Describe("Manager", func() {
 			})
 			It("updates boost configurations metric", func() {
 				Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(0)))
+			})
+		})
+	})
+	Describe("updates startup-cpu-boost from spec", func() {
+		var (
+			boost       cpuboost.StartupCPUBoost
+			err         error
+			spec        *autoscaling.StartupCPUBoost
+			updatedSpec *autoscaling.StartupCPUBoost
+		)
+		BeforeEach(func() {
+			spec = specTemplate.DeepCopy()
+			updatedSpec = spec.DeepCopy()
+			updatedSpec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
+				Unit:  autoscaling.FixedDurationPolicyUnitMin,
+				Value: 1000,
+			}
+		})
+		JustBeforeEach(func() {
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			Expect(err).ToNot(HaveOccurred())
+		})
+		When("startup-cpu-boost is registered", func() {
+			JustBeforeEach(func() {
+				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				Expect(err).ToNot(HaveOccurred())
+				err = manager.UpdateStartupCPUBoost(context.TODO(), updatedSpec)
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("updates the startup-cpu-boost", func() {
+				boost, ok := manager.StartupCPUBoost(updatedSpec.Namespace, updatedSpec.Name)
+				Expect(ok).To(BeTrue())
+				durationPolicies := boost.DurationPolicies()
+				durationPolicy, ok := durationPolicies[duration.FixedDurationPolicyName]
+				Expect(ok).To(BeTrue())
+				Expect(durationPolicy).To(BeAssignableToTypeOf(&duration.FixedDurationPolicy{}))
+				fixedDurationPolicy := durationPolicy.(*duration.FixedDurationPolicy)
+				Expect(fixedDurationPolicy.Duration()).To(Equal(1000 * time.Minute))
 			})
 		})
 	})

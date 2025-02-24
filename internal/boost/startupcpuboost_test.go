@@ -299,4 +299,113 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 	})
+	Describe("Updates boost from the spec", func() {
+		var (
+			updatedSpec *autoscaling.StartupCPUBoost
+		)
+		BeforeEach(func() {
+			spec.Selector = metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "test",
+				},
+			}
+			spec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
+				Unit:  autoscaling.FixedDurationPolicyUnitMin,
+				Value: 2,
+			}
+			spec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
+				Status: corev1.ConditionTrue,
+				Type:   corev1.PodReady,
+			}
+			updatedSpec = spec.DeepCopy()
+		})
+		JustBeforeEach(func() {
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			Expect(err).ShouldNot(HaveOccurred())
+			err = boost.UpdateFromSpec(context.TODO(), updatedSpec)
+		})
+		When("selector is changed", func() {
+			var (
+				podToSelect *corev1.Pod
+			)
+			BeforeEach(func() {
+				updatedSpec.Selector = metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "newApp",
+					},
+				}
+				podToSelect = &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pod",
+						Namespace: specTemplate.Namespace,
+						Labels: map[string]string{
+							"app": "newApp",
+						}}}
+			})
+			It("matches pod with new selector", func() {
+				Expect(boost.Matches(podToSelect)).To(BeTrue())
+			})
+		})
+		When("duration policy is changed", func() {
+			var (
+				durationPolicies map[string]duration.Policy
+			)
+			BeforeEach(func() {
+				updatedSpec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
+					Unit:  autoscaling.FixedDurationPolicyUnitMin,
+					Value: 1000,
+				}
+				updatedSpec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
+					Type:   corev1.PodInitialized,
+					Status: corev1.ConditionTrue,
+				}
+			})
+			JustBeforeEach(func() {
+				durationPolicies = boost.DurationPolicies()
+			})
+			It("has valid fixed duration policy", func() {
+				durationPolicy := durationPolicies[duration.FixedDurationPolicyName]
+				Expect(durationPolicy).To(BeAssignableToTypeOf(&duration.FixedDurationPolicy{}))
+				fixedDurationPolicy := durationPolicy.(*duration.FixedDurationPolicy)
+				Expect(fixedDurationPolicy.Duration()).To(Equal(1000 * time.Minute))
+			})
+			It("has valid pod condition policy", func() {
+				durationPolicy := durationPolicies[duration.PodConditionPolicyName]
+				Expect(durationPolicy).To(BeAssignableToTypeOf(&duration.PodConditionPolicy{}))
+				podConditionDurationPolicy := durationPolicy.(*duration.PodConditionPolicy)
+				Expect(podConditionDurationPolicy.Condition()).To(Equal(corev1.PodInitialized))
+				Expect(podConditionDurationPolicy.Status()).To(Equal(corev1.ConditionTrue))
+			})
+		})
+		When("resource policy is changed", func() {
+			var (
+				resourcePolicy      resource.ContainerPolicy
+				resourcePolicyFound bool
+			)
+			BeforeEach(func() {
+				updatedSpec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						{
+							ContainerName: "test",
+							PercentageIncrease: &autoscaling.PercentageIncrease{
+								Value: 1000,
+							},
+						},
+					},
+				}
+
+			})
+			JustBeforeEach(func() {
+				resourcePolicy, resourcePolicyFound = boost.ResourcePolicy("test")
+			})
+			It("finds resource policy", func() {
+				Expect(resourcePolicyFound).To(BeTrue())
+			})
+			It("has valid resource policy", func() {
+				Expect(resourcePolicy).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+				percentagePolicy := resourcePolicy.(*resource.PercentageContainerPolicy)
+				Expect(percentagePolicy.Percentage()).To(Equal(int64(1000)))
+			})
+		})
+	})
 })

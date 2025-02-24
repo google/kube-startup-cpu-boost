@@ -60,6 +60,8 @@ type StartupCPUBoost interface {
 	Matches(pod *corev1.Pod) bool
 	// Stats returns the StartupCPUBoost usage statistics
 	Stats() StartupCPUBoostStats
+	// UpdateFromSpec updates the StartupCPUBoost from the API spec
+	UpdateFromSpec(ctx context.Context, boost *autoscaling.StartupCPUBoost) error
 }
 
 const (
@@ -224,6 +226,26 @@ func (b *StartupCPUBoostImpl) Matches(pod *corev1.Pod) bool {
 // Stats returns the StartupCPUBoost usage statistics
 func (b *StartupCPUBoostImpl) Stats() StartupCPUBoostStats {
 	return b.stats
+}
+
+// UpdateFromSpec updates the StartupCPUBoost from the API spec
+func (b *StartupCPUBoostImpl) UpdateFromSpec(ctx context.Context, boost *autoscaling.StartupCPUBoost) error {
+	b.Lock()
+	defer b.Unlock()
+	log := b.loggerFromContext(ctx)
+	log.V(5).Info("handling boost update from API spec")
+	selector, err := metav1.LabelSelectorAsSelector(&boost.Selector)
+	if err != nil {
+		return err
+	}
+	resourcePolicies, err := mapResourcePolicy(boost.Spec.ResourcePolicy)
+	if err != nil {
+		return err
+	}
+	b.selector = selector
+	b.resourcePolicies = resourcePolicies
+	b.durationPolicies = mapDurationPolicy(boost.Spec.DurationPolicy)
+	return nil
 }
 
 // loggerFromContext provides Logger from a current context with configured
