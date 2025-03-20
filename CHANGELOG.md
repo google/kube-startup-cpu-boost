@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.12.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.12.0...v0.12.1) (2025-03-20)
+
+
+### Bug Fixes
+
+* rbac too wide ([#99](https://github.com/google/kube-startup-cpu-boost/issues/99)) ([767d31c](https://github.com/google/kube-startup-cpu-boost/commit/767d31c4aff6cf385ec9c931728bbc7e3d47b0fd))
+
 ## [0.12.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.11.3...v0.12.0) (2025-02-20)
 
 
