@@ -32,9 +32,10 @@ const (
 	webhookSecretName          = "kube-startup-cpu-boost-webhook-secret"
 )
 
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;update
-//+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=mutatingwebhookconfigurations,verbs=get;list;watch;update
-//+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=validatingwebhookconfigurations,verbs=get;list;watch;update
+//+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=mutatingwebhookconfigurations,verbs=list;watch
+//+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=validatingwebhookconfigurations,verbs=list;watch
+//+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=mutatingwebhookconfigurations,resourceNames=kube-startup-cpu-boost-mutating-webhook-configuration,verbs=get;update
+//+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=validatingwebhookconfigurations,resourceNames=kube-startup-cpu-boost-validating-webhook-configuration,verbs=get;update
 
 func ManageCerts(mgr ctrl.Manager, namespace string, setupFinished chan struct{}) error {
 	dnsName := fmt.Sprintf("%s.%s.svc", webhookServiceName, namespace)

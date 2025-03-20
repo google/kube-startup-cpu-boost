@@ -1,2 +1,4 @@
 resources:
+- role.yaml
+- role_binding.yaml
 - secret.yaml
