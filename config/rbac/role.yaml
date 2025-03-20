@@ -12,7 +12,6 @@ rules:
   - ""
   resources:
   - pods
-  - secrets
   verbs:
   - get
   - list
@@ -20,14 +19,30 @@ rules:
   - watch
 - apiGroups:
   - admissionregistration.k8s.io
+  resourceNames:
+  - kube-startup-cpu-boost-mutating-webhook-configuration
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - admissionregistration.k8s.io
   resources:
   - mutatingwebhookconfigurations
   - validatingwebhookconfigurations
   verbs:
-  - get
   - list
-  - update
   - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - kube-startup-cpu-boost-validating-webhook-configuration
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
 - apiGroups:
   - autoscaling.x-k8s.io
   resources:
