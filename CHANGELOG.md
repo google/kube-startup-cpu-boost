@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.12.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.12.1...v0.12.2) (2025-03-21)
+
+
+### Bug Fixes
+
+* added node affinities for supported archs ([#101](https://github.com/google/kube-startup-cpu-boost/issues/101)) ([b84c398](https://github.com/google/kube-startup-cpu-boost/commit/b84c3986eb05cc1388ba2d12571a462eedcba834))
+* deps upgrade ([#103](https://github.com/google/kube-startup-cpu-boost/issues/103)) ([eaed864](https://github.com/google/kube-startup-cpu-boost/commit/eaed86420b3ecf6574dfb9bb79229db02bff27c4))
+
 ## [0.12.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.12.0...v0.12.1) (2025-03-20)
 
 
