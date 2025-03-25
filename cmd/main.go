@@ -24,7 +24,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/rest"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -72,19 +71,21 @@ func main() {
 	metrics.Register()
 	restConfig := ctrl.GetConfigOrDie()
 
+	clusterInfo, err := util.NewClusterInfoFromConfig(context.Background(), restConfig)
+	if err != nil {
+		setupLog.Error(err, "failed to create cluster info provider")
+		os.Exit(1)
+	}
+
+	versionInfo, err := clusterInfo.GetClusterVersion()
+	if err != nil {
+		setupLog.Error(err, "failed to get cluster version, continuing...")
+	} else {
+		setupLog.Info("cluster info", "version", versionInfo.GitVersion)
+	}
+
 	if cfg.ValidateFeatureEnabled {
-		setupLog.Info("validating required feature gates")
-		featureGates, err := getFeatureGatesFromMetrics(context.Background(), restConfig)
-		if err == nil {
-			if !featureGates.IsEnabledAnyStage(InPlacePodVerticalScalingFeatureGateName) {
-				setupLog.Error(
-					fmt.Errorf("%s is not enabled at any stage", InPlacePodVerticalScalingFeatureGateName),
-					"required feature gates are not enabled")
-				os.Exit(1)
-			}
-		} else {
-			setupLog.Error(err, "failed to validate required feature gates, continuing...")
-		}
+		validateFeatureGates(clusterInfo)
 	}
 
 	tlsOpts := []func(*tls.Config){}
@@ -169,10 +170,17 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 	//+kubebuilder:scaffold:builder
 }
 
-func getFeatureGatesFromMetrics(ctx context.Context, cfg *rest.Config) (util.FeatureGates, error) {
-	fgValidator, err := util.NewMetricsFeatureGateValidatorFromConfig(ctx, cfg)
-	if err != nil {
-		return nil, err
+func validateFeatureGates(clusterInfo util.ClusterInfo) {
+	setupLog.Info("validating required feature gates")
+	featureGates, err := clusterInfo.GetFeatureGates()
+	if err == nil {
+		if !featureGates.IsEnabledAnyStage(InPlacePodVerticalScalingFeatureGateName) {
+			setupLog.Error(
+				fmt.Errorf("%s is not enabled at any stage", InPlacePodVerticalScalingFeatureGateName),
+				"required feature gates are not enabled")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Error(err, "failed to validate required feature gates, continuing...")
 	}
-	return fgValidator.GetFeatureGates()
 }
