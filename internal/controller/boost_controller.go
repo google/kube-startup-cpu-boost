@@ -21,6 +21,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -40,20 +41,23 @@ const (
 	BoostActiveConditionTrueMessage  = "Can boost new containers"
 	BoostActiveConditionFalseReason  = "NotFound"
 	BoostActiveConditionFalseMessage = "StartupCPUBoost not found"
+	WantedServerVersionForNewRevert  = "v1.32.0"
 )
 
 // StartupCPUBoostReconciler reconciles a StartupCPUBoost object
 type StartupCPUBoostReconciler struct {
 	client.Client
-	Scheme  *runtime.Scheme
-	Log     logr.Logger
-	Manager boost.Manager
+	Scheme           *runtime.Scheme
+	Log              logr.Logger
+	Manager          boost.Manager
+	LegacyRevertMode bool
 }
 
 //+kubebuilder:rbac:groups=autoscaling.x-k8s.io,resources=startupcpuboosts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=autoscaling.x-k8s.io,resources=startupcpuboosts/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=autoscaling.x-k8s.io,resources=startupcpuboosts/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;update;watch
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;update;patch;watch
+//+kubebuilder:rbac:groups="",resources=pods/resize,verbs=patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -98,12 +102,15 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager, serverVersion *version.Info) error {
 	boostPodHandler := NewBoostPodHandler(r.Manager, ctrl.Log.WithName("pod-handler"))
 	lsPredicate, err := predicate.LabelSelectorPredicate(*boostPodHandler.GetPodLabelSelector())
 	if err != nil {
 		return err
 	}
+	r.LegacyRevertMode = shouldUseLegacyRevertMode(serverVersion)
+	ctrl.Log.WithName("boost-controller-setup").WithValues("legacyRevertMode", r.LegacyRevertMode).
+		V(5).Info("setting legacy revert mode")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&autoscaling.StartupCPUBoost{}).
 		Watches(&corev1.Pod{},
@@ -121,7 +128,7 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost create event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	boost, err := boost.NewStartupCPUBoost(r.Client, boostObj)
+	boost, err := boost.NewStartupCPUBoost(r.Client, boostObj, r.LegacyRevertMode)
 	if err != nil {
 		log.Error(err, "boost creation error")
 	}
@@ -161,4 +168,9 @@ func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
 	log := r.Log.WithValues("object", klog.KObj(e.Object))
 	log.V(5).Info("handling generic event")
 	return true
+}
+
+// shouldUseLegacyRevertMode determines if legacy resource revert mode should be used basing on server version
+func shouldUseLegacyRevertMode(serverVersion *version.Info) (legacyMode bool) {
+	return version.CompareKubeAwareVersionStrings(WantedServerVersionForNewRevert, serverVersion.GitVersion) < 0
 }

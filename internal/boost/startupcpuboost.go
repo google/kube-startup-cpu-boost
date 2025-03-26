@@ -68,6 +68,7 @@ const (
 	StartupCPUBoostStatsPodCreateEvent = 1
 	StartupCPUBoostStatsPodUpdateEvent = 2
 	StartupCPUBoostStatsPodDeleteEvent = 3
+	ResizeSubResourceName              = "resize"
 )
 
 type StartupCPUBoostStatsEventType int32
@@ -98,10 +99,11 @@ type StartupCPUBoostImpl struct {
 	pods             map[string]*corev1.Pod
 	client           client.Client
 	stats            StartupCPUBoostStats
+	legacyRevertMode bool
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
-func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost) (StartupCPUBoost, error) {
+func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost, legacyRevertMode bool) (StartupCPUBoost, error) {
 	selector, err := metav1.LabelSelectorAsSelector(&boost.Selector)
 	if err != nil {
 		return nil, err
@@ -119,6 +121,7 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 		pods:             make(map[string]*corev1.Pod),
 		client:           client,
 		stats:            StartupCPUBoostStats{},
+		legacyRevertMode: legacyRevertMode,
 	}, nil
 }
 
@@ -272,15 +275,40 @@ func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p duratio
 // revertResources updates POD's container resource requests and limits to their original
 // values using the data from StartupCPUBoost annotation
 func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.Pod) error {
-	if err := bpod.RevertResourceBoost(pod); err != nil {
-		return fmt.Errorf("failed to update pod spec: %s", err)
+	var err error
+	log := b.loggerFromContext(ctx)
+	if b.legacyRevertMode {
+		log.V(5).Info("reverting pod resources with legacy update method")
+		err = b.updateBoostPodLegacy(ctx, pod)
+	} else {
+		log.V(5).Info("reverting pod resources with new update method")
+		err = b.updateBoostPod(ctx, pod)
 	}
-	if err := b.client.Update(ctx, pod); err != nil {
+	if err != nil {
 		return err
 	}
 	delete(b.pods, pod.Name)
 	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
 	return nil
+}
+
+// updateBoostPod restores original POD annotations, labels and resource requirements by patching
+func (b *StartupCPUBoostImpl) updateBoostPod(ctx context.Context, pod *corev1.Pod) error {
+	if err := b.client.SubResource(ResizeSubResourceName).Patch(ctx, pod, bpod.NewRevertBootsResourcesPatch()); err != nil {
+		return err
+	}
+	if err := b.client.Patch(ctx, pod, bpod.NewRevertBoostLabelsPatch()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// updateBoostPodLegacy restores original POD annotations, labels and resource requirements by updating
+func (b *StartupCPUBoostImpl) updateBoostPodLegacy(ctx context.Context, pod *corev1.Pod) error {
+	if err := bpod.RevertResourceBoost(pod); err != nil {
+		return fmt.Errorf("failed to update pod spec: %s", err)
+	}
+	return b.client.Update(ctx, pod)
 }
 
 // updateStats updates the StartupCPUBoost usage statistics based on the

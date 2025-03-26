@@ -27,6 +27,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -125,7 +126,7 @@ func main() {
 	}
 
 	boostMgr := boost.NewManager(mgr.GetClient())
-	go setupControllers(mgr, boostMgr, cfg, certsReady)
+	go setupControllers(mgr, boostMgr, cfg, versionInfo, certsReady)
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -145,7 +146,8 @@ func main() {
 	}
 }
 
-func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config, certsReady chan struct{}) {
+func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config, serverVersion *version.Info,
+	certsReady chan struct{}) {
 	setupLog.Info("Waiting for certificate generation to complete")
 	<-certsReady
 	setupLog.Info("Certificate generation has completed")
@@ -163,7 +165,7 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		Manager: boostMgr,
 	}
 	boostMgr.SetStartupCPUBoostReconciler(boostCtrl)
-	if err := boostCtrl.SetupWithManager(mgr); err != nil {
+	if err := boostCtrl.SetupWithManager(mgr, serverVersion); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StartupCPUBoost")
 		os.Exit(1)
 	}
