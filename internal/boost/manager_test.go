@@ -21,6 +21,7 @@ import (
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
@@ -39,16 +40,17 @@ var _ = Describe("Manager", func() {
 	})
 	Describe("Registers startup-cpu-boost", func() {
 		var (
-			spec  *autoscaling.StartupCPUBoost
-			boost cpuboost.StartupCPUBoost
-			err   error
+			spec                *autoscaling.StartupCPUBoost
+			boost               cpuboost.StartupCPUBoost
+			useLegacyRevertMode bool
+			err                 error
 		)
 		BeforeEach(func() {
 			spec = specTemplate.DeepCopy()
 		})
 		JustBeforeEach(func() {
 			manager = cpuboost.NewManager(nil)
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, useLegacyRevertMode)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		When("startup-cpu-boost exists", func() {
@@ -81,16 +83,17 @@ var _ = Describe("Manager", func() {
 	})
 	Describe("De-registers startup-cpu-boost", func() {
 		var (
-			spec  *autoscaling.StartupCPUBoost
-			boost cpuboost.StartupCPUBoost
-			err   error
+			spec                *autoscaling.StartupCPUBoost
+			boost               cpuboost.StartupCPUBoost
+			useLegacyRevertMode bool
+			err                 error
 		)
 		BeforeEach(func() {
 			spec = specTemplate.DeepCopy()
 		})
 		JustBeforeEach(func() {
 			manager = cpuboost.NewManager(nil)
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, useLegacyRevertMode)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		When("startup-cpu-boost exists", func() {
@@ -110,10 +113,11 @@ var _ = Describe("Manager", func() {
 	})
 	Describe("updates startup-cpu-boost from spec", func() {
 		var (
-			boost       cpuboost.StartupCPUBoost
-			err         error
-			spec        *autoscaling.StartupCPUBoost
-			updatedSpec *autoscaling.StartupCPUBoost
+			boost               cpuboost.StartupCPUBoost
+			err                 error
+			useLegacyRevertMode bool
+			spec                *autoscaling.StartupCPUBoost
+			updatedSpec         *autoscaling.StartupCPUBoost
 		)
 		BeforeEach(func() {
 			spec = specTemplate.DeepCopy()
@@ -124,7 +128,7 @@ var _ = Describe("Manager", func() {
 			}
 		})
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, useLegacyRevertMode)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		When("startup-cpu-boost is registered", func() {
@@ -148,11 +152,12 @@ var _ = Describe("Manager", func() {
 	})
 	Describe("retrieves startup-cpu-boost for a POD", func() {
 		var (
-			pod               *corev1.Pod
-			podNameLabel      string
-			podNameLabelValue string
-			boost             cpuboost.StartupCPUBoost
-			found             bool
+			pod                 *corev1.Pod
+			podNameLabel        string
+			podNameLabelValue   string
+			boost               cpuboost.StartupCPUBoost
+			useLegacyRevertMode bool
+			found               bool
 		)
 		BeforeEach(func() {
 			podNameLabel = "app.kubernetes.io/name"
@@ -184,7 +189,7 @@ var _ = Describe("Manager", func() {
 				spec.Selector = *metav1.AddLabelToSelector(&metav1.LabelSelector{}, podNameLabel, podNameLabelValue)
 			})
 			JustBeforeEach(func() {
-				boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+				boost, err = cpuboost.NewStartupCPUBoost(nil, spec, useLegacyRevertMode)
 				Expect(err).NotTo(HaveOccurred())
 				err = manager.AddStartupCPUBoost(context.TODO(), boost)
 				Expect(err).NotTo(HaveOccurred())
@@ -242,12 +247,13 @@ var _ = Describe("Manager", func() {
 		})
 		When("There are startup-cpu-boosts with fixed duration policy", func() {
 			var (
-				spec           *autoscaling.StartupCPUBoost
-				boost          cpuboost.StartupCPUBoost
-				pod            *corev1.Pod
-				mockClient     *mock.MockClient
-				mockReconciler *mock.MockReconciler
-				c              chan time.Time
+				spec                *autoscaling.StartupCPUBoost
+				boost               cpuboost.StartupCPUBoost
+				useLegacyRevertMode bool
+				pod                 *corev1.Pod
+				mockClient          *mock.MockClient
+				mockReconciler      *mock.MockReconciler
+				c                   chan time.Time
 			)
 			BeforeEach(func() {
 				spec = specTemplate.DeepCopy()
@@ -265,13 +271,12 @@ var _ = Describe("Manager", func() {
 				c = make(chan time.Time, 1)
 				mockTicker.EXPECT().Tick().MinTimes(1).Return(c)
 				mockTicker.EXPECT().Stop().Return()
-				mockClient.EXPECT().Update(gomock.Any(), gomock.Eq(pod)).MinTimes(1).Return(nil)
 				reconcileReq := reconcile.Request{NamespacedName: types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}}
 				mockReconciler.EXPECT().Reconcile(gomock.Any(), gomock.Eq(reconcileReq)).Times(1)
 			})
 			JustBeforeEach(func() {
 				manager.SetStartupCPUBoostReconciler(mockReconciler)
-				boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec)
+				boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec, useLegacyRevertMode)
 				Expect(err).ShouldNot(HaveOccurred())
 				err = boost.UpsertPod(ctx, pod)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -283,8 +288,30 @@ var _ = Describe("Manager", func() {
 				cancel()
 				<-done
 			})
-			It("doesn't error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			When("legacy revert mode is not used", func() {
+				var (
+					mockSubResourceClient *mock.MockSubResourceClient
+				)
+				BeforeEach(func() {
+					mockSubResourceClient = mock.NewMockSubResourceClient(mockCtrl)
+					mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+						gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
+					mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
+					mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+						gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+				})
+				It("doesn't error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
+			When("legacy revert mode is used", func() {
+				BeforeEach(func() {
+					useLegacyRevertMode = true
+					mockClient.EXPECT().Update(gomock.Any(), gomock.Eq(pod)).MinTimes(1).Return(nil)
+				})
+				It("doesn't error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
 			})
 		})
 	})

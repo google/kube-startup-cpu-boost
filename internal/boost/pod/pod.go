@@ -22,13 +22,17 @@ import (
 	"fmt"
 	"time"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	BoostLabelKey      = "autoscaling.x-k8s.io/startup-cpu-boost"
 	BoostAnnotationKey = "autoscaling.x-k8s.io/startup-cpu-boost"
+	EmptyPatchString   = "{}"
 )
 
 type BoostPodAnnotation struct {
@@ -36,6 +40,8 @@ type BoostPodAnnotation struct {
 	InitCPURequests map[string]string `json:"initCPURequests,omitempty"`
 	InitCPULimits   map[string]string `json:"initCPULimits,omitempty"`
 }
+
+type mutatePodFunc func(pod *corev1.Pod) error
 
 func NewBoostAnnotation() *BoostPodAnnotation {
 	return &BoostPodAnnotation{
@@ -66,12 +72,23 @@ func BoostAnnotationFromPod(pod *corev1.Pod) (*BoostPodAnnotation, error) {
 }
 
 func RevertResourceBoost(pod *corev1.Pod) error {
+	if err := revertBoostResources(pod); err != nil {
+		return err
+	}
+	return revertBoostLabels(pod)
+}
+
+func revertBoostLabels(pod *corev1.Pod) error {
+	delete(pod.Labels, BoostLabelKey)
+	delete(pod.Annotations, BoostAnnotationKey)
+	return nil
+}
+
+func revertBoostResources(pod *corev1.Pod) error {
 	annotation, err := BoostAnnotationFromPod(pod)
 	if err != nil {
 		return fmt.Errorf("failed to get boost annotation from pod: %s", err)
 	}
-	delete(pod.Labels, BoostLabelKey)
-	delete(pod.Annotations, BoostAnnotationKey)
 	for i := range pod.Spec.Containers {
 		container := &pod.Spec.Containers[i]
 		if request, ok := annotation.InitCPURequests[container.Name]; ok {
@@ -96,4 +113,62 @@ func RevertResourceBoost(pod *corev1.Pod) error {
 		}
 	}
 	return nil
+}
+
+func buildPodPatch(pod *corev1.Pod, mutatePodFunc mutatePodFunc) ([]byte, error) {
+	podJSON, err := json.Marshal(pod)
+	if err != nil {
+		return nil, err
+	}
+	if err := mutatePodFunc(pod); err != nil {
+		return nil, err
+	}
+	updatedPodJSON, err := json.Marshal(pod)
+	if err != nil {
+		return nil, err
+	}
+	return jsonpatch.CreateMergePatch(podJSON, updatedPodJSON)
+
+}
+
+func NewRevertBoostLabelsPatch() client.Patch {
+	return &revertBoostLabelsPatch{}
+}
+
+type revertBoostLabelsPatch struct {
+}
+
+func (p *revertBoostLabelsPatch) Type() types.PatchType {
+	return types.MergePatchType
+}
+
+func (p *revertBoostLabelsPatch) Data(obj client.Object) ([]byte, error) {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil, errors.New("revertBoostLabelsPatch applies only on *corev1.Pod objects")
+	}
+	return buildPodPatch(pod, revertBoostLabels)
+}
+
+func NewRevertBootsResourcesPatch() client.Patch {
+	return &revertBoostResourcesPatch{}
+}
+
+type revertBoostResourcesPatch struct {
+}
+
+func (p *revertBoostResourcesPatch) Type() types.PatchType {
+	return types.MergePatchType
+}
+
+func (p *revertBoostResourcesPatch) Data(obj client.Object) ([]byte, error) {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil, errors.New("revertBoostResourcesPatch applies only on *corev1.Pod objects")
+	}
+	patchData, err := buildPodPatch(pod, revertBoostResources)
+	if err != nil {
+		return []byte(EmptyPatchString), nil
+	}
+	return patchData, nil
 }

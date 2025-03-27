@@ -21,6 +21,7 @@ import (
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
@@ -34,10 +35,11 @@ import (
 
 var _ = Describe("StartupCPUBoost", func() {
 	var (
-		spec  *autoscaling.StartupCPUBoost
-		boost cpuboost.StartupCPUBoost
-		err   error
-		pod   *corev1.Pod
+		spec             *autoscaling.StartupCPUBoost
+		boost            cpuboost.StartupCPUBoost
+		legacyRevertMode bool
+		err              error
+		pod              *corev1.Pod
 	)
 	BeforeEach(func() {
 		pod = podTemplate.DeepCopy()
@@ -46,7 +48,7 @@ var _ = Describe("StartupCPUBoost", func() {
 	})
 	Describe("Instantiates from the API specification", func() {
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
 		})
 		It("does not error", func() {
 			Expect(err).NotTo(HaveOccurred())
@@ -182,7 +184,7 @@ var _ = Describe("StartupCPUBoost", func() {
 			mockClient = mock.NewMockClient(mockCtrl)
 		})
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec, legacyRevertMode)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		When("POD does not exist", func() {
@@ -251,12 +253,33 @@ var _ = Describe("StartupCPUBoost", func() {
 							Type:   corev1.PodReady,
 							Status: corev1.ConditionTrue,
 						}}
-						mockClient.EXPECT().
-							Update(gomock.Any(), gomock.Eq(pod)).
-							Return(nil)
 					})
-					It("doesn't error", func() {
-						Expect(err).NotTo(HaveOccurred())
+					When("legacy revert mode is not used", func() {
+						var (
+							mockSubResourceClient *mock.MockSubResourceClient
+						)
+						BeforeEach(func() {
+							mockSubResourceClient = mock.NewMockSubResourceClient(mockCtrl)
+							mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+								gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
+							mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
+							mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+								gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+						})
+						It("doesn't error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
+					})
+					When("legacy revert mode is used", func() {
+						BeforeEach(func() {
+							legacyRevertMode = true
+							mockClient.EXPECT().
+								Update(gomock.Any(), gomock.Eq(pod)).
+								Return(nil)
+						})
+						It("doesn't error", func() {
+							Expect(err).NotTo(HaveOccurred())
+						})
 					})
 				})
 				When("POD condition does not match spec policy", func() {
@@ -275,7 +298,7 @@ var _ = Describe("StartupCPUBoost", func() {
 	})
 	Describe("Deletes a pod", func() {
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		When("Pod exists", func() {
@@ -320,7 +343,7 @@ var _ = Describe("StartupCPUBoost", func() {
 			updatedSpec = spec.DeepCopy()
 		})
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec)
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
 			Expect(err).ShouldNot(HaveOccurred())
 			err = boost.UpdateFromSpec(context.TODO(), updatedSpec)
 		})

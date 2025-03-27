@@ -15,6 +15,7 @@
 package pod_test
 
 import (
+	"fmt"
 	"time"
 
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
@@ -108,6 +109,72 @@ var _ = Describe("Pod", func() {
 					Expect(cpuReqOne.String()).Should(Equal(annot.InitCPULimits[containerOneName]))
 					Expect(cpuReqTwo.String()).Should(Equal(annot.InitCPULimits[containerTwoName]))
 				})
+			})
+		})
+	})
+	Describe("Creates revert boost labels patch", func() {
+		var (
+			patchData []byte
+			err       error
+		)
+		JustBeforeEach(func() {
+			patch := bpod.NewRevertBoostLabelsPatch()
+			patchData, err = patch.Data(pod)
+		})
+		When("Pod is missing boost labels and annotations", func() {
+			BeforeEach(func() {
+				delete(pod.ObjectMeta.Annotations, bpod.BoostAnnotationKey)
+				delete(pod.ObjectMeta.Labels, bpod.BoostLabelKey)
+			})
+			It("doesn't error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns empty patch", func() {
+				Expect(string(patchData)).To(Equal("{}"))
+			})
+		})
+		When("Pod has boost labels and annotations", func() {
+			It("doesn't error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns valid patch", func() {
+				Expect(string(patchData)).To(Equal("{\"metadata\":{\"annotations\":null,\"labels\":null}}"))
+			})
+		})
+	})
+	Describe("Creates revert boost resources patch", func() {
+		var (
+			patchData []byte
+			err       error
+		)
+		JustBeforeEach(func() {
+			patch := bpod.NewRevertBootsResourcesPatch()
+			patchData, err = patch.Data(pod)
+		})
+		When("Pod is missing boost labels and annotations", func() {
+			BeforeEach(func() {
+				delete(pod.ObjectMeta.Annotations, bpod.BoostAnnotationKey)
+				delete(pod.ObjectMeta.Labels, bpod.BoostLabelKey)
+			})
+			It("doesn't error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns empty patch", func() {
+				Expect(string(patchData)).To(Equal("{}"))
+			})
+		})
+		When("Pod has boost labels and annotations", func() {
+			It("doesn't error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns valid patch", func() {
+				expectedPatch := fmt.Sprintf(
+					"{\"spec\":{\"containers\":[{\"name\":\"container-one\",\"resources\":{\"limits\":{\"cpu\":\"%s\"},"+
+						"\"requests\":{\"cpu\":\"%s\"}}},{\"name\":\"container-two\",\"resources\":{\"limits\":{\"cpu\":\"%s\"},"+
+						"\"requests\":{\"cpu\":\"%s\"}}}]}}",
+					annot.InitCPULimits[containerOneName], annot.InitCPURequests[containerOneName],
+					annot.InitCPULimits[containerTwoName], annot.InitCPURequests[containerTwoName])
+				Expect(string(patchData)).To(Equal(expectedPatch))
 			})
 		})
 	})

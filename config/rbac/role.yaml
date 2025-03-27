@@ -15,8 +15,15 @@ rules:
   verbs:
   - get
   - list
+  - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/resize
+  verbs:
+  - patch
 - apiGroups:
   - admissionregistration.k8s.io
   resourceNames:

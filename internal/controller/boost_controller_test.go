@@ -27,9 +27,16 @@ import (
 	"go.uber.org/mock/gomock"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/version"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
@@ -51,6 +58,55 @@ var _ = Describe("BoostController", func() {
 			Client:  mockClient,
 			Manager: mockManager,
 		}
+	})
+	Describe("Setups with manager", func() {
+		var (
+			mockCtrlManager *mock.MockCtrlManager
+			serverVersion   *version.Info
+			err             error
+		)
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+			utilruntime.Must(autoscaling.AddToScheme(scheme))
+			mockCtrlManager = mock.NewMockCtrlManager(mockCtrl)
+			skipNameValidation := true
+			mockCtrlManager.EXPECT().GetControllerOptions().
+				Return(config.Controller{SkipNameValidation: &skipNameValidation}).MinTimes(1)
+			mockCtrlManager.EXPECT().GetScheme().Return(scheme).MinTimes(1)
+			mockCtrlManager.EXPECT().GetLogger().Return(logr.Discard()).MinTimes(1)
+			mockCtrlManager.EXPECT().Add(gomock.Any()).Return(nil).MinTimes(1)
+			mockCtrlManager.EXPECT().GetCache().Return(&informertest.FakeInformers{}).MinTimes(1)
+		})
+		JustBeforeEach(func() {
+			err = boostCtrl.SetupWithManager(mockCtrlManager, serverVersion)
+		})
+		When("server version is newer or equal to 1.32.0", func() {
+			BeforeEach(func() {
+				serverVersion = &version.Info{
+					GitVersion: "v1.32.0",
+				}
+			})
+			It("doesn't error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("runs new revert mode", func() {
+				Expect(boostCtrl.LegacyRevertMode).To(BeFalse())
+			})
+		})
+		When("server version is less than 1.32.0", func() {
+			BeforeEach(func() {
+				serverVersion = &version.Info{
+					GitVersion: "v1.29.2",
+				}
+			})
+			It("doesn't error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("runs legacy revert mode", func() {
+				Expect(boostCtrl.LegacyRevertMode).To(BeTrue())
+			})
+		})
 	})
 	Describe("Receives reconcile request", func() {
 		var (
@@ -110,10 +166,10 @@ var _ = Describe("BoostController", func() {
 				})
 			})
 			When("there existing status is not up to date", func() {
-				var mockSubResWriter *mock.MockSubResourceWriter
+				var mockSubResClient *mock.MockSubResourceClient
 				BeforeEach(func() {
-					mockSubResWriter = mock.NewMockSubResourceWriter(mockCtrl)
-					mockSubResWriter.EXPECT().Update(
+					mockSubResClient = mock.NewMockSubResourceClient(mockCtrl)
+					mockSubResClient.EXPECT().Update(
 						gomock.Any(),
 						gomock.Cond(func(b any) bool {
 							boostObj := b.(*autoscaling.StartupCPUBoost)
@@ -131,7 +187,7 @@ var _ = Describe("BoostController", func() {
 						boostObj.Namespace = namespace
 						return nil
 					})
-					mockClient.EXPECT().Status().Return(mockSubResWriter).Times(1)
+					mockClient.EXPECT().Status().Return(mockSubResClient).Times(1)
 				})
 				It("does not error", func() {
 					Expect(err).To(BeNil())
