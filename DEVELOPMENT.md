@@ -1,4 +1,9 @@
-# kube-startup-cpu-boost development guide
+# Development guide
+
+## Commit messages
+
+We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) specification
+for commit messages to automate the release process. The spec is enforced by github action based validation.
 
 ## Running development cluster
 
