@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.13.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.12.2...v0.13.0) (2025-03-27)
+
+
+### Features
+
+* cluster info provider for version checking ([#104](https://github.com/google/kube-startup-cpu-boost/issues/104)) ([e3bec98](https://github.com/google/kube-startup-cpu-boost/commit/e3bec9899d4784b5000c172f9d5bf8cc5b039283))
+* new mode of resource resize for 1.32 ([#106](https://github.com/google/kube-startup-cpu-boost/issues/106)) ([edaca92](https://github.com/google/kube-startup-cpu-boost/commit/edaca92f11602052a6b65dd29d9f78358eab5236))
+
 ## [0.12.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.12.1...v0.12.2) (2025-03-21)
 
 
