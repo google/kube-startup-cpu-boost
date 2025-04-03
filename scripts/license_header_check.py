@@ -27,7 +27,7 @@ import re
 import sys
 
 _EXCLUDE_DIRS = ('.git', '.terraform', 'config')
-_EXCLUDE_RE = re.compile(r'# skip boilerplate check')
+_EXCLUDE_RE = re.compile(r'// skip boilerplate check')
 _EXCLUDE_FILES = {}
 _MATCH_FILES = ('Dockerfile', '.py', '.sh', '.tf', '.yaml', '.yml', '.go', '.rego')
 _MATCH_STRING = (r'^\s*([#\*]|[/]{2})\sCopyright [0-9]{4} Google LLC$\s+([#\*]|[/]{2})\s+'

@@ -46,6 +46,7 @@ import (
 
 const (
 	InPlacePodVerticalScalingFeatureGateName = "InPlacePodVerticalScaling"
+	PodLevelResourcesFeatureGateName         = "PodLevelResources"
 )
 
 var (
@@ -85,8 +86,17 @@ func main() {
 		setupLog.Info("cluster info", "version", versionInfo.GitVersion)
 	}
 
+	podLevelResourcesEnabled := false
 	if cfg.ValidateFeatureEnabled {
-		validateFeatureGates(clusterInfo)
+		featureGates, err := getFeatureGates(clusterInfo)
+		if err == nil {
+			validateRequiredFeatureGates(featureGates)
+			if featureGates.IsEnabledAnyStage(PodLevelResourcesFeatureGateName) {
+				podLevelResourcesEnabled = true
+			}
+		} else {
+			setupLog.Error(err, "failed to validate required feature gates, continuing...")
+		}
 	}
 
 	tlsOpts := []func(*tls.Config){}
@@ -126,7 +136,7 @@ func main() {
 	}
 
 	boostMgr := boost.NewManager(mgr.GetClient())
-	go setupControllers(mgr, boostMgr, cfg, versionInfo, certsReady)
+	go setupControllers(mgr, boostMgr, cfg, podLevelResourcesEnabled, versionInfo, certsReady)
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -146,8 +156,8 @@ func main() {
 	}
 }
 
-func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config, serverVersion *version.Info,
-	certsReady chan struct{}) {
+func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config,
+	podLevelResourcesEnabled bool, serverVersion *version.Info, certsReady chan struct{}) {
 	setupLog.Info("Waiting for certificate generation to complete")
 	<-certsReady
 	setupLog.Info("Certificate generation has completed")
@@ -156,7 +166,8 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		setupLog.Error(err, "Unable to create webhook", "webhook", failedWebhook)
 		os.Exit(1)
 	}
-	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme, cfg.RemoveLimits)
+	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme, cfg.RemoveLimits,
+		podLevelResourcesEnabled)
 	mgr.GetWebhookServer().Register("/mutate-v1-pod", cpuBoostWebHook)
 	boostCtrl := &controller.StartupCPUBoostReconciler{
 		Client:  mgr.GetClient(),
@@ -172,17 +183,16 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 	//+kubebuilder:scaffold:builder
 }
 
-func validateFeatureGates(clusterInfo util.ClusterInfo) {
-	setupLog.Info("validating required feature gates")
-	featureGates, err := clusterInfo.GetFeatureGates()
-	if err == nil {
-		if !featureGates.IsEnabledAnyStage(InPlacePodVerticalScalingFeatureGateName) {
-			setupLog.Error(
-				fmt.Errorf("%s is not enabled at any stage", InPlacePodVerticalScalingFeatureGateName),
-				"required feature gates are not enabled")
-			os.Exit(1)
-		}
-	} else {
-		setupLog.Error(err, "failed to validate required feature gates, continuing...")
+func getFeatureGates(clusterInfo util.ClusterInfo) (util.FeatureGates, error) {
+	setupLog.Info("fetching cluster feature gates")
+	return clusterInfo.GetFeatureGates()
+}
+
+func validateRequiredFeatureGates(featureGates util.FeatureGates) {
+	if !featureGates.IsEnabledAnyStage(InPlacePodVerticalScalingFeatureGateName) {
+		setupLog.Error(
+			fmt.Errorf("%s is not enabled at any stage", InPlacePodVerticalScalingFeatureGateName),
+			"required feature gates are not enabled")
+		os.Exit(1)
 	}
 }
