@@ -18,4 +18,4 @@ resources:
   - config/default
 images:
   - name: ghcr.io/google/kube-startup-cpu-boost
-    newTag: v0.13.0 #x-release-please-version
+    newTag: v0.14.0 #x-release-please-version
