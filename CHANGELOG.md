@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.14.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.13.0...v0.14.0) (2025-04-07)
+
+
+### Features
+
+* boost webhooks validates POD qos changes ([#110](https://github.com/google/kube-startup-cpu-boost/issues/110)) ([2ceb69a](https://github.com/google/kube-startup-cpu-boost/commit/2ceb69a8b38a999faced683fd7cede3ee57725c5))
+
 ## [0.13.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.12.2...v0.13.0) (2025-03-27)
 
 
