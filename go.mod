@@ -7,8 +7,8 @@ toolchain go1.23.2
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-logr/logr v1.4.2
-	github.com/onsi/ginkgo/v2 v2.23.2
-	github.com/onsi/gomega v1.36.2
+	github.com/onsi/ginkgo/v2 v2.23.3
+	github.com/onsi/gomega v1.37.0
 	github.com/open-policy-agent/cert-controller v0.12.0
 	github.com/prometheus/client_golang v1.21.1
 	github.com/prometheus/client_model v0.6.1
@@ -57,7 +57,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect

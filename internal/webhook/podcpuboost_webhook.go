@@ -32,17 +32,20 @@ import (
 // +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,timeoutSeconds=2,groups="",resources=pods,verbs=create,versions=v1,name=cpuboost.autoscaling.x-k8s.io,admissionReviewVersions=v1
 
 type podCPUBoostHandler struct {
-	decoder      admission.Decoder
-	manager      boost.Manager
-	removeLimits bool
+	decoder                  admission.Decoder
+	manager                  boost.Manager
+	removeLimits             bool
+	podLevelResourcesEnabled bool
 }
 
-func NewPodCPUBoostWebHook(mgr boost.Manager, scheme *runtime.Scheme, removeLimits bool) *webhook.Admission {
+func NewPodCPUBoostWebHook(mgr boost.Manager, scheme *runtime.Scheme, removeLimits bool,
+	podLevelResourcesEnabled bool) *webhook.Admission {
 	return &webhook.Admission{
 		Handler: &podCPUBoostHandler{
-			manager:      mgr,
-			decoder:      admission.NewDecoder(scheme),
-			removeLimits: removeLimits,
+			manager:                  mgr,
+			decoder:                  admission.NewDecoder(scheme),
+			removeLimits:             removeLimits,
+			podLevelResourcesEnabled: podLevelResourcesEnabled,
 		},
 	}
 }
@@ -71,6 +74,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 }
 
 func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
+	originalQosClass := computePodQOS(pod, h.podLevelResourcesEnabled)
 	annotation := bpod.NewBoostAnnotation()
 	for i, container := range pod.Spec.Containers {
 		policy, found := b.ResourcePolicy(container.Name)
@@ -90,13 +94,17 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 			continue
 		}
 		resources := policy.NewResources(ctx, &container)
+		if h.containerResizeChangesQosClass(originalQosClass, pod, i, resources) {
+			log.Info("skipping container due to QOS class change after boost")
+			continue
+		}
 		if !resources.Requests.Cpu().IsZero() {
 			log = log.WithValues(
 				"newCpuRequests", resources.Requests.Cpu().String(),
 			)
 		}
 		if !resources.Limits.Cpu().IsZero() {
-			if h.removeLimits {
+			if h.canRemoveLimit(originalQosClass, log) {
 				delete(resources.Limits, corev1.ResourceCPU)
 				log = log.WithValues("newCpuLimits", "<removed>")
 			} else {
@@ -117,6 +125,25 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 		}
 		pod.Labels[bpod.BoostLabelKey] = b.Name()
 	}
+}
+
+func (h *podCPUBoostHandler) canRemoveLimit(qosClass corev1.PodQOSClass, log logr.Logger) bool {
+	if !h.removeLimits {
+		return false
+	}
+	if qosClass != corev1.PodQOSBurstable && qosClass != corev1.PodQOSBestEffort {
+		log.Info("skipping CPU limits removal as pod is not burstable or besteffort, ")
+		return false
+	}
+	return true
+}
+
+func (h *podCPUBoostHandler) containerResizeChangesQosClass(initQosClass corev1.PodQOSClass,
+	initPod *corev1.Pod, containerIdx int, newContainerRes *corev1.ResourceRequirements) bool {
+	podCopy := initPod.DeepCopy()
+	podCopy.Spec.Containers[containerIdx].Resources = *newContainerRes
+	newQos := computePodQOS(podCopy, h.podLevelResourcesEnabled)
+	return newQos != initQosClass
 }
 
 func hasResourcesToIncrease(c corev1.Container) bool {
