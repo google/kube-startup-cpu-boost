@@ -59,7 +59,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	log := ctrl.LoggerFrom(ctx).WithName("boost-pod-webhook")
 	log.V(5).Info("handling pod")
 
-	boostImpl, ok := h.manager.StartupCPUBoostForPod(ctx, pod)
+	boostImpl, ok := h.manager.GetCPUBoostForPod(ctx, pod)
 	if !ok {
 		log.V(5).Info("no boost matched")
 		return admission.Allowed("no boost matched")
@@ -73,7 +73,8 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost, pod *corev1.Pod, log logr.Logger) {
+func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost,
+	pod *corev1.Pod, log logr.Logger) {
 	originalQosClass := computePodQOS(pod, h.podLevelResourcesEnabled)
 	annotation := bpod.NewBoostAnnotation()
 	for i, container := range pod.Spec.Containers {
@@ -150,7 +151,8 @@ func hasResourcesToIncrease(c corev1.Container) bool {
 	return !c.Resources.Requests.Cpu().IsZero() || !c.Resources.Limits.Cpu().IsZero()
 }
 
-func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string, resources corev1.ResourceRequirements) {
+func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string,
+	resources corev1.ResourceRequirements) {
 	if cpuRequests, ok := resources.Requests[corev1.ResourceCPU]; ok {
 		annot.InitCPURequests[containerName] = cpuRequests.String()
 	}

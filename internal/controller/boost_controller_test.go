@@ -142,21 +142,25 @@ var _ = Describe("BoostController", func() {
 					TotalContainerBoosts:  totalContainerBoosts,
 					ActiveContainerBoosts: activeContainerBoosts,
 				}
-				mockManager.EXPECT().StartupCPUBoost(gomock.Eq(namespace), gomock.Eq(name)).Times(1).Return(mockBoost, true)
+				mockManager.EXPECT().GetRegularCPUBoost(gomock.Any(), gomock.Eq(name),
+					gomock.Eq(namespace)).Times(1).Return(mockBoost, true)
 				mockBoost.EXPECT().Stats().Times(1).Return(stats)
 			})
 			When("there existing status is up to date", func() {
 				BeforeEach(func() {
-					mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName), gomock.Any()).
-						Times(1).DoAndReturn(func(c context.Context, cc client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-						boostObj := obj.(*autoscaling.StartupCPUBoost)
-						boostObj.Name = name
-						boostObj.Namespace = namespace
-						meta.SetStatusCondition(&boostObj.Status.Conditions, activeConditionTrue)
-						boostObj.Status.TotalContainerBoosts = int32(totalContainerBoosts)
-						boostObj.Status.ActiveContainerBoosts = int32(activeContainerBoosts)
-						return nil
-					})
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName),
+						gomock.Any()).
+						Times(1).
+						DoAndReturn(func(c context.Context, cc client.ObjectKey, obj client.Object,
+							opts ...client.GetOption) error {
+							boostObj := obj.(*autoscaling.StartupCPUBoost)
+							boostObj.Name = name
+							boostObj.Namespace = namespace
+							meta.SetStatusCondition(&boostObj.Status.Conditions, activeConditionTrue)
+							boostObj.Status.TotalContainerBoosts = int32(totalContainerBoosts)
+							boostObj.Status.ActiveContainerBoosts = int32(activeContainerBoosts)
+							return nil
+						})
 				})
 				It("does not error", func() {
 					Expect(err).To(BeNil())
@@ -180,8 +184,10 @@ var _ = Describe("BoostController", func() {
 							return ret
 						})).
 						Return(nil).Times(1)
-					mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName), gomock.Any()).
-						Times(1).DoAndReturn(func(c context.Context, cc client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName),
+						gomock.Any()).
+						Times(1).DoAndReturn(func(c context.Context, cc client.ObjectKey,
+						obj client.Object, opts ...client.GetOption) error {
 						boostObj := obj.(*autoscaling.StartupCPUBoost)
 						boostObj.Name = name
 						boostObj.Namespace = namespace
@@ -212,7 +218,7 @@ var _ = Describe("BoostController", func() {
 					},
 				},
 			}
-			mgrMockCall = mockManager.EXPECT().UpdateStartupCPUBoost(
+			mgrMockCall = mockManager.EXPECT().UpdateRegularCPUBoost(
 				gomock.Any(), gomock.Eq(updateEvent.ObjectNew))
 		})
 		JustBeforeEach(func() {

@@ -61,7 +61,8 @@ type StartupCPUBoostReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result,
+	error) {
 	var boostObj autoscaling.StartupCPUBoost
 	var err error
 	if err = r.Client.Get(ctx, req.NamespacedName, &boostObj); err != nil {
@@ -75,7 +76,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		Reason:  BoostActiveConditionFalseReason,
 		Message: BoostActiveConditionFalseMessage,
 	}
-	boost, ok := r.Manager.StartupCPUBoost(boostObj.Namespace, boostObj.Name)
+	boost, ok := r.Manager.GetRegularCPUBoost(ctx, boostObj.Name, boostObj.Namespace)
 	if ok {
 		log.V(5).Info("found boost in a manager")
 		stats := boost.Stats()
@@ -102,7 +103,8 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager, serverVersion *version.Info) error {
+func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager,
+	serverVersion *version.Info) error {
 	boostPodHandler := NewBoostPodHandler(r.Manager, ctrl.Log.WithName("pod-handler"))
 	lsPredicate, err := predicate.LabelSelectorPredicate(*boostPodHandler.GetPodLabelSelector())
 	if err != nil {
@@ -132,7 +134,7 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	if err != nil {
 		log.Error(err, "boost creation error")
 	}
-	if err := r.Manager.AddStartupCPUBoost(ctx, boost); err != nil {
+	if err := r.Manager.AddRegularCPUBoost(ctx, boost); err != nil {
 		log.Error(err, "boost registration error")
 	}
 	return true
@@ -146,7 +148,7 @@ func (r *StartupCPUBoostReconciler) Delete(e event.DeleteEvent) bool {
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost delete event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	r.Manager.RemoveStartupCPUBoost(ctx, boostObj.Namespace, boostObj.Name)
+	r.Manager.DeleteRegularCPUBoost(ctx, boostObj.Namespace, boostObj.Name)
 	return true
 }
 
@@ -158,7 +160,7 @@ func (r *StartupCPUBoostReconciler) Update(e event.UpdateEvent) bool {
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost update event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	if err := r.Manager.UpdateStartupCPUBoost(ctx, boostObj); err != nil {
+	if err := r.Manager.UpdateRegularCPUBoost(ctx, boostObj); err != nil {
 		log.Error(err, "boost update error")
 	}
 	return true
@@ -170,7 +172,9 @@ func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
 	return true
 }
 
-// shouldUseLegacyRevertMode determines if legacy resource revert mode should be used basing on server version
+// shouldUseLegacyRevertMode determines if legacy resource revert mode should be used
+// basing on server version
 func shouldUseLegacyRevertMode(serverVersion *version.Info) (legacyMode bool) {
-	return version.CompareKubeAwareVersionStrings(WantedServerVersionForNewRevert, serverVersion.GitVersion) < 0
+	return version.CompareKubeAwareVersionStrings(WantedServerVersionForNewRevert,
+		serverVersion.GitVersion) < 0
 }
