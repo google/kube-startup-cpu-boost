@@ -128,6 +128,20 @@ func (mr *MockManagerMockRecorder) GetRegularCPUBoost(ctx, name, namespace any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegularCPUBoost", reflect.TypeOf((*MockManager)(nil).GetRegularCPUBoost), ctx, name, namespace)
 }
 
+// IsRunning mocks base method.
+func (m *MockManager) IsRunning(ctx context.Context) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsRunning", ctx)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsRunning indicates an expected call of IsRunning.
+func (mr *MockManagerMockRecorder) IsRunning(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRunning", reflect.TypeOf((*MockManager)(nil).IsRunning), ctx)
+}
+
 // SetStartupCPUBoostReconciler mocks base method.
 func (m *MockManager) SetStartupCPUBoostReconciler(reconciler reconcile.TypedReconciler[reconcile.Request]) {
 	m.ctrl.T.Helper()
