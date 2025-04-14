@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -136,13 +137,14 @@ func main() {
 	}
 
 	boostMgr := boost.NewManager(mgr.GetClient())
-	go setupControllers(mgr, boostMgr, cfg, podLevelResourcesEnabled, versionInfo, certsReady)
-
+	controllersReady := make(chan struct{})
+	go setupControllers(mgr, boostMgr, cfg, podLevelResourcesEnabled, versionInfo, certsReady,
+		controllersReady)
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err := setupReadyzCheck(mgr, boostMgr, controllersReady); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
@@ -157,7 +159,9 @@ func main() {
 }
 
 func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config,
-	podLevelResourcesEnabled bool, serverVersion *version.Info, certsReady chan struct{}) {
+	podLevelResourcesEnabled bool, serverVersion *version.Info, certsReady chan struct{},
+	controllersReady chan struct{}) {
+	defer close(controllersReady)
 	setupLog.Info("Waiting for certificate generation to complete")
 	<-certsReady
 	setupLog.Info("Certificate generation has completed")
@@ -181,6 +185,29 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
+}
+
+func setupReadyzCheck(mgr ctrl.Manager, boostMgr boost.Manager,
+	controllersReadyChan chan struct{}) error {
+	if err := mgr.AddReadyzCheck("readyz", func(req *http.Request) error {
+		controllersReady := false
+		select {
+		case <-controllersReadyChan:
+			controllersReady = true
+		default:
+		}
+		if !controllersReady {
+			return fmt.Errorf("controllers are not ready")
+		}
+		if !boostMgr.IsRunning(req.Context()) {
+			return fmt.Errorf("boost manager is not running")
+		}
+		return nil
+	}); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+	return nil
 }
 
 func getFeatureGates(clusterInfo util.ClusterInfo) (util.FeatureGates, error) {

@@ -73,6 +73,9 @@ type Manager interface {
 
 	// Start starts the manager time based check loop.
 	Start(ctx context.Context) error
+
+	// IsRunning returns true if manager has started its time based check loop.
+	IsRunning(ctx context.Context) bool
 }
 
 type TimeTicker interface {
@@ -105,6 +108,7 @@ type podRevertTask struct {
 
 type managerImpl struct {
 	sync.RWMutex
+	isRunning     bool
 	client        client.Client
 	reconciler    reconcile.Reconciler
 	ticker        TimeTicker
@@ -240,7 +244,9 @@ func (m *managerImpl) SetStartupCPUBoostReconciler(reconciler reconcile.Reconcil
 // Start starts the manager time based check loop.
 func (m *managerImpl) Start(ctx context.Context) error {
 	defer m.ticker.Stop()
+	defer m.setRunning(false)
 	m.log.Info("starting")
+	m.setRunning(true)
 	for {
 		select {
 		case <-m.ticker.Tick():
@@ -252,7 +258,15 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	}
 }
 
+func (m *managerImpl) IsRunning(ctx context.Context) bool {
+	return m.isRunning
+}
+
 // PRIVATE FUNCS START below
+
+func (m *managerImpl) setRunning(isRunning bool) {
+	m.isRunning = isRunning
+}
 
 // getMatchingBoost finds the most specific matching boost for a given pod.
 func (m *managerImpl) getMatchingBoost(pod *corev1.Pod) (StartupCPUBoost, bool) {
