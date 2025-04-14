@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.15.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.14.1...v0.15.0) (2025-04-14)
+
+
+### Features
+
+* readyz check improvements ([#114](https://github.com/google/kube-startup-cpu-boost/issues/114)) ([7cb9c93](https://github.com/google/kube-startup-cpu-boost/commit/7cb9c93be32e95b9d27384ca3b89677cb696b148))
+
 ## [0.14.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.14.0...v0.14.1) (2025-04-14)
 
 
