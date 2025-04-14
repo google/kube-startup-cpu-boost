@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.14.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.14.0...v0.14.1) (2025-04-14)
+
+
+### Bug Fixes
+
+* race condition between tracked pods / boosts ([#112](https://github.com/google/kube-startup-cpu-boost/issues/112)) ([ab92b3d](https://github.com/google/kube-startup-cpu-boost/commit/ab92b3d33ae14e5ff7b62d54ff733ed64b453ac5))
+
 ## [0.14.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.13.0...v0.14.0) (2025-04-07)
 
 
