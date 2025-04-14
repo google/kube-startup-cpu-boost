@@ -43,17 +43,35 @@ const (
 )
 
 type Manager interface {
-	// AddStartupCPUBoost registers a new startup-cpu-boost is a manager.
-	AddStartupCPUBoost(ctx context.Context, boost StartupCPUBoost) error
-	// RemoveStartupCPUBoost removes a startup-cpu-boost from a manager
-	RemoveStartupCPUBoost(ctx context.Context, namespace, name string)
-	// UpdateStartupCPUBoost updates a startup-cpu-boost in a manager
-	UpdateStartupCPUBoost(ctx context.Context, spec *autoscaling.StartupCPUBoost) error
-	// StartupCPUBoost returns a startup-cpu-boost with a given name and namespace
-	StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool)
-	// StartupCPUBoostForPod returns a startup-cpu-boost that matches a given pod
-	StartupCPUBoost(namespace, name string) (StartupCPUBoost, bool)
+	// AddRegularCPUBoost registers new regular startup cpu boost in a manager.
+	AddRegularCPUBoost(ctx context.Context, boost StartupCPUBoost) error
+
+	// DeleteRegularCPUBoost deletes a regular startup cpu boost from a manager.
+	DeleteRegularCPUBoost(ctx context.Context, name, namespace string)
+
+	// UpdateRegularCPUBoost updates a regular startup cpu boost in a manager.
+	UpdateRegularCPUBoost(ctx context.Context, spec *autoscaling.StartupCPUBoost) error
+
+	// GetRegularCPUBoost returns a regular startup cpu boost with a given name and namespace
+	// if such is registered in a manager.
+	GetRegularCPUBoost(ctx context.Context, name, namespace string) (StartupCPUBoost, bool)
+
+	// GetCPUBoostForPod returns a startup cpu boost that matches a given pod if such is registered
+	// in a manager. If multiple boost types matches, the most specific is returned.
+	GetCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool)
+
+	// UpsertPod adds new or updates existing tracked POD to the manager and boosts.
+	// If found, the matching cpu boost is returned.
+	UpsertPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error)
+
+	// DeletePod deletes the tracked POD from the manager and boosts.
+	// If found, the matching cpu boost is returned.
+	DeletePod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error)
+
+	// SetStartupCPUBoostReconciler sets the boost object reconciler for the manager.
 	SetStartupCPUBoostReconciler(reconciler reconcile.Reconciler)
+
+	// Start starts the manager time based check loop.
 	Start(ctx context.Context) error
 }
 
@@ -80,21 +98,26 @@ func newTimeTickerImpl(d time.Duration) TimeTicker {
 	}
 }
 
-type managerImpl struct {
-	sync.RWMutex
-	client           client.Client
-	reconciler       reconcile.Reconciler
-	ticker           TimeTicker
-	checkInterval    time.Duration
-	startupCPUBoosts map[string]map[string]StartupCPUBoost
-	timePolicyBoosts map[boostKey]StartupCPUBoost
-	maxGoroutines    int
-	log              logr.Logger
+type podRevertTask struct {
+	boost StartupCPUBoost
+	pod   *corev1.Pod
 }
 
-type boostKey struct {
-	name      string
-	namespace string
+type managerImpl struct {
+	sync.RWMutex
+	client        client.Client
+	reconciler    reconcile.Reconciler
+	ticker        TimeTicker
+	checkInterval time.Duration
+	maxGoroutines int
+	log           logr.Logger
+
+	// timedBoosts is a collection of boosts of any kind that have time duration policy set
+	timedBoosts namespacedObjects[StartupCPUBoost]
+	// regularBoost is collection of a regular, namespaced boosts
+	regularBoosts namespacedObjects[StartupCPUBoost]
+	// orphanedPods is a collection of tracked pods that have no matching boost registered
+	orphanedPods namespacedObjects[*corev1.Pod]
 }
 
 func NewManager(client client.Client) Manager {
@@ -103,94 +126,118 @@ func NewManager(client client.Client) Manager {
 
 func NewManagerWithTicker(client client.Client, ticker TimeTicker) Manager {
 	return &managerImpl{
-		client:           client,
-		ticker:           ticker,
-		checkInterval:    DefaultManagerCheckInterval,
-		startupCPUBoosts: make(map[string]map[string]StartupCPUBoost),
-		timePolicyBoosts: make(map[boostKey]StartupCPUBoost),
-		maxGoroutines:    DefaultMaxGoroutines,
-		log:              ctrl.Log.WithName("boost-manager"),
+		client:        client,
+		ticker:        ticker,
+		checkInterval: DefaultManagerCheckInterval,
+		timedBoosts:   *newNamespacedObjects[StartupCPUBoost](),
+		regularBoosts: *newNamespacedObjects[StartupCPUBoost](),
+		orphanedPods:  *newNamespacedObjects[*corev1.Pod](),
+		maxGoroutines: DefaultMaxGoroutines,
+		log:           ctrl.Log.WithName("boost-manager"),
 	}
 }
 
-// AddStartupCPUBoost registers a new startup-cpu-boost is a manager.
-// If a boost with a given name and namespace already exists, it returns an error.
-func (m *managerImpl) AddStartupCPUBoost(ctx context.Context, boost StartupCPUBoost) error {
+// AddRegularCPUBoost registers new regular startup cpu boost in a manager.
+// Returns an error if a boost is already registered.
+func (m *managerImpl) AddRegularCPUBoost(ctx context.Context, boost StartupCPUBoost) error {
 	m.Lock()
 	defer m.Unlock()
-	if _, ok := m.getStartupCPUBoost(boost.Namespace(), boost.Name()); ok {
+	log := m.log.WithValues("boost", boost.Name(), "namespace", boost.Namespace())
+	if _, ok := m.regularBoosts.Get(boost.Name(), boost.Namespace()); ok {
 		return errStartupCPUBoostAlreadyExists
 	}
-	log := m.log.WithValues("boost", boost.Name(), "namespace", boost.Namespace())
-	log.V(5).Info("handling boost registration")
-	m.addStartupCPUBoost(boost)
+	defer log.Info("regular boost registered successfully")
+	defer m.postProcessNewBoost(ctx, boost)
+	log.V(5).Info("handling regular boost registration")
+	m.regularBoosts.Put(boost.Name(), boost.Namespace(), boost)
 	metrics.NewBoostConfiguration(boost.Namespace())
-	log.Info("boost registered successfully")
 	return nil
 }
 
-// RemoveStartupCPUBoost removes a startup-cpu-boost from a manager if registered.
-func (m *managerImpl) RemoveStartupCPUBoost(ctx context.Context, namespace, name string) {
+// DeleteRegularCPUBoost deletes a regular startup cpu boost from a manager.
+func (m *managerImpl) DeleteRegularCPUBoost(ctx context.Context, namespace, name string) {
 	m.Lock()
 	defer m.Unlock()
 	log := m.log.WithValues("boost", name, "namespace", namespace)
-	log.V(5).Info("handling boost deletion")
-	if boosts, ok := m.startupCPUBoosts[namespace]; ok {
-		delete(boosts, name)
-	}
-	key := boostKey{name: name, namespace: namespace}
-	delete(m.timePolicyBoosts, key)
+	log.V(5).Info("handling regular boost deletion")
+	defer log.Info("boost deleted successfully")
+	m.regularBoosts.Delete(name, namespace)
+	m.timedBoosts.Delete(name, namespace)
 	metrics.DeleteBoostConfiguration(namespace)
-	log.Info("boost deleted successfully")
 }
 
-func (m *managerImpl) UpdateStartupCPUBoost(ctx context.Context, spec *autoscaling.StartupCPUBoost) error {
+// UpdateRegularCPUBoost updates a regular startup cpu boost in a manager.
+func (m *managerImpl) UpdateRegularCPUBoost(ctx context.Context,
+	spec *autoscaling.StartupCPUBoost) error {
 	m.Lock()
 	defer m.Unlock()
 	log := m.log.WithValues("boost", spec.ObjectMeta.Name, "namespace", spec.ObjectMeta.Namespace)
 	log.V(5).Info("handling boost update")
-	boost, ok := m.getStartupCPUBoost(spec.ObjectMeta.Namespace, spec.ObjectMeta.Name)
+	defer log.Info("boost updated successfully")
+	boost, ok := m.regularBoosts.Get(spec.ObjectMeta.Name, spec.ObjectMeta.Namespace)
 	if !ok {
-		log.V(5).Info("boost object not found")
+		log.V(5).Info("boost not found")
 		return nil
 	}
-	if err := boost.UpdateFromSpec(ctx, spec); err != nil {
-		return err
-	}
-	log.Info("boost updated successfully")
-	return nil
+	return boost.UpdateFromSpec(ctx, spec)
 }
 
-// StartupCPUBoost returns a startup-cpu-boost with a given name and namespace
-// if registered in a manager.
-func (m *managerImpl) StartupCPUBoost(namespace string, name string) (StartupCPUBoost, bool) {
+// GetRegularCPUBoost returns a regular startup cpu boost with a given name and namespace
+// if such is registered in a manager.
+func (m *managerImpl) GetRegularCPUBoost(ctx context.Context, name string,
+	namespace string) (StartupCPUBoost, bool) {
 	m.RLock()
 	defer m.RUnlock()
-	return m.getStartupCPUBoost(namespace, name)
+	return m.regularBoosts.Get(name, namespace)
 }
 
-// StartupCPUBoostForPod returns a startup-cpu-boost that matches a given pod if such is registered
-// in a manager.
-func (m *managerImpl) StartupCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool) {
+// GetCPUBoostForPod returns a startup cpu boost that matches a given pod if such is registered
+// in a manager. If multiple boost types matches, the most specific is returned.
+func (m *managerImpl) GetCPUBoostForPod(ctx context.Context,
+	pod *corev1.Pod) (StartupCPUBoost, bool) {
 	m.RLock()
 	defer m.RUnlock()
-	m.log.V(5).Info("handling boost pod lookup")
-	nsBoosts, ok := m.startupCPUBoosts[pod.Namespace]
-	if !ok {
-		return nil, false
-	}
-	for _, boost := range nsBoosts {
-		if boost.Matches(pod) {
-			return boost, true
+	return m.getMatchingBoost(pod)
+}
+
+// UpsertPod adds new or updates existing tracked POD to the manager and boosts.
+// If found, the matching cpu boost is returned.
+func (m *managerImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error) {
+	m.Lock()
+	defer m.Unlock()
+	m.log.V(5).Info("handling pod upsert")
+	if boost, ok := m.getMatchingBoost(pod); ok {
+		err := boost.UpsertPod(ctx, pod)
+		if err == nil {
+			m.orphanedPods.Delete(pod.Name, pod.Namespace)
 		}
+		return boost, err
 	}
-	return nil, false
+	m.log.V(5).Info("boost not found, registering orphaned pod")
+	m.orphanedPods.Put(pod.Name, pod.Namespace, pod)
+	return nil, nil
 }
 
+// DeletePod deletes the tracked POD from the manager and boosts.
+// If found, the matching cpu boost is returned.
+func (m *managerImpl) DeletePod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error) {
+	m.Lock()
+	defer m.Unlock()
+	m.log.V(5).Info("handling pod delete")
+	if boost, ok := m.getMatchingBoost(pod); ok {
+		return boost, boost.DeletePod(ctx, pod)
+	}
+	m.log.V(5).Info("boost not found, removing orphaned pod if exists")
+	m.orphanedPods.Delete(pod.Name, pod.Namespace)
+	return nil, nil
+}
+
+// SetStartupCPUBoostReconciler sets the boost object reconciler for the manager.
 func (m *managerImpl) SetStartupCPUBoostReconciler(reconciler reconcile.Reconciler) {
 	m.reconciler = reconciler
 }
 
+// Start starts the manager time based check loop.
 func (m *managerImpl) Start(ctx context.Context) error {
 	defer m.ticker.Stop()
 	m.log.Info("starting")
@@ -205,33 +252,53 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	}
 }
 
-// addStartupCPUBoost registers a new startup-cpu-boost in a manager.
-func (m *managerImpl) addStartupCPUBoost(boost StartupCPUBoost) {
-	boosts, ok := m.startupCPUBoosts[boost.Namespace()]
-	if !ok {
-		boosts = make(map[string]StartupCPUBoost)
-		m.startupCPUBoosts[boost.Namespace()] = boosts
-	}
-	boosts[boost.Name()] = boost
-	if _, ok := boost.DurationPolicies()[duration.FixedDurationPolicyName]; ok {
-		key := boostKey{name: boost.Name(), namespace: boost.Namespace()}
-		m.timePolicyBoosts[key] = boost
-	}
-}
+// PRIVATE FUNCS START below
 
-// getStartupCPUBoost returns the startup-cpu-boost with a given name and namespace
-// if registered in a manager.
-func (m *managerImpl) getStartupCPUBoost(namespace string, name string) (StartupCPUBoost, bool) {
-	if boosts, ok := m.startupCPUBoosts[namespace]; ok {
-		boost, ok := boosts[name]
-		return boost, ok
+// getMatchingBoost finds the most specific matching boost for a given pod.
+func (m *managerImpl) getMatchingBoost(pod *corev1.Pod) (StartupCPUBoost, bool) {
+	namespaceBoosts := m.regularBoosts.List(pod.Namespace)
+	for _, boost := range namespaceBoosts {
+		if boost.Matches(pod) {
+			return boost, true
+		}
 	}
 	return nil, false
 }
 
-type podRevertTask struct {
-	boost StartupCPUBoost
-	pod   *corev1.Pod
+// postProcessNewBoost performs additional post processing of a newly registered boost
+func (m *managerImpl) postProcessNewBoost(ctx context.Context, boost StartupCPUBoost) {
+	log := m.log.WithValues("boost", boost.Name(), "namespace", boost.Namespace())
+	if _, ok := boost.DurationPolicies()[duration.FixedDurationPolicyName]; ok {
+		log.V(5).Info("adding boost to timedBoosts collection")
+		m.timedBoosts.Put(boost.Name(), boost.Namespace(), boost)
+	}
+	if err := m.mapOrphanedPods(ctx, boost); err != nil {
+		log.Error(err, "failed to map orphaned pods")
+	}
+}
+
+// mapOrphanedPods maps orphaned pods to the given boost if they match.
+// Matched pods are registered in a boost and removed from orphanedPods collection.
+func (m *managerImpl) mapOrphanedPods(ctx context.Context, boost StartupCPUBoost) error {
+	log := m.log.WithValues("boost", boost.Name(), "namespace", boost.Namespace())
+	errs := make([]error, 0)
+	namespaceOrphanedPods := m.orphanedPods.List(boost.Namespace())
+	mappedOrphanedPods := make([]*corev1.Pod, 0, len(namespaceOrphanedPods))
+	for _, orphanedPod := range namespaceOrphanedPods {
+		if boost.Matches(orphanedPod) {
+			log := log.WithValues("pod", orphanedPod.Name)
+			log.V(5).Info("matched orphaned pod")
+			if err := boost.UpsertPod(ctx, orphanedPod); err != nil {
+				errs = append(errs, err)
+			} else {
+				mappedOrphanedPods = append(mappedOrphanedPods, orphanedPod)
+			}
+		}
+	}
+	for _, orphanedPod := range mappedOrphanedPods {
+		m.orphanedPods.Delete(orphanedPod.Name, orphanedPod.Namespace)
+	}
+	return errors.Join(errs...)
 }
 
 // validateTimePolicyBoosts validates all time policy boosts in a manager
@@ -244,7 +311,7 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 	errors := make(chan error, m.maxGoroutines)
 
 	go func() {
-		for _, boost := range m.timePolicyBoosts {
+		for _, boost := range m.timedBoosts.ListAll() {
 			for _, pod := range boost.ValidatePolicy(ctx, duration.FixedDurationPolicyName) {
 				revertTasks <- &podRevertTask{
 					boost: boost,

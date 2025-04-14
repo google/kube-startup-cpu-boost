@@ -30,10 +30,14 @@ import (
 )
 
 type BoostPodHandler interface {
-	Create(context.Context, event.CreateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
-	Update(context.Context, event.UpdateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
-	Delete(context.Context, event.DeleteEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
-	Generic(context.Context, event.GenericEvent, workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Create(context.Context, event.CreateEvent,
+		workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Update(context.Context, event.UpdateEvent,
+		workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Delete(context.Context, event.DeleteEvent,
+		workqueue.TypedRateLimitingInterface[reconcile.Request])
+	Generic(context.Context, event.GenericEvent,
+		workqueue.TypedRateLimitingInterface[reconcile.Request])
 	GetPodLabelSelector() *metav1.LabelSelector
 }
 
@@ -49,55 +53,54 @@ func NewBoostPodHandler(manager boost.Manager, log logr.Logger) BoostPodHandler 
 	}
 }
 
-func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent,
+	wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		return
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod create")
-	boost, ok := h.boostForPod(pod)
-	if !ok {
-		log.V(5).Info("pod create skipped: no boost for pod")
+	boost, err := h.manager.UpsertPod(ctx, pod)
+	if err != nil {
+		log.Error(err, "failed to handle pod create")
 		return
 	}
-	boostName := boost.Name()
-	log.WithValues("boost", boostName)
-	if err := boost.UpsertPod(ctx, pod); err != nil {
-		log.Error(err, "failed to handle pod create")
+	if boost != nil {
+		wq.Add(reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      boost.Name(),
+				Namespace: boost.Namespace(),
+			},
+		})
 	}
-	wq.Add(reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      boostName,
-			Namespace: boost.Namespace(),
-		},
-	})
 }
 
-func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent,
+	wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		return
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod delete")
-	boost, ok := h.boostForPod(pod)
-	if !ok {
-		log.V(5).Info("pod delete skipped: no boost for pod")
+	boost, err := h.manager.DeletePod(ctx, pod)
+	if err != nil {
+		log.Error(err, "failed to handle pod delete")
 		return
 	}
-	if err := boost.DeletePod(ctx, pod); err != nil {
-		log.Error(err, "failed to handle pod delete")
+	if boost != nil {
+		wq.Add(reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      boost.Name(),
+				Namespace: boost.Namespace(),
+			},
+		})
 	}
-	wq.Add(reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      boost.Name(),
-			Namespace: boost.Namespace(),
-		},
-	})
 }
 
-func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent,
+	wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.ObjectNew.(*corev1.Pod)
 	oldPod, ok_ := e.ObjectOld.(*corev1.Pod)
 	if !ok || !ok_ {
@@ -109,23 +112,23 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent, wq wo
 		log.V(5).Info("pod update skipped: conditions did not change")
 		return
 	}
-	boost, ok := h.boostForPod(pod)
-	if !ok {
-		log.V(5).Info("pod update skipped: no boost for pod")
+	boost, err := h.manager.UpsertPod(ctx, pod)
+	if err != nil {
+		log.Error(err, "failed to handle pod update")
 		return
 	}
-	if err := boost.UpsertPod(ctx, pod); err != nil {
-		log.Error(err, "pod update failed")
+	if boost != nil {
+		wq.Add(reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      boost.Name(),
+				Namespace: boost.Namespace(),
+			},
+		})
 	}
-	wq.Add(reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      boost.Name(),
-			Namespace: boost.Namespace(),
-		},
-	})
 }
 
-func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent, wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (h *boostPodHandler) Generic(ctx context.Context, e event.GenericEvent,
+	wq workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	pod, ok := e.Object.(*corev1.Pod)
 	if !ok {
 		return
@@ -144,12 +147,4 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 			},
 		},
 	}
-}
-
-func (h *boostPodHandler) boostForPod(pod *corev1.Pod) (boost.StartupCPUBoost, bool) {
-	boostName, ok := pod.Labels[bpod.BoostLabelKey]
-	if !ok {
-		return nil, false
-	}
-	return h.manager.StartupCPUBoost(pod.Namespace, boostName)
 }

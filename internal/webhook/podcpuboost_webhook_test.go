@@ -50,7 +50,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
 			manager = mock.NewMockManager(mockCtrl)
-			managerCall = manager.EXPECT().StartupCPUBoostForPod(
+			managerCall = manager.EXPECT().GetCPUBoostForPod(
 				gomock.Any(),
 				gomock.Cond(func(x any) bool {
 					p, ok := x.(*corev1.Pod)

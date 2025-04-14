@@ -57,9 +57,9 @@ var _ = Describe("BoostPodHandler", func() {
 			createEvent = event.CreateEvent{
 				Object: pod,
 			}
-			mgrMockCall = mgrMock.EXPECT().StartupCPUBoost(
-				gomock.Eq(pod.Namespace),
-				gomock.Eq(specTemplate.Name),
+			mgrMockCall = mgrMock.EXPECT().UpsertPod(
+				gomock.Any(),
+				gomock.Eq(pod),
 			)
 		})
 		JustBeforeEach(func() {
@@ -67,35 +67,18 @@ var _ = Describe("BoostPodHandler", func() {
 		})
 		When("There is no boost matching the POD", func() {
 			BeforeEach(func() {
-				mgrMockCall.Return(nil, false)
+				mgrMockCall.Return(nil, nil)
 			})
 			It("sends a valid call to the boost manager", func() {
 				mgrMockCall.Times(1)
 			})
 		})
 		When("There is a boost matching the POD", func() {
-			var (
-				boostMockNameCall      *gomock.Call
-				boostMockNamespaceCall *gomock.Call
-				boostMockUpsertCall    *gomock.Call
-			)
 			BeforeEach(func() {
 				boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
-				boostMockNameCall = boostMock.EXPECT().Name().
-					Return(specTemplate.Name)
-				boostMockNamespaceCall = boostMock.EXPECT().Namespace().
-					Return(specTemplate.Namespace)
-				boostMockUpsertCall = boostMock.EXPECT().UpsertPod(
-					gomock.Any(),
-					gomock.Eq(pod),
-				).Return(nil)
-				mgrMockCall.Return(boostMock, true)
-			})
-			It("sends a valid call to the boost manager and a boost", func() {
-				mgrMockCall.Times(1)
-				boostMockNameCall.Times(2)
-				boostMockNamespaceCall.Times(1)
-				boostMockUpsertCall.Times(1)
+				boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
+				boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
+				mgrMockCall.Return(boostMock, nil)
 			})
 			It("sends reconciliation request", func() {
 				Expect(wq.Len()).To(Equal(1))
@@ -115,9 +98,9 @@ var _ = Describe("BoostPodHandler", func() {
 			deleteEvent = event.DeleteEvent{
 				Object: pod,
 			}
-			mgrMockCall = mgrMock.EXPECT().StartupCPUBoost(
-				gomock.Eq(pod.Namespace),
-				gomock.Eq(specTemplate.Name),
+			mgrMockCall = mgrMock.EXPECT().DeletePod(
+				gomock.Any(),
+				gomock.Eq(pod),
 			)
 		})
 		JustBeforeEach(func() {
@@ -125,35 +108,21 @@ var _ = Describe("BoostPodHandler", func() {
 		})
 		When("There is no boost matching the POD", func() {
 			BeforeEach(func() {
-				mgrMockCall.Return(nil, false)
+				mgrMockCall.Return(nil, nil)
 			})
 			It("sends a valid call to the boost manager", func() {
 				mgrMockCall.Times(1)
 			})
 		})
 		When("There is a boost matching the POD", func() {
-			var (
-				boostMockDeleteCall    *gomock.Call
-				boostMockNameCall      *gomock.Call
-				boostMockNamespaceCall *gomock.Call
-			)
 			BeforeEach(func() {
 				boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
-				boostMockNameCall = boostMock.EXPECT().Name().
-					Return(specTemplate.Name)
-				boostMockNamespaceCall = boostMock.EXPECT().Namespace().
-					Return(specTemplate.Namespace)
-				boostMockDeleteCall = boostMock.EXPECT().DeletePod(
-					gomock.Any(),
-					gomock.Eq(pod),
-				).Return(nil)
-				mgrMockCall.Return(boostMock, true)
+				boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
+				boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
+				mgrMockCall.Return(boostMock, nil)
 			})
 			It("sends a valid call to the boost manager and a boost", func() {
 				mgrMockCall.Times(1)
-				boostMockNameCall.Times(1)
-				boostMockNamespaceCall.Times(1)
-				boostMockDeleteCall.Times(1)
 			})
 			It("sends reconciliation request", func() {
 				Expect(wq.Len()).To(Equal(1))
@@ -181,8 +150,11 @@ var _ = Describe("BoostPodHandler", func() {
 			podHandler.Update(context.TODO(), updateEvent, wq)
 		})
 		When("Pod status conditions has not change", func() {
-			It("does not send a call to the boost manager", func() {
-				mgrMockCall.Times(0)
+			BeforeEach(func() {
+				mgrMockCall = mgrMock.EXPECT().UpsertPod(
+					gomock.Any(),
+					gomock.Eq(newPod),
+				).Times(0)
 			})
 			It("does not send reconciliation request", func() {
 				Expect(wq.Len()).To(Equal(0))
@@ -196,48 +168,34 @@ var _ = Describe("BoostPodHandler", func() {
 						Status: corev1.ConditionFalse,
 					},
 				}
-				oldPod.Status.Conditions = []corev1.PodCondition{
+				newPod.Status.Conditions = []corev1.PodCondition{
 					{
 						Type:   corev1.PodReady,
 						Status: corev1.ConditionTrue,
 					},
 				}
-				mgrMockCall = mgrMock.EXPECT().StartupCPUBoost(
-					gomock.Eq(newPod.Namespace),
-					gomock.Eq(specTemplate.Name),
+				mgrMockCall = mgrMock.EXPECT().UpsertPod(
+					gomock.Any(),
+					gomock.Eq(newPod),
 				)
 			})
 			When("There is no boost matching the POD", func() {
 				BeforeEach(func() {
-					mgrMockCall.Return(nil, false)
+					mgrMockCall.Return(nil, nil)
 				})
 				It("sends a valid call to the boost manager", func() {
 					mgrMockCall.Times(1)
 				})
 			})
 			When("There is a boost matching the POD", func() {
-				var (
-					boostMockNameCall      *gomock.Call
-					boostMockNamespaceCall *gomock.Call
-					boostMockUpsertCall    *gomock.Call
-				)
 				BeforeEach(func() {
 					boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
-					boostMockNameCall = boostMock.EXPECT().Name().
-						Return(specTemplate.Name)
-					boostMockNamespaceCall = boostMock.EXPECT().Namespace().
-						Return(specTemplate.Namespace)
-					boostMockUpsertCall = boostMock.EXPECT().UpsertPod(
-						gomock.Any(),
-						gomock.Eq(newPod),
-					).Return(nil)
-					mgrMockCall.Return(boostMock, true)
+					boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
+					boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
+					mgrMockCall.Return(boostMock, nil)
 				})
 				It("sends a valid call to the boost manager and a boost", func() {
 					mgrMockCall.Times(1)
-					boostMockNameCall.Times(1)
-					boostMockNamespaceCall.Times(1)
-					boostMockUpsertCall.Times(1)
 				})
 				It("sends reconciliation request", func() {
 					Expect(wq.Len()).To(Equal(1))

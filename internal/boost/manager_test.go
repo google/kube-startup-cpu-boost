@@ -55,29 +55,64 @@ var _ = Describe("Manager", func() {
 		})
 		When("startup-cpu-boost exists", func() {
 			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 				Expect(err).ToNot(HaveOccurred())
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 			})
 			It("errors", func() {
 				Expect(err).To(HaveOccurred())
 			})
 		})
 		When("startup-cpu-boost does not exist", func() {
-			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+			When("manager has no matching orphaned pod", func() {
+				JustBeforeEach(func() {
+					err = manager.AddRegularCPUBoost(context.TODO(), boost)
+				})
+				It("does not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+				It("stores the startup-cpu-boost", func() {
+					stored, ok := manager.GetRegularCPUBoost(context.TODO(), spec.Name, spec.Namespace)
+					Expect(ok).To(BeTrue())
+					Expect(stored.Name()).To(Equal(spec.Name))
+					Expect(stored.Namespace()).To(Equal(spec.Namespace))
+				})
+				It("updates boost configurations metric", func() {
+					Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(1)))
+				})
 			})
-			It("does not error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-			It("stores the startup-cpu-boost", func() {
-				stored, ok := manager.StartupCPUBoost(spec.Namespace, spec.Name)
-				Expect(ok).To(BeTrue())
-				Expect(stored.Name()).To(Equal(spec.Name))
-				Expect(stored.Namespace()).To(Equal(spec.Namespace))
-			})
-			It("updates boost configurations metric", func() {
-				Expect(metrics.BoostConfigurations(spec.Namespace)).To(Equal(float64(1)))
+			When("manager has matching orphaned pod", func() {
+				var (
+					pod          *corev1.Pod
+					matchedBoost cpuboost.StartupCPUBoost
+				)
+				BeforeEach(func() {
+					podNameLabel := "app.kubernetes.io/name"
+					podNameLabelValue := "app-001"
+					pod = podTemplate.DeepCopy()
+					pod.Labels[podNameLabel] = podNameLabelValue
+					spec.Selector = *metav1.AddLabelToSelector(&metav1.LabelSelector{},
+						podNameLabel, podNameLabelValue)
+				})
+				JustBeforeEach(func() {
+					matchedBoost, err = manager.UpsertPod(context.TODO(), pod)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(matchedBoost).To(BeNil())
+					err = manager.AddRegularCPUBoost(context.TODO(), boost)
+				})
+				It("does not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+				It("stores the startup-cpu-boost", func() {
+					stored, ok := manager.GetRegularCPUBoost(context.TODO(), spec.Name, spec.Namespace)
+					Expect(ok).To(BeTrue())
+					Expect(stored).To(Equal(boost))
+				})
+				It("stored boost manages orphaned pod", func() {
+					managedPod, ok := boost.Pod(pod.Name)
+					Expect(ok).To(BeTrue())
+					Expect(managedPod).To(Equal(pod))
+				})
 			})
 		})
 	})
@@ -98,12 +133,12 @@ var _ = Describe("Manager", func() {
 		})
 		When("startup-cpu-boost exists", func() {
 			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 				Expect(err).ToNot(HaveOccurred())
-				manager.RemoveStartupCPUBoost(context.TODO(), boost.Namespace(), boost.Name())
+				manager.DeleteRegularCPUBoost(context.TODO(), boost.Namespace(), boost.Name())
 			})
 			It("removes the startup-cpu-boost", func() {
-				_, ok := manager.StartupCPUBoost(spec.Namespace, spec.Name)
+				_, ok := manager.GetRegularCPUBoost(context.TODO(), spec.Name, spec.Namespace)
 				Expect(ok).To(BeFalse())
 			})
 			It("updates boost configurations metric", func() {
@@ -133,13 +168,14 @@ var _ = Describe("Manager", func() {
 		})
 		When("startup-cpu-boost is registered", func() {
 			JustBeforeEach(func() {
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 				Expect(err).ToNot(HaveOccurred())
-				err = manager.UpdateStartupCPUBoost(context.TODO(), updatedSpec)
+				err = manager.UpdateRegularCPUBoost(context.TODO(), updatedSpec)
 				Expect(err).ToNot(HaveOccurred())
 			})
 			It("updates the startup-cpu-boost", func() {
-				boost, ok := manager.StartupCPUBoost(updatedSpec.Namespace, updatedSpec.Name)
+				boost, ok := manager.GetRegularCPUBoost(context.TODO(), updatedSpec.Name,
+					updatedSpec.Namespace)
 				Expect(ok).To(BeTrue())
 				durationPolicies := boost.DurationPolicies()
 				durationPolicy, ok := durationPolicies[duration.FixedDurationPolicyName]
@@ -170,7 +206,7 @@ var _ = Describe("Manager", func() {
 		})
 		When("matching startup-cpu-boost does not exist", func() {
 			JustBeforeEach(func() {
-				boost, found = manager.StartupCPUBoostForPod(context.TODO(), pod)
+				boost, found = manager.GetCPUBoostForPod(context.TODO(), pod)
 			})
 			It("returns false", func() {
 				Expect(found).To(BeFalse())
@@ -191,9 +227,9 @@ var _ = Describe("Manager", func() {
 			JustBeforeEach(func() {
 				boost, err = cpuboost.NewStartupCPUBoost(nil, spec, useLegacyRevertMode)
 				Expect(err).NotTo(HaveOccurred())
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 				Expect(err).NotTo(HaveOccurred())
-				boost, found = manager.StartupCPUBoostForPod(context.TODO(), pod)
+				boost, found = manager.GetCPUBoostForPod(context.TODO(), pod)
 			})
 			It("returns true", func() {
 				Expect(found).To(BeTrue())
@@ -205,7 +241,114 @@ var _ = Describe("Manager", func() {
 			})
 		})
 	})
-	Describe("Runs on a time tick", func() {
+	Describe("handles pod upsert", func() {
+		var (
+			podNameLabel      string
+			podNameLabelValue string
+			pod               *corev1.Pod
+			matchedBoost      cpuboost.StartupCPUBoost
+			err               error
+		)
+		BeforeEach(func() {
+			podNameLabel = "app.kubernetes.io/name"
+			podNameLabelValue = "app-001"
+			pod = podTemplate.DeepCopy()
+			pod.Labels[podNameLabel] = podNameLabelValue
+		})
+		JustBeforeEach(func() {
+			matchedBoost, err = manager.UpsertPod(context.TODO(), pod)
+		})
+		When("there is a matching boost", func() {
+			var (
+				boost cpuboost.StartupCPUBoost
+			)
+			BeforeEach(func() {
+				boostSpec := specTemplate.DeepCopy()
+				boostSpec.Selector = *metav1.AddLabelToSelector(&metav1.LabelSelector{},
+					podNameLabel, podNameLabelValue)
+				boost, err = cpuboost.NewStartupCPUBoost(nil, boostSpec, false)
+				Expect(err).ToNot(HaveOccurred())
+				manager = cpuboost.NewManager(nil)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("doesn't error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("return's valid matched boost", func() {
+				Expect(matchedBoost).To(Equal(boost))
+			})
+		})
+		When("there is no matching boost", func() {
+			BeforeEach(func() {
+				manager = cpuboost.NewManager(nil)
+			})
+			It("doesn't error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("doesn't return matched boost", func() {
+				Expect(matchedBoost).To(BeNil())
+			})
+		})
+	})
+	Describe("handles pod delete", func() {
+		var (
+			podNameLabel      string
+			podNameLabelValue string
+			pod               *corev1.Pod
+			matchedBoost      cpuboost.StartupCPUBoost
+			err               error
+		)
+		BeforeEach(func() {
+			podNameLabel = "app.kubernetes.io/name"
+			podNameLabelValue = "app-001"
+			pod = podTemplate.DeepCopy()
+			pod.Labels[podNameLabel] = podNameLabelValue
+		})
+		JustBeforeEach(func() {
+			matchedBoost, err = manager.DeletePod(context.TODO(), pod)
+		})
+		When("there is a matching boost", func() {
+			var (
+				boost cpuboost.StartupCPUBoost
+			)
+			BeforeEach(func() {
+				boostSpec := specTemplate.DeepCopy()
+				boostSpec.Selector = *metav1.AddLabelToSelector(&metav1.LabelSelector{},
+					podNameLabel, podNameLabelValue)
+				boost, err = cpuboost.NewStartupCPUBoost(nil, boostSpec, false)
+				Expect(err).ToNot(HaveOccurred())
+				manager = cpuboost.NewManager(nil)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
+				Expect(err).ToNot(HaveOccurred())
+				err = boost.UpsertPod(context.TODO(), pod)
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("doesn't error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("return's valid matched boost", func() {
+				Expect(matchedBoost).To(Equal(boost))
+			})
+			It("matched boost doesn't manage deleted pod", func() {
+				managedPod, ok := boost.Pod(pod.Name)
+				Expect(managedPod).To(BeNil())
+				Expect(ok).To(BeFalse())
+			})
+		})
+		When("there is no matching boost", func() {
+			BeforeEach(func() {
+				manager = cpuboost.NewManager(nil)
+			})
+			It("doesn't error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+			It("doesn't return matched boost", func() {
+				Expect(matchedBoost).To(BeNil())
+			})
+		})
+	})
+	Describe("runs on a time tick", func() {
 		var (
 			mockCtrl   *gomock.Controller
 			mockTicker *mock.MockTimeTicker
@@ -280,7 +423,7 @@ var _ = Describe("Manager", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				err = boost.UpsertPod(ctx, pod)
 				Expect(err).ShouldNot(HaveOccurred())
-				err = manager.AddStartupCPUBoost(context.TODO(), boost)
+				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				c <- time.Now()
