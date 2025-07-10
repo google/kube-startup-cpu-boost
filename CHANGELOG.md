@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.15.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.15.0...v0.15.1) (2025-07-10)
+
+
+### Bug Fixes
+
+* set the RuntimeDefault Seccomp profile for the container ([#117](https://github.com/google/kube-startup-cpu-boost/issues/117)) ([a0201d6](https://github.com/google/kube-startup-cpu-boost/commit/a0201d6faed0741735a78275cc704f3a63c40824))
+
 ## [0.15.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.14.1...v0.15.0) (2025-04-14)
 
 
