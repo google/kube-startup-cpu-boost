@@ -183,7 +183,11 @@ func (m *managerImpl) UpdateRegularCPUBoost(ctx context.Context,
 		log.V(5).Info("boost not found")
 		return nil
 	}
-	return boost.UpdateFromSpec(ctx, spec)
+	if err := boost.UpdateFromSpec(ctx, spec); err != nil {
+		return err
+	}
+	m.postProcessNewBoost(ctx, boost)
+	return nil
 }
 
 // GetRegularCPUBoost returns a regular startup cpu boost with a given name and namespace
