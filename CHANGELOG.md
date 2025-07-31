@@ -1,6 +1,18 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.16.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.15.1...v0.16.0) (2025-07-31)
+
+
+### Features
+
+* fixed duration policy uses POD scheduled time ([#123](https://github.com/google/kube-startup-cpu-boost/issues/123)) ([98f9ebd](https://github.com/google/kube-startup-cpu-boost/commit/98f9ebd84b42badfd9ebab509267b67503145a38))
+
+
+### Bug Fixes
+
+* resources are reverted on boosts updated with fixedDuration policy ([#120](https://github.com/google/kube-startup-cpu-boost/issues/120)) ([9184734](https://github.com/google/kube-startup-cpu-boost/commit/9184734e641fa86b9be5570d5ac05fa51a2baaa6))
+
 ## [0.15.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.15.0...v0.15.1) (2025-07-10)
 
 
