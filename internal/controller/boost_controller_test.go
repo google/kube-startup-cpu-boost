@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
@@ -62,7 +61,7 @@ var _ = Describe("BoostController", func() {
 	Describe("Setups with manager", func() {
 		var (
 			mockCtrlManager *mock.MockCtrlManager
-			serverVersion   *version.Info
+			serverVersion   string
 			err             error
 		)
 		BeforeEach(func() {
@@ -83,9 +82,7 @@ var _ = Describe("BoostController", func() {
 		})
 		When("server version is newer or equal to 1.32.0", func() {
 			BeforeEach(func() {
-				serverVersion = &version.Info{
-					GitVersion: "v1.32.0",
-				}
+				serverVersion = "v1.32.0"
 			})
 			It("doesn't error", func() {
 				Expect(err).NotTo(HaveOccurred())
@@ -96,9 +93,7 @@ var _ = Describe("BoostController", func() {
 		})
 		When("server version is less than 1.32.0", func() {
 			BeforeEach(func() {
-				serverVersion = &version.Info{
-					GitVersion: "v1.29.2",
-				}
+				serverVersion = "v1.29.2"
 			})
 			It("doesn't error", func() {
 				Expect(err).NotTo(HaveOccurred())
