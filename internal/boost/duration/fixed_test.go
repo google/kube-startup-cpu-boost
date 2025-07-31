@@ -20,6 +20,7 @@ import (
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -39,17 +40,33 @@ var _ = Describe("FixedDurationPolicy", func() {
 	})
 
 	Describe("Validates POD", func() {
+		When("the POD has no status conditions", func() {
+			It("returns policy is valid", func() {
+				pod.Status.Conditions = []v1.PodCondition{}
+				Expect(policy.Valid(pod)).To(BeTrue())
+			})
+		})
 		When("the life time of a POD exceeds the policy duration", func() {
 			It("returns policy is not valid", func() {
-				creationTimesamp := now.Add(-1 * timeDuration).Add(-1 * time.Minute)
-				pod.CreationTimestamp = metav1.NewTime(creationTimesamp)
+				scheduleTime := now.Add(-1 * timeDuration).Add(-1 * time.Minute)
+				pod.Status.Conditions = []v1.PodCondition{
+					{
+						LastTransitionTime: metav1.NewTime(scheduleTime),
+						Type:               v1.PodScheduled,
+						Status:             v1.ConditionTrue,
+					}}
 				Expect(policy.Valid(pod)).To(BeFalse())
 			})
 		})
 		When("the life time of a POD is within policy duration", func() {
 			It("returns policy is valid", func() {
-				creationTimesamp := now.Add(-1 * timeDuration).Add(1 * time.Minute)
-				pod.CreationTimestamp = metav1.NewTime(creationTimesamp)
+				scheduleTime := now.Add(-1 * timeDuration).Add(1 * time.Minute)
+				pod.Status.Conditions = []v1.PodCondition{
+					{
+						LastTransitionTime: metav1.NewTime(scheduleTime),
+						Type:               v1.PodScheduled,
+						Status:             v1.ConditionTrue,
+					}}
 				Expect(policy.Valid(pod)).To(BeTrue())
 			})
 		})

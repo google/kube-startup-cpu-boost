@@ -187,7 +187,8 @@ spec:
 
 ### [Boost duration] fixed time
 
-Define the fixed amount of time, the resource boost effect will last for it since the POD's creation.
+Define the fixed amount of time, the resource boost effect will last for it since the
+**POD's schedule time**.
 
 ```yaml
 spec:

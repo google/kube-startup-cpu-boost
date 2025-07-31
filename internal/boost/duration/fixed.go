@@ -52,5 +52,10 @@ func (p *FixedDurationPolicy) Duration() time.Duration {
 
 func (p *FixedDurationPolicy) Valid(pod *v1.Pod) bool {
 	now := p.timeFunc()
-	return pod.CreationTimestamp.Add(p.duration).After(now)
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == v1.PodScheduled && condition.Status == v1.ConditionTrue {
+			return condition.LastTransitionTime.Add(p.duration).After(now)
+		}
+	}
+	return true
 }

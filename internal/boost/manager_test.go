@@ -434,10 +434,15 @@ var _ = Describe("Manager", func() {
 				durationSeconds = 60
 
 				pod = podTemplate.DeepCopy()
-				creationTimestamp := time.Now().
+				scheduledTimestamp := time.Now().
 					Add(-1 * time.Duration(durationSeconds) * time.Second).
 					Add(-1 * time.Minute)
-				pod.CreationTimestamp = metav1.NewTime(creationTimestamp)
+				pod.Status.Conditions = []corev1.PodCondition{
+					{
+						LastTransitionTime: metav1.NewTime(scheduledTimestamp),
+						Type:               corev1.PodScheduled,
+						Status:             corev1.ConditionTrue,
+					}}
 				mockClient = mock.NewMockClient(mockCtrl)
 				mockReconciler = mock.NewMockReconciler(mockCtrl)
 
