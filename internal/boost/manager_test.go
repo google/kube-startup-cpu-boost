@@ -397,16 +397,46 @@ var _ = Describe("Manager", func() {
 				mockClient          *mock.MockClient
 				mockReconciler      *mock.MockReconciler
 				c                   chan time.Time
+				durationSeconds     int64
 			)
+			var itShouldRevertBoost = func() {
+				When("legacy revert mode is not used", func() {
+					var (
+						mockSubResourceClient *mock.MockSubResourceClient
+					)
+					BeforeEach(func() {
+						useLegacyRevertMode = false
+						mockSubResourceClient = mock.NewMockSubResourceClient(mockCtrl)
+						mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+							gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
+						mockClient.EXPECT().SubResource("resize").
+							Return(mockSubResourceClient).Times(1)
+						mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+							gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+					})
+					It("doesn't error", func() {
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+				When("legacy revert mode is used", func() {
+					BeforeEach(func() {
+						useLegacyRevertMode = true
+						mockClient.EXPECT().Update(gomock.Any(), gomock.Eq(pod)).
+							MinTimes(1).Return(nil)
+					})
+					It("doesn't error", func() {
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+			}
 			BeforeEach(func() {
 				spec = specTemplate.DeepCopy()
-				var seconds int64 = 60
-				spec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
-					Unit:  autoscaling.FixedDurationPolicyUnitSec,
-					Value: seconds,
-				}
+				durationSeconds = 60
+
 				pod = podTemplate.DeepCopy()
-				creationTimestamp := time.Now().Add(-1 * time.Duration(seconds) * time.Second).Add(-1 * time.Minute)
+				creationTimestamp := time.Now().
+					Add(-1 * time.Duration(durationSeconds) * time.Second).
+					Add(-1 * time.Minute)
 				pod.CreationTimestamp = metav1.NewTime(creationTimestamp)
 				mockClient = mock.NewMockClient(mockCtrl)
 				mockReconciler = mock.NewMockReconciler(mockCtrl)
@@ -414,7 +444,10 @@ var _ = Describe("Manager", func() {
 				c = make(chan time.Time, 1)
 				mockTicker.EXPECT().Tick().MinTimes(1).Return(c)
 				mockTicker.EXPECT().Stop().Return()
-				reconcileReq := reconcile.Request{NamespacedName: types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}}
+				reconcileReq := reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name: spec.Name, Namespace: spec.Namespace,
+					}}
 				mockReconciler.EXPECT().Reconcile(gomock.Any(), gomock.Eq(reconcileReq)).Times(1)
 			})
 			JustBeforeEach(func() {
@@ -425,36 +458,45 @@ var _ = Describe("Manager", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				err = manager.AddRegularCPUBoost(context.TODO(), boost)
 				Expect(err).ShouldNot(HaveOccurred())
+			})
+			When("The startup-cpu-boost was created with fixed duration policy", func() {
+				BeforeEach(func() {
+					spec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
+						Unit:  autoscaling.FixedDurationPolicyUnitSec,
+						Value: durationSeconds,
+					}
+				})
+				JustBeforeEach(func() {
+					c <- time.Now()
+					time.Sleep(500 * time.Millisecond)
+					cancel()
+					<-done
+				})
+				itShouldRevertBoost()
+			})
+			When("The startup-cpu-boost was updated with fixed duration policy", func() {
+				var updatedSpec *autoscaling.StartupCPUBoost
+				BeforeEach(func() {
+					spec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionTrue,
+					}
+					updatedSpec = specTemplate.DeepCopy()
+					updatedSpec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
+						Unit:  autoscaling.FixedDurationPolicyUnitSec,
+						Value: durationSeconds,
+					}
+				})
+				JustBeforeEach(func() {
+					err = manager.UpdateRegularCPUBoost(ctx, updatedSpec)
+					Expect(err).ShouldNot(HaveOccurred())
 
-				c <- time.Now()
-				time.Sleep(500 * time.Millisecond)
-				cancel()
-				<-done
-			})
-			When("legacy revert mode is not used", func() {
-				var (
-					mockSubResourceClient *mock.MockSubResourceClient
-				)
-				BeforeEach(func() {
-					mockSubResourceClient = mock.NewMockSubResourceClient(mockCtrl)
-					mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-						gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
-					mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
-					mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-						gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+					c <- time.Now()
+					time.Sleep(500 * time.Millisecond)
+					cancel()
+					<-done
 				})
-				It("doesn't error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-			})
-			When("legacy revert mode is used", func() {
-				BeforeEach(func() {
-					useLegacyRevertMode = true
-					mockClient.EXPECT().Update(gomock.Any(), gomock.Eq(pod)).MinTimes(1).Return(nil)
-				})
-				It("doesn't error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
+				itShouldRevertBoost()
 			})
 		})
 	})
