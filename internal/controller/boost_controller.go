@@ -104,7 +104,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager,
-	serverVersion *version.Info) error {
+	serverVersion string) error {
 	boostPodHandler := NewBoostPodHandler(r.Manager, ctrl.Log.WithName("pod-handler"))
 	lsPredicate, err := predicate.LabelSelectorPredicate(*boostPodHandler.GetPodLabelSelector())
 	if err != nil {
@@ -174,7 +174,7 @@ func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
 
 // shouldUseLegacyRevertMode determines if legacy resource revert mode should be used
 // basing on server version
-func shouldUseLegacyRevertMode(serverVersion *version.Info) (legacyMode bool) {
+func shouldUseLegacyRevertMode(serverVersion string) (legacyMode bool) {
 	return version.CompareKubeAwareVersionStrings(WantedServerVersionForNewRevert,
-		serverVersion.GitVersion) < 0
+		serverVersion) < 0
 }

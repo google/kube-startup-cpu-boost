@@ -28,7 +28,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -82,10 +81,10 @@ func main() {
 
 	versionInfo, err := clusterInfo.GetClusterVersion()
 	if err != nil {
-		setupLog.Error(err, "failed to get cluster version, continuing...")
-	} else {
-		setupLog.Info("cluster info", "version", versionInfo.GitVersion)
+		setupLog.Error(err, "failed to get cluster version")
+		os.Exit(1)
 	}
+	setupLog.Info("cluster info", "version", versionInfo.GitVersion)
 
 	podLevelResourcesEnabled := false
 	if cfg.ValidateFeatureEnabled {
@@ -138,7 +137,7 @@ func main() {
 
 	boostMgr := boost.NewManager(mgr.GetClient())
 	controllersReady := make(chan struct{})
-	go setupControllers(mgr, boostMgr, cfg, podLevelResourcesEnabled, versionInfo, certsReady,
+	go setupControllers(mgr, boostMgr, cfg, podLevelResourcesEnabled, versionInfo.GitVersion, certsReady,
 		controllersReady)
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -159,7 +158,7 @@ func main() {
 }
 
 func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Config,
-	podLevelResourcesEnabled bool, serverVersion *version.Info, certsReady chan struct{},
+	podLevelResourcesEnabled bool, serverVersion string, certsReady chan struct{},
 	controllersReady chan struct{}) {
 	defer close(controllersReady)
 	setupLog.Info("Waiting for certificate generation to complete")
