@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.16.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.0...v0.16.1) (2025-08-01)
+
+
+### Bug Fixes
+
+* fail fast in case of server version retrieval failure ([#124](https://github.com/google/kube-startup-cpu-boost/issues/124)) ([05fabd6](https://github.com/google/kube-startup-cpu-boost/commit/05fabd6f843801b7e21c536cca94bf98467ffb2f))
+
 ## [0.16.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.15.1...v0.16.0) (2025-07-31)
 
 
