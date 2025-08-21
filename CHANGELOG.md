@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.16.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.1...v0.16.2) (2025-08-21)
+
+
+### Bug Fixes
+
+* removing time boosts reconciliation deadlock ([#127](https://github.com/google/kube-startup-cpu-boost/issues/127)) ([0d00fff](https://github.com/google/kube-startup-cpu-boost/commit/0d00fff46d8acfdf30b15b3749618cd3efb7c9e5))
+
 ## [0.16.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.0...v0.16.1) (2025-08-01)
 
 
