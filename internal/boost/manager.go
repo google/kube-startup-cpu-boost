@@ -257,6 +257,7 @@ func (m *managerImpl) Start(ctx context.Context) error {
 			m.log.V(5).Info("tick...")
 			m.validateTimePolicyBoosts(ctx)
 		case <-ctx.Done():
+			m.log.Info("stopping")
 			return nil
 		}
 	}
@@ -323,13 +324,16 @@ func (m *managerImpl) mapOrphanedPods(ctx context.Context, boost StartupCPUBoost
 // and reverts the resources for violated pods.
 func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 	m.RLock()
-	defer m.RUnlock()
+	timeBoosts := make([]StartupCPUBoost, 0)
+	timeBoosts = append(timeBoosts, m.timedBoosts.ListAll()...)
+	m.RUnlock()
+
 	revertTasks := make(chan *podRevertTask, m.maxGoroutines)
 	reconcileTasks := make(chan *reconcile.Request, m.maxGoroutines)
 	errors := make(chan error, m.maxGoroutines)
 
 	go func() {
-		for _, boost := range m.timedBoosts.ListAll() {
+		for _, boost := range timeBoosts {
 			for _, pod := range boost.ValidatePolicy(ctx, duration.FixedDurationPolicyName) {
 				revertTasks <- &podRevertTask{
 					boost: boost,
