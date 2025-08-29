@@ -1,0 +1,97 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-startup-cpu-boost-manager-role
+  labels:
+  {{- include "kube-startup-cpu-boost.labels" . | nindent 4 }}
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/resize
+  verbs:
+  - patch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - kube-startup-cpu-boost-mutating-webhook-configuration
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - kube-startup-cpu-boost-validating-webhook-configuration
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - autoscaling.x-k8s.io
+  resources:
+  - startupcpuboosts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling.x-k8s.io
+  resources:
+  - startupcpuboosts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - autoscaling.x-k8s.io
+  resources:
+  - startupcpuboosts/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-startup-cpu-boost-manager-rolebinding
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: kube-startup-cpu-boost
+    app.kubernetes.io/part-of: kube-startup-cpu-boost
+  {{- include "kube-startup-cpu-boost.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-startup-cpu-boost-manager-role
+subjects:
+- kind: ServiceAccount
+  name: kube-startup-cpu-boost-controller-manager
+  namespace: '{{ .Release.Namespace }}'

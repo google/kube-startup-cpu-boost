@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kube-startup-cpu-boost
+description: A Helm chart for kube-startup-cpu-boost operator
+type: application
+version: 0.1.0 #x-release-please-version
+appVersion: "0.1.0" #x-release-please-version

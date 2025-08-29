@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-startup-cpu-boost-webhook-service
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: kube-startup-cpu-boost
+    app.kubernetes.io/part-of: kube-startup-cpu-boost
+  {{- include "kube-startup-cpu-boost.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.webhookService.type }}
+  selector:
+    control-plane: controller-manager
+    {{- include "kube-startup-cpu-boost.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- .Values.webhookService.ports | toYaml | nindent 2 }}
