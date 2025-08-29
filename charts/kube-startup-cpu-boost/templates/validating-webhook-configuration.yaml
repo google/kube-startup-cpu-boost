@@ -1,0 +1,29 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "kube-startup-cpu-boost.fullname" . }}-validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "kube-startup-cpu-boost.fullname" . }}-
+  labels:
+  {{- include "kube-startup-cpu-boost.labels" . | nindent 4 }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kube-startup-cpu-boost-webhook-service
+      namespace: '{{ .Release.Namespace }}'
+      path: /validate-autoscaling-x-k8s-io-v1alpha1-startupcpuboost
+  failurePolicy: Fail
+  name: vstartupcpuboost.autoscaling.x-k8s.io
+  rules:
+  - apiGroups:
+    - autoscaling.x-k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - startupcpuboosts
+  sideEffects: None
