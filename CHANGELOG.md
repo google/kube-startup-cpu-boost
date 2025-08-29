@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.17.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.2...v0.17.0) (2025-08-29)
+
+
+### Features
+
+* adding helmify generated helm chart ([#132](https://github.com/google/kube-startup-cpu-boost/issues/132)) ([b457d35](https://github.com/google/kube-startup-cpu-boost/commit/b457d3530ef3a7644e8e5081c47630c1b9d87b12))
+* adding helmify to makefile ([46ee573](https://github.com/google/kube-startup-cpu-boost/commit/46ee5733e8c55e3fd2d50386e71ab82ecbe470ed))
+
 ## [0.16.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.1...v0.16.2) (2025-08-21)
 
 
