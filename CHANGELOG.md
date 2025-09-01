@@ -1,6 +1,23 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.17.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.2...v0.17.0) (2025-09-01)
+
+
+### Features
+
+* adding helmify generated helm chart ([#132](https://github.com/google/kube-startup-cpu-boost/issues/132)) ([b457d35](https://github.com/google/kube-startup-cpu-boost/commit/b457d3530ef3a7644e8e5081c47630c1b9d87b12))
+* adding helmify to makefile ([46ee573](https://github.com/google/kube-startup-cpu-boost/commit/46ee5733e8c55e3fd2d50386e71ab82ecbe470ed))
+* automated helm chart release ([#133](https://github.com/google/kube-startup-cpu-boost/issues/133)) ([9a22ca7](https://github.com/google/kube-startup-cpu-boost/commit/9a22ca7a2505196372552e255cee2df2b2a4560f))
+* release-please helm release ([#136](https://github.com/google/kube-startup-cpu-boost/issues/136)) ([75903df](https://github.com/google/kube-startup-cpu-boost/commit/75903df386ec4382e96e95db1cd11f1cfecacc93))
+
+
+### Bug Fixes
+
+* aligning chart version and appVersion ([#137](https://github.com/google/kube-startup-cpu-boost/issues/137)) ([f56b2bf](https://github.com/google/kube-startup-cpu-boost/commit/f56b2bf8d8533f2c59fdeaf44eb844de1947e93a))
+* app version in chart not updated by release-please ([#134](https://github.com/google/kube-startup-cpu-boost/issues/134)) ([c89b9c1](https://github.com/google/kube-startup-cpu-boost/commit/c89b9c11bc55a50c80e4ce1d9daba8f1f4dba406))
+* chart release-please version ([#135](https://github.com/google/kube-startup-cpu-boost/issues/135)) ([6f84dc5](https://github.com/google/kube-startup-cpu-boost/commit/6f84dc5169821c6682cba6c0536dcb5b19d8519a))
+
 ## [0.16.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.1...v0.16.2) (2025-08-21)
 
 

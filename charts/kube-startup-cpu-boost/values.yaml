@@ -11,7 +11,7 @@ controllerManager:
       leaderElection: "true"
     image:
       repository: ghcr.io/google/kube-startup-cpu-boost
-      tag: v0.16.2 #x-release-please-version
+      tag: v0.17.0 #x-release-please-version
     resources:
       limits:
         cpu: 500m
