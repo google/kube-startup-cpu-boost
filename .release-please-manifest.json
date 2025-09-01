@@ -1,3 +1,4 @@
 {
-  ".": "0.16.2"
+  ".": "0.16.2",
+  "charts/kube-startup-cpu-boost": "0.16.2"
 }

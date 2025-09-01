@@ -1,11 +1,5 @@
 {
   "bootstrap-sha": "c421a4f84641631d5ae3241323e4a5af63dc9731",
-  "extra-files": [
-    "README.md",
-    "kustomization.yaml",
-    "charts/kube-startup-cpu-boost/Chart.yaml",
-    "charts/kube-startup-cpu-boost/values.yaml"
-  ],
   "packages": {
     ".": {
       "changelog-path": "CHANGELOG.md",
@@ -13,7 +7,15 @@
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
-      "prerelease": false
+      "prerelease": false,
+      "extra-files": [
+        "README.md",
+        "kustomization.yaml",
+        "charts/kube-startup-cpu-boost/values.yaml"
+      ]
+    },
+    "charts/kube-startup-cpu-boost": {
+      "release-type": "helm"
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
