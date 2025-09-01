@@ -68,7 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   chart-releaser:
     runs-on: ubuntu-latest
-    needs: release-please
+    needs: goreleaser
     if: needs.release-please.outputs.releases_created == 'true'
     permissions:
       contents: write
