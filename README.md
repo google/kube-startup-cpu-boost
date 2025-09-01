@@ -33,20 +33,22 @@ Note: this is not an officially supported Google product.
 The primary use cases for Kube Startup CPU Boosts are workloads that require extra CPU resources during
 the startup phase - typically JVM based applications.
 
-The Kube Startup CPU Boost leverages [In-place Resource Resize for Kubernetes Pods](https://kubernetes.io/blog/2023/05/12/in-place-pod-resize-alpha/)
+The Kube Startup CPU Boost leverages [In-place Resource Resize for Kubernetes Pods](https://kubernetes.io/docs/tasks/configure-pod-container/resize-container-resources/)
 feature introduced in Kubernetes 1.27. It allows to revert workload's CPU resource requests and limits
 back to their original values without the need to recreate the Pods.
 
 The increase of resources is achieved by Mutating Admission Webhook. By default, the webhook also
-removes CPU resource limits if present. The original resource values are set by operator after a given
-period of time or when the POD condition is met.
+removes CPU resource limits if present. The original resource values are set by tge operator after a
+given period of time or when the POD condition is met.
 
 ## Installation
 
-**Requires Kubernetes 1.27 or newer with `InPlacePodVerticalScaling` feature gate
-enabled.**
+### Prerequisites
 
-To install the latest release of Kube Startup CPU Boost in your cluster, run the following command:
+* **Requires Kubernetes 1.33 or newer**.
+* For older clusters (>= 1.27), enable the `InPlacePodVerticalScaling` feature gate.
+
+### Install with manifests file
 
  <!-- x-release-please-start-version -->
 ```sh
@@ -73,35 +75,24 @@ kubectl kustomize | kubectl apply -f -
 ```
  <!-- x-release-please-end -->
 
-### Installation on Kind cluster
+### Install with Helm
 
-You can use [KIND](https://github.com/kubernetes-sigs/kind) to get a local cluster for testing.
+Helm installation uses self-hosted Helm chart repo [kube-startup-cpu-boost](https://google.github.io/kube-startup-cpu-boost).
 
 ```sh
-cat <<EOF > kind-poc-cluster.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: poc
-nodes:
-- role: control-plane
-- role: worker
-- role: worker
-featureGates:
-  InPlacePodVerticalScaling: true 
-EOF
-kind create cluster --config kind-poc-cluster.yaml
+helm repo add kube-startup-cpu-boost https://google.github.io/kube-startup-cpu-boost
+helm repo update
+helm install -n kube-startup-cpu-boost-system kube-startup-cpu-boost kube-startup-cpu-boost/kube-startup-cpu-boost
 ```
 
 ### Installation on GKE cluster
 
-You can use [GKE Alpha cluster](https://cloud.google.com/kubernetes-engine/docs/concepts/alpha-clusters)
-to run against the remote cluster.
+Ensure that GKE is running version 1.33 or newer by using
+[GKE Rapid release channel](https://cloud.google.com/kubernetes-engine/docs/concepts/release-channels).
 
 ```sh
 gcloud container clusters create poc \
-    --enable-kubernetes-alpha \
-    --no-enable-autorepair \
-    --no-enable-autoupgrade \
+    --release-channel rapid \
     --region europe-central2
 ```
 
