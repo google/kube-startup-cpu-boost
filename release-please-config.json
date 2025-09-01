@@ -2,7 +2,9 @@
   "bootstrap-sha": "c421a4f84641631d5ae3241323e4a5af63dc9731",
   "extra-files": [
     "README.md",
-    "kustomization.yaml"
+    "kustomization.yaml",
+    "charts/kube-startup-cpu-boost/Chart.yaml",
+    "charts/kube-startup-cpu-boost/values.yaml"
   ],
   "packages": {
     ".": {
