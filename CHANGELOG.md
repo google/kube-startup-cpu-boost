@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.17.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.17.0...v0.17.1) (2025-09-01)
+
+
+### Bug Fixes
+
+* chart releaser vs goreleaser order ([#138](https://github.com/google/kube-startup-cpu-boost/issues/138)) ([703b0a3](https://github.com/google/kube-startup-cpu-boost/commit/703b0a311e93702c2d2cbcdca569d4b0b92cc08f))
+
 ## [0.17.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.16.2...v0.17.0) (2025-09-01)
 
 
