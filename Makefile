@@ -174,7 +174,8 @@ envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
-HELMIFY ?= $(LOCALBIN)/helmify -original-name charts/kube-startup-cpu-boost
+HELM_CHART_ROOT ?= charts/kube-startup-cpu-boost
+HELMIFY ?= $(LOCALBIN)/helmify -original-name ${HELM_CHART_ROOT}
 
 .PHONY: helmify
 helmify: $(HELMIFY) ## Download helmify locally if necessary.
@@ -182,4 +183,5 @@ $(HELMIFY): $(LOCALBIN)
 	test -s $(LOCALBIN)/helmify || GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@latest
 
 helm: manifests kustomize helmify
-	$(KUSTOMIZE) build config/default | $(HELMIFY)
+	$(KUSTOMIZE) build . | $(HELMIFY)
+	@sed -i 's/\(.\+tag: v[0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1 #x-release-please-version/g' ${HELM_CHART_ROOT}/values.yaml
