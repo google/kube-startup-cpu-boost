@@ -4,7 +4,7 @@ controllerManager:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-          - ALL
+        - ALL
       seccompProfile:
         type: RuntimeDefault
     env:
