@@ -4,11 +4,12 @@ controllerManager:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-        - ALL
+          - ALL
       seccompProfile:
         type: RuntimeDefault
     env:
       leaderElection: "true"
+      removeLimits: "false"
     image:
       repository: ghcr.io/google/kube-startup-cpu-boost
       tag: v0.17.1 #x-release-please-version
@@ -27,7 +28,7 @@ controllerManager:
 kubernetesClusterDomain: cluster.local
 webhookService:
   ports:
-  - port: 443
-    protocol: TCP
-    targetPort: 9443
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
   type: ClusterIP
