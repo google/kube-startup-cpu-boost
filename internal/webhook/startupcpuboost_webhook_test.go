@@ -329,4 +329,129 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 			})
 		})
 	})
+	When("Defaults StartupCPUBoost", func() {
+		var boost v1alpha1.StartupCPUBoost
+		When("Startup CPU Boost has no triggers", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:  "container-one",
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+						// Triggers field omitted (nil/empty)
+					},
+				}
+			})
+			It("defaults to PodCreate trigger", func() {
+				err := w.Default(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(boost.Spec.Triggers).NotTo(BeEmpty())
+				Expect(len(boost.Spec.Triggers)).To(Equal(1))
+				Expect(boost.Spec.Triggers[0].Type).To(Equal(v1alpha1.BoostTriggerTypePodCreate))
+			})
+		})
+		When("Startup CPU Boost has empty triggers array", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:  "container-one",
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+						Triggers: []v1alpha1.BoostTrigger{}, // Empty array
+					},
+				}
+			})
+			It("defaults to PodCreate trigger", func() {
+				err := w.Default(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(boost.Spec.Triggers).NotTo(BeEmpty())
+				Expect(len(boost.Spec.Triggers)).To(Equal(1))
+				Expect(boost.Spec.Triggers[0].Type).To(Equal(v1alpha1.BoostTriggerTypePodCreate))
+			})
+		})
+		When("Startup CPU Boost already has triggers", func() {
+			BeforeEach(func() {
+				containerRestartType := v1alpha1.BoostTriggerTypeContainerRestart
+				containerName := "*"
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:  "container-one",
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+						Triggers: []v1alpha1.BoostTrigger{
+							{
+								Type:          containerRestartType,
+								ContainerName: &containerName,
+							},
+						},
+					},
+				}
+			})
+			It("does not modify existing triggers", func() {
+				originalTriggers := boost.Spec.Triggers
+				err := w.Default(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(boost.Spec.Triggers).To(Equal(originalTriggers))
+				Expect(len(boost.Spec.Triggers)).To(Equal(1))
+				Expect(boost.Spec.Triggers[0].Type).To(Equal(v1alpha1.BoostTriggerTypeContainerRestart))
+			})
+		})
+		When("Startup CPU Boost has PodCreate trigger already", func() {
+			BeforeEach(func() {
+				podCreateType := v1alpha1.BoostTriggerTypePodCreate
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:  "container-one",
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+						Triggers: []v1alpha1.BoostTrigger{
+							{
+								Type: podCreateType,
+							},
+						},
+					},
+				}
+			})
+			It("does not modify existing triggers", func() {
+				originalTriggers := boost.Spec.Triggers
+				err := w.Default(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(boost.Spec.Triggers).To(Equal(originalTriggers))
+				Expect(len(boost.Spec.Triggers)).To(Equal(1))
+				Expect(boost.Spec.Triggers[0].Type).To(Equal(v1alpha1.BoostTriggerTypePodCreate))
+			})
+		})
+	})
 })

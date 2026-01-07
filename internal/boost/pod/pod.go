@@ -255,11 +255,11 @@ func (a *BoostPodAnnotation) GetActivationState() *ActivationState {
 func (a *BoostPodAnnotation) SetCurrentActivation(triggerType autoscaling.BoostTriggerType, startTime time.Time, expiryType string, expiryFixedDuration *int64, expiryPodCondition *PodConditionExpiryEntry) {
 	state := a.GetActivationState()
 	state.CurrentActivation = &ActivationStateEntry{
-		TriggerType:          triggerType,
-		StartTime:            startTime.Format(time.RFC3339),
-		ExpiryConditionType:  expiryType,
-		ExpiryFixedDuration:  expiryFixedDuration,
-		ExpiryPodCondition:   expiryPodCondition,
+		TriggerType:         triggerType,
+		StartTime:           startTime.Format(time.RFC3339),
+		ExpiryConditionType: expiryType,
+		ExpiryFixedDuration: expiryFixedDuration,
+		ExpiryPodCondition:  expiryPodCondition,
 	}
 }
 
