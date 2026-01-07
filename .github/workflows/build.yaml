@@ -17,11 +17,13 @@ on:
   push:
     branches:
       - main
+      - development
     paths-ignore:
       - 'demo-app/**'
   pull_request:
     branches:
       - main
+      - development
     paths-ignore:
       - 'demo-app/**'
 

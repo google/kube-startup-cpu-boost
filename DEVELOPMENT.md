@@ -1,5 +1,57 @@
 # Development guide
 
+## Branching Strategy
+
+### Long-Lived Development Branch
+
+We use a **long-lived `development` branch** for feature development. All story branches branch off and merge back to `development` until code complete.
+
+**Branch Structure**:
+```
+main
+  └── development (long-lived)
+       ├── story/epic-001-us-001-api-schema
+       ├── story/epic-001-us-002-activation-model
+       ├── story/epic-002-us-005-restart-detection
+       └── ... (other story branches)
+```
+
+**Workflow**:
+1. **Create story branch** from `development`:
+   ```bash
+   git checkout development
+   git pull origin development
+   git checkout -b story/epic-001-us-001-api-schema
+   ```
+
+2. **Work on story**:
+   - Make commits following [Conventional Commits](#commit-messages)
+   - Push branch and create PR targeting `development`
+
+3. **Merge back to development**:
+   - PR reviewed and approved
+   - Merge to `development` (squash or merge commits as preferred)
+   - Delete story branch after merge
+
+4. **Repeat** until all stories complete
+
+5. **Final merge to main**:
+   - When all EPICS are code complete
+   - Create PR from `development` to `main`
+   - After merge, tag release
+
+**Branch Naming Convention**:
+- Story branches: `story/epic-{number}-us-{number}-{short-description}`
+  - Example: `story/epic-001-us-001-api-schema`
+  - Example: `story/epic-002-us-005-restart-detection`
+- Hotfix branches: `hotfix/{description}` (if needed)
+
+**Best Practices**:
+- Always branch from latest `development`
+- Keep story branches focused (one user story per branch)
+- Rebase on `development` before creating PR if needed
+- Delete merged story branches to keep repository clean
+
 ## Commit messages
 
 We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) specification
