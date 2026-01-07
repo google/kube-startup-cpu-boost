@@ -62,6 +62,9 @@ type StartupCPUBoost interface {
 	Stats() StartupCPUBoostStats
 	// UpdateFromSpec updates the StartupCPUBoost from the API spec
 	UpdateFromSpec(ctx context.Context, boost *autoscaling.StartupCPUBoost) error
+	// ShouldActivateForPodCreate returns true if boost should activate on pod creation
+	// This maintains backward compatibility - if no triggers specified, defaults to true
+	ShouldActivateForPodCreate() bool
 }
 
 const (
@@ -100,6 +103,8 @@ type StartupCPUBoostImpl struct {
 	client           client.Client
 	stats            StartupCPUBoostStats
 	legacyRevertMode bool
+	triggers         []autoscaling.BoostTrigger
+	durationPolicy   autoscaling.DurationPolicy
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
@@ -122,6 +127,8 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 		client:           client,
 		stats:            StartupCPUBoostStats{},
 		legacyRevertMode: legacyRevertMode,
+		triggers:         boost.Spec.Triggers,
+		durationPolicy:   boost.Spec.DurationPolicy,
 	}, nil
 }
 
@@ -248,7 +255,17 @@ func (b *StartupCPUBoostImpl) UpdateFromSpec(ctx context.Context, boost *autosca
 	b.selector = selector
 	b.resourcePolicies = resourcePolicies
 	b.durationPolicies = mapDurationPolicy(boost.Spec.DurationPolicy)
+	b.triggers = boost.Spec.Triggers
+	b.durationPolicy = boost.Spec.DurationPolicy
 	return nil
+}
+
+// ShouldActivateForPodCreate returns true if boost should activate on pod creation
+// This maintains backward compatibility - if no triggers specified, defaults to true
+func (b *StartupCPUBoostImpl) ShouldActivateForPodCreate() bool {
+	return ShouldActivateForPodCreate(autoscaling.StartupCPUBoostSpec{
+		Triggers: b.triggers,
+	})
 }
 
 // loggerFromContext provides Logger from a current context with configured

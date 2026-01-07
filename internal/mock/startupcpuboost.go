@@ -228,3 +228,17 @@ func (mr *MockStartupCPUBoostMockRecorder) ValidatePolicy(ctx, name any) *gomock
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ValidatePolicy), ctx, name)
 }
+
+// ShouldActivateForPodCreate mocks base method.
+func (m *MockStartupCPUBoost) ShouldActivateForPodCreate() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShouldActivateForPodCreate")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ShouldActivateForPodCreate indicates an expected call of ShouldActivateForPodCreate.
+func (mr *MockStartupCPUBoostMockRecorder) ShouldActivateForPodCreate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldActivateForPodCreate", reflect.TypeOf((*MockStartupCPUBoost)(nil).ShouldActivateForPodCreate))
+}

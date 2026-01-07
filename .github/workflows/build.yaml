@@ -61,6 +61,23 @@ jobs:
         run: |
           make test
           make vet
+      - name: Verify all test packages executed
+        run: |
+          echo "Verifying all test packages were executed..."
+          LOCALBIN="$(pwd)/bin"
+          export KUBEBUILDER_ASSETS="$($LOCALBIN/setup-envtest use 1.30.x --bin-dir $LOCALBIN -p path)"
+          TEST_OUTPUT=$(go test ./... 2>&1)
+          echo "$TEST_OUTPUT"
+          TEST_COUNT=$(echo "$TEST_OUTPUT" | grep -E "^(ok|FAIL|\?)" | wc -l | tr -d ' ')
+          echo ""
+          echo "Total test packages executed: $TEST_COUNT"
+          echo "Expected packages with tests: 9"
+          if [ "$TEST_COUNT" -lt "9" ]; then
+            echo "ERROR: Expected at least 9 test packages, found $TEST_COUNT"
+            echo "This indicates not all tests are running in CI"
+            exit 1
+          fi
+          echo "✓ All test packages executed successfully"
       - name: Lint
         uses: dominikh/staticcheck-action@v1
         with:
