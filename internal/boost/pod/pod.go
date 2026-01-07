@@ -59,6 +59,11 @@ type ActivationState struct {
 	// Used for rate limiting (max activations per hour)
 	// Only keeps activations from the last hour
 	ActivationHistory []string `json:"activationHistory,omitempty"`
+
+	// LastRestartCounts tracks the last seen restartCount per container
+	// Used to detect ContainerRestart trigger activations
+	// Key: container name, Value: restartCount (as string)
+	LastRestartCounts map[string]int32 `json:"lastRestartCounts,omitempty"`
 }
 
 // ActivationStateEntry represents a single activation state entry
@@ -95,6 +100,7 @@ func NewBoostAnnotation() *BoostPodAnnotation {
 		ActivationState: &ActivationState{
 			LastActivationTime: make(map[string]string),
 			ActivationHistory:  make([]string, 0),
+			LastRestartCounts:  make(map[string]int32),
 		},
 	}
 }
@@ -121,6 +127,7 @@ func BoostAnnotationFromPod(pod *corev1.Pod) (*BoostPodAnnotation, error) {
 		annotation.ActivationState = &ActivationState{
 			LastActivationTime: make(map[string]string),
 			ActivationHistory:  make([]string, 0),
+			LastRestartCounts:  make(map[string]int32),
 		}
 	}
 	if annotation.ActivationState.LastActivationTime == nil {
@@ -128,6 +135,9 @@ func BoostAnnotationFromPod(pod *corev1.Pod) (*BoostPodAnnotation, error) {
 	}
 	if annotation.ActivationState.ActivationHistory == nil {
 		annotation.ActivationState.ActivationHistory = make([]string, 0)
+	}
+	if annotation.ActivationState.LastRestartCounts == nil {
+		annotation.ActivationState.LastRestartCounts = make(map[string]int32)
 	}
 	return annotation, nil
 }
@@ -240,6 +250,7 @@ func (a *BoostPodAnnotation) GetActivationState() *ActivationState {
 		a.ActivationState = &ActivationState{
 			LastActivationTime: make(map[string]string),
 			ActivationHistory:  make([]string, 0),
+			LastRestartCounts:  make(map[string]int32),
 		}
 	}
 	if a.ActivationState.LastActivationTime == nil {
@@ -247,6 +258,9 @@ func (a *BoostPodAnnotation) GetActivationState() *ActivationState {
 	}
 	if a.ActivationState.ActivationHistory == nil {
 		a.ActivationState.ActivationHistory = make([]string, 0)
+	}
+	if a.ActivationState.LastRestartCounts == nil {
+		a.ActivationState.LastRestartCounts = make(map[string]int32)
 	}
 	return a.ActivationState
 }
@@ -324,4 +338,40 @@ func (a *BoostPodAnnotation) GetActivationHistoryCount() int {
 		return 0
 	}
 	return len(a.ActivationState.ActivationHistory)
+}
+
+// GetLastRestartCount returns the last seen restartCount for a container
+func (a *BoostPodAnnotation) GetLastRestartCount(containerName string) (int32, bool) {
+	state := a.GetActivationState()
+	count, ok := state.LastRestartCounts[containerName]
+	return count, ok
+}
+
+// SetLastRestartCount sets the last seen restartCount for a container
+func (a *BoostPodAnnotation) SetLastRestartCount(containerName string, restartCount int32) {
+	state := a.GetActivationState()
+	state.LastRestartCounts[containerName] = restartCount
+}
+
+// UpdateLastRestartCounts updates the last seen restartCounts from pod status
+// Returns a map of containers whose restartCount increased
+func (a *BoostPodAnnotation) UpdateLastRestartCounts(pod *corev1.Pod) map[string]int32 {
+	state := a.GetActivationState()
+	incremented := make(map[string]int32)
+
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		containerName := containerStatus.Name
+		currentCount := containerStatus.RestartCount
+		lastCount, exists := state.LastRestartCounts[containerName]
+
+		// If restartCount increased, record it
+		if !exists || currentCount > lastCount {
+			incremented[containerName] = currentCount
+		}
+
+		// Always update the last seen count
+		state.LastRestartCounts[containerName] = currentCount
+	}
+
+	return incremented
 }
