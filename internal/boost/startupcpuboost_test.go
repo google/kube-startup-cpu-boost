@@ -431,4 +431,65 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 	})
+	Describe("ShouldActivateForPodCreate", func() {
+		JustBeforeEach(func() {
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+		When("no triggers are specified", func() {
+			It("should return true for backward compatibility", func() {
+				Expect(boost.ShouldActivateForPodCreate()).To(BeTrue())
+			})
+		})
+		When("PodCreate trigger is specified", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypePodCreate},
+				}
+			})
+			It("should return true", func() {
+				Expect(boost.ShouldActivateForPodCreate()).To(BeTrue())
+			})
+		})
+		When("only ContainerRestart trigger is specified", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypeContainerRestart},
+				}
+			})
+			It("should return false", func() {
+				Expect(boost.ShouldActivateForPodCreate()).To(BeFalse())
+			})
+		})
+		When("multiple triggers including PodCreate", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypeContainerRestart},
+					{Type: autoscaling.BoostTriggerTypePodCreate},
+				}
+			})
+			It("should return true", func() {
+				Expect(boost.ShouldActivateForPodCreate()).To(BeTrue())
+			})
+		})
+		When("triggers are updated via UpdateFromSpec", func() {
+			var updatedSpec *autoscaling.StartupCPUBoost
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypePodCreate},
+				}
+				updatedSpec = spec.DeepCopy()
+				updatedSpec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypeContainerRestart},
+				}
+			})
+			JustBeforeEach(func() {
+				err = boost.UpdateFromSpec(context.TODO(), updatedSpec)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+			It("should reflect updated triggers", func() {
+				Expect(boost.ShouldActivateForPodCreate()).To(BeFalse())
+			})
+		})
+	})
 })

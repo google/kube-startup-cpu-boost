@@ -24,3 +24,4 @@ bin/
 demo-app/target
 .vscode
 docs/
+coverage/

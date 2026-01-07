@@ -259,10 +259,10 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 							},
 							Triggers: []v1alpha1.BoostTrigger{
 								{
-									Type:         transitionType,
+									Type:          transitionType,
 									ConditionType: &conditionType,
-									FromStatus:   &fromStatus,
-									ToStatus:     &toStatus,
+									FromStatus:    &fromStatus,
+									ToStatus:      &toStatus,
 								},
 							},
 						},

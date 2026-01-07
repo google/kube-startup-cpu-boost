@@ -65,6 +65,14 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 		return admission.Allowed("no boost matched")
 	}
 	log = log.WithValues("boost", boostImpl.Name())
+
+	// Evaluate if PodCreate trigger should activate this boost
+	// This maintains backward compatibility - if no triggers specified, defaults to activating
+	if !boostImpl.ShouldActivateForPodCreate() {
+		log.V(5).Info("boost matched but PodCreate trigger not configured, skipping")
+		return admission.Allowed("boost matched but PodCreate trigger not configured")
+	}
+
 	h.boostContainerResources(ctx, boostImpl, pod, log)
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {

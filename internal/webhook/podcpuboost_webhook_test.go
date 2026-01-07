@@ -100,7 +100,9 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				)
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
+					boost.EXPECT().ShouldActivateForPodCreate().AnyTimes().Return(true)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
+					boost.EXPECT().ShouldActivateForPodCreate().AnyTimes().Return(true)
 					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
 					managerCall.Return(boost, true)
 				})
@@ -189,7 +191,9 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				)
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
+					boost.EXPECT().ShouldActivateForPodCreate().AnyTimes().Return(true)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
+					boost.EXPECT().ShouldActivateForPodCreate().AnyTimes().Return(true)
 					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
 					managerCall.Return(boost, true)
 				})
@@ -262,6 +266,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				)
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
+					boost.EXPECT().ShouldActivateForPodCreate().AnyTimes().Return(true)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
 					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
 					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-two"))
@@ -426,6 +431,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				)
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
+					boost.EXPECT().ShouldActivateForPodCreate().AnyTimes().Return(true)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
 					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
 					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-two"))
