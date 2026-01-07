@@ -65,6 +65,11 @@ type StartupCPUBoost interface {
 	// ShouldActivateForPodCreate returns true if boost should activate on pod creation
 	// This maintains backward compatibility - if no triggers specified, defaults to true
 	ShouldActivateForPodCreate() bool
+	// HasContainerRestartTrigger returns true if boost has ContainerRestart trigger configured
+	HasContainerRestartTrigger() bool
+	// ShouldActivateForContainerRestart checks if boost should activate for a container restart
+	// Returns true if ContainerRestart trigger is configured and matches the container name
+	ShouldActivateForContainerRestart(containerName string) bool
 }
 
 const (
@@ -266,6 +271,34 @@ func (b *StartupCPUBoostImpl) ShouldActivateForPodCreate() bool {
 	return ShouldActivateForPodCreate(autoscaling.StartupCPUBoostSpec{
 		Triggers: b.triggers,
 	})
+}
+
+// HasContainerRestartTrigger returns true if boost has ContainerRestart trigger configured
+func (b *StartupCPUBoostImpl) HasContainerRestartTrigger() bool {
+	for _, trigger := range b.triggers {
+		if trigger.Type == autoscaling.BoostTriggerTypeContainerRestart {
+			return true
+		}
+	}
+	return false
+}
+
+// ShouldActivateForContainerRestart checks if boost should activate for a container restart
+// Returns true if ContainerRestart trigger is configured and matches the container name
+func (b *StartupCPUBoostImpl) ShouldActivateForContainerRestart(containerName string) bool {
+	for _, trigger := range b.triggers {
+		if trigger.Type == autoscaling.BoostTriggerTypeContainerRestart {
+			// If containerName is "*" or not specified, match all containers
+			if trigger.ContainerName == nil || *trigger.ContainerName == "*" {
+				return true
+			}
+			// Otherwise, match specific container name
+			if *trigger.ContainerName == containerName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // loggerFromContext provides Logger from a current context with configured

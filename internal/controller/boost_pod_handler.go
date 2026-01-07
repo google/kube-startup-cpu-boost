@@ -108,22 +108,61 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent,
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod update")
-	if equality.Semantic.DeepEqual(pod.Status.Conditions, oldPod.Status.Conditions) {
-		log.V(5).Info("pod update skipped: conditions did not change")
-		return
-	}
+
+	// Check for ContainerRestart trigger - detect restartCount increases
 	boost, err := h.manager.UpsertPod(ctx, pod)
 	if err != nil {
 		log.Error(err, "failed to handle pod update")
 		return
 	}
+
+	// If boost found, check for ContainerRestart triggers
 	if boost != nil {
-		wq.Add(reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      boost.Name(),
-				Namespace: boost.Namespace(),
-			},
-		})
+		// Check for ContainerRestart trigger if configured
+		if boost.HasContainerRestartTrigger() {
+			// Check if restartCount increased for any container
+			annotation, err := bpod.BoostAnnotationFromPod(pod)
+			if err == nil {
+				// Update restart counts and get containers that restarted
+				incrementedContainers := annotation.UpdateLastRestartCounts(pod)
+				if len(incrementedContainers) > 0 {
+					log.V(5).Info("detected container restart(s)", "containers", incrementedContainers)
+					// Check if boost has ContainerRestart trigger configured for any restarted container
+					shouldActivate := false
+					for containerName := range incrementedContainers {
+						if boost.ShouldActivateForContainerRestart(containerName) {
+							shouldActivate = true
+							log.V(5).Info("ContainerRestart trigger matches container", "container", containerName)
+							break
+						}
+					}
+					if shouldActivate {
+						log.Info("ContainerRestart trigger detected, queuing boost reconciliation")
+						wq.Add(reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      boost.Name(),
+								Namespace: boost.Namespace(),
+							},
+						})
+					}
+				}
+			} else {
+				// Pod doesn't have boost annotation yet, but we still need to track restart counts
+				// This will be handled when the boost is first activated
+				log.V(5).Info("pod does not have boost annotation, restart tracking will be initialized on first activation")
+			}
+		}
+
+		// Also check for condition changes (existing logic)
+		if !equality.Semantic.DeepEqual(pod.Status.Conditions, oldPod.Status.Conditions) {
+			log.V(5).Info("pod conditions changed, queuing boost reconciliation")
+			wq.Add(reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      boost.Name(),
+					Namespace: boost.Namespace(),
+				},
+			})
+		}
 	}
 }
 

@@ -242,3 +242,31 @@ func (mr *MockStartupCPUBoostMockRecorder) ShouldActivateForPodCreate() *gomock.
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldActivateForPodCreate", reflect.TypeOf((*MockStartupCPUBoost)(nil).ShouldActivateForPodCreate))
 }
+
+// HasContainerRestartTrigger mocks base method.
+func (m *MockStartupCPUBoost) HasContainerRestartTrigger() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasContainerRestartTrigger")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasContainerRestartTrigger indicates an expected call of HasContainerRestartTrigger.
+func (mr *MockStartupCPUBoostMockRecorder) HasContainerRestartTrigger() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasContainerRestartTrigger", reflect.TypeOf((*MockStartupCPUBoost)(nil).HasContainerRestartTrigger))
+}
+
+// ShouldActivateForContainerRestart mocks base method.
+func (m *MockStartupCPUBoost) ShouldActivateForContainerRestart(containerName string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShouldActivateForContainerRestart", containerName)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ShouldActivateForContainerRestart indicates an expected call of ShouldActivateForContainerRestart.
+func (mr *MockStartupCPUBoostMockRecorder) ShouldActivateForContainerRestart(containerName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldActivateForContainerRestart", reflect.TypeOf((*MockStartupCPUBoost)(nil).ShouldActivateForContainerRestart), containerName)
+}
