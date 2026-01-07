@@ -208,9 +208,103 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 				})
 			})
 			When("ContainerRestart trigger is valid", func() {
+				When("containerName is \"*\" (match all)", func() {
+					BeforeEach(func() {
+						containerRestartType := v1alpha1.BoostTriggerTypeContainerRestart
+						containerName := "*"
+						boost = v1alpha1.StartupCPUBoost{
+							Spec: v1alpha1.StartupCPUBoostSpec{
+								ResourcePolicy: v1alpha1.ResourcePolicy{
+									ContainerPolicies: []v1alpha1.ContainerPolicy{
+										{
+											ContainerName:  "container-one",
+											FixedResources: &v1alpha1.FixedResources{},
+										},
+									},
+								},
+								DurationPolicy: v1alpha1.DurationPolicy{
+									PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+								},
+								Triggers: []v1alpha1.BoostTrigger{
+									{
+										Type:          containerRestartType,
+										ContainerName: &containerName,
+									},
+								},
+							},
+						}
+					})
+					It("does not error", func() {
+						_, err = w.ValidateCreate(context.TODO(), &boost)
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+				When("containerName is nil (defaults to \"*\")", func() {
+					BeforeEach(func() {
+						containerRestartType := v1alpha1.BoostTriggerTypeContainerRestart
+						boost = v1alpha1.StartupCPUBoost{
+							Spec: v1alpha1.StartupCPUBoostSpec{
+								ResourcePolicy: v1alpha1.ResourcePolicy{
+									ContainerPolicies: []v1alpha1.ContainerPolicy{
+										{
+											ContainerName:  "container-one",
+											FixedResources: &v1alpha1.FixedResources{},
+										},
+									},
+								},
+								DurationPolicy: v1alpha1.DurationPolicy{
+									PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+								},
+								Triggers: []v1alpha1.BoostTrigger{
+									{
+										Type: containerRestartType,
+										// containerName is nil - should default to "*"
+									},
+								},
+							},
+						}
+					})
+					It("does not error", func() {
+						_, err = w.ValidateCreate(context.TODO(), &boost)
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+				When("containerName is specific container name", func() {
+					BeforeEach(func() {
+						containerRestartType := v1alpha1.BoostTriggerTypeContainerRestart
+						containerName := "container-one"
+						boost = v1alpha1.StartupCPUBoost{
+							Spec: v1alpha1.StartupCPUBoostSpec{
+								ResourcePolicy: v1alpha1.ResourcePolicy{
+									ContainerPolicies: []v1alpha1.ContainerPolicy{
+										{
+											ContainerName:  "container-one",
+											FixedResources: &v1alpha1.FixedResources{},
+										},
+									},
+								},
+								DurationPolicy: v1alpha1.DurationPolicy{
+									PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+								},
+								Triggers: []v1alpha1.BoostTrigger{
+									{
+										Type:          containerRestartType,
+										ContainerName: &containerName,
+									},
+								},
+							},
+						}
+					})
+					It("does not error", func() {
+						_, err = w.ValidateCreate(context.TODO(), &boost)
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+			})
+			When("ContainerRestart trigger has invalid containerName", func() {
 				BeforeEach(func() {
 					containerRestartType := v1alpha1.BoostTriggerTypeContainerRestart
-					containerName := "*"
+					emptyContainerName := ""
 					boost = v1alpha1.StartupCPUBoost{
 						Spec: v1alpha1.StartupCPUBoostSpec{
 							ResourcePolicy: v1alpha1.ResourcePolicy{
@@ -227,15 +321,16 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 							Triggers: []v1alpha1.BoostTrigger{
 								{
 									Type:          containerRestartType,
-									ContainerName: &containerName,
+									ContainerName: &emptyContainerName,
 								},
 							},
 						},
 					}
 				})
-				It("does not error", func() {
+				It("errors", func() {
 					_, err = w.ValidateCreate(context.TODO(), &boost)
-					Expect(err).NotTo(HaveOccurred())
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("containerName"))
 				})
 			})
 			When("PodConditionTransition trigger is valid", func() {

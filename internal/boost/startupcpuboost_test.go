@@ -492,4 +492,128 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 	})
+	Describe("HasContainerRestartTrigger", func() {
+		JustBeforeEach(func() {
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+		When("no triggers are specified", func() {
+			It("should return false", func() {
+				Expect(boost.HasContainerRestartTrigger()).To(BeFalse())
+			})
+		})
+		When("ContainerRestart trigger is specified", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypeContainerRestart},
+				}
+			})
+			It("should return true", func() {
+				Expect(boost.HasContainerRestartTrigger()).To(BeTrue())
+			})
+		})
+		When("only PodCreate trigger is specified", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypePodCreate},
+				}
+			})
+			It("should return false", func() {
+				Expect(boost.HasContainerRestartTrigger()).To(BeFalse())
+			})
+		})
+		When("multiple triggers including ContainerRestart", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypePodCreate},
+					{Type: autoscaling.BoostTriggerTypeContainerRestart},
+				}
+			})
+			It("should return true", func() {
+				Expect(boost.HasContainerRestartTrigger()).To(BeTrue())
+			})
+		})
+	})
+	Describe("ShouldActivateForContainerRestart", func() {
+		JustBeforeEach(func() {
+			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+		When("no ContainerRestart trigger is specified", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypePodCreate},
+				}
+			})
+			It("should return false for any container", func() {
+				Expect(boost.ShouldActivateForContainerRestart("container-one")).To(BeFalse())
+				Expect(boost.ShouldActivateForContainerRestart("container-two")).To(BeFalse())
+			})
+		})
+		When("ContainerRestart trigger with nil containerName (defaults to \"*\")", func() {
+			BeforeEach(func() {
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{Type: autoscaling.BoostTriggerTypeContainerRestart},
+				}
+			})
+			It("should return true for any container", func() {
+				Expect(boost.ShouldActivateForContainerRestart("container-one")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("container-two")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("any-container")).To(BeTrue())
+			})
+		})
+		When("ContainerRestart trigger with \"*\" containerName", func() {
+			BeforeEach(func() {
+				containerName := "*"
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{
+						Type:          autoscaling.BoostTriggerTypeContainerRestart,
+						ContainerName: &containerName,
+					},
+				}
+			})
+			It("should return true for any container", func() {
+				Expect(boost.ShouldActivateForContainerRestart("container-one")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("container-two")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("any-container")).To(BeTrue())
+			})
+		})
+		When("ContainerRestart trigger with specific containerName", func() {
+			BeforeEach(func() {
+				containerName := "container-one"
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{
+						Type:          autoscaling.BoostTriggerTypeContainerRestart,
+						ContainerName: &containerName,
+					},
+				}
+			})
+			It("should return true only for matching container", func() {
+				Expect(boost.ShouldActivateForContainerRestart("container-one")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("container-two")).To(BeFalse())
+				Expect(boost.ShouldActivateForContainerRestart("any-container")).To(BeFalse())
+			})
+		})
+		When("multiple ContainerRestart triggers with different containerNames", func() {
+			BeforeEach(func() {
+				containerOne := "container-one"
+				containerTwo := "container-two"
+				spec.Spec.Triggers = []autoscaling.BoostTrigger{
+					{
+						Type:          autoscaling.BoostTriggerTypeContainerRestart,
+						ContainerName: &containerOne,
+					},
+					{
+						Type:          autoscaling.BoostTriggerTypeContainerRestart,
+						ContainerName: &containerTwo,
+					},
+				}
+			})
+			It("should return true for any matching container", func() {
+				Expect(boost.ShouldActivateForContainerRestart("container-one")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("container-two")).To(BeTrue())
+				Expect(boost.ShouldActivateForContainerRestart("container-three")).To(BeFalse())
+			})
+		})
+	})
 })

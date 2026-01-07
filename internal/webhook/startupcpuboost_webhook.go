@@ -157,6 +157,15 @@ func validateTriggers(triggers []v1alpha1.BoostTrigger) field.ErrorList {
 					"toStatus is required for PodConditionTransition trigger"))
 			}
 		}
+		// Validate ContainerRestart trigger: containerName must not be empty string if specified
+		// nil or "*" are valid (both mean match all containers)
+		if trigger.Type == v1alpha1.BoostTriggerTypeContainerRestart {
+			if trigger.ContainerName != nil && *trigger.ContainerName == "" {
+				allErrs = append(allErrs, field.Invalid(fldPath.Child("containerName"),
+					*trigger.ContainerName,
+					"containerName cannot be empty string for ContainerRestart trigger; use \"*\" to match all containers or omit to default to \"*\""))
+			}
+		}
 	}
 	return allErrs
 }
