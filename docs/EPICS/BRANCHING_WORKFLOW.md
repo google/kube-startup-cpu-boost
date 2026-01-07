@@ -211,7 +211,7 @@ git rebase --onto development <wrong-base-branch>
 
 ## Related Documentation
 
-- [Development Guide](../../DEVELOPMENT.md) - General development practices
+- [Development Guide](../DEVELOPMENT.md) - General development practices
 - [EPICS README](./README.md) - EPIC structure and status
 - [ADR-001](../ADR-001-lifecycle-aware-cpu-boost.md) - Architecture decision
 

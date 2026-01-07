@@ -108,9 +108,7 @@ EPIC-002 + EPIC-003
 
 ## Related Documentation
 
-- [Design Proposal](../background/02_design_proposal.md): Detailed technical design
-- [Proposed Solution](../background/01_proposed_solution.md): Problem analysis and solution approach
-- [Introduction](../background/00_intro.md): Problem statement and context
+- [Development Guide](../DEVELOPMENT.md): Development practices and branching strategy
 
 ## Contributing
 
@@ -131,7 +129,7 @@ When working on an EPIC:
 7. Create PR targeting `development` branch
 8. After merge, delete story branch
 
-See [Development Guide](../../DEVELOPMENT.md#branching-strategy) for detailed branching workflow.
+See [Development Guide](../DEVELOPMENT.md#branching-strategy) for detailed branching workflow.
 
 ## Questions or Issues
 

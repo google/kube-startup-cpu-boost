@@ -177,5 +177,156 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
+		When("Startup CPU Boost has triggers", func() {
+			When("PodCreate trigger is valid", func() {
+				BeforeEach(func() {
+					podCreateType := v1alpha1.BoostTriggerTypePodCreate
+					boost = v1alpha1.StartupCPUBoost{
+						Spec: v1alpha1.StartupCPUBoostSpec{
+							ResourcePolicy: v1alpha1.ResourcePolicy{
+								ContainerPolicies: []v1alpha1.ContainerPolicy{
+									{
+										ContainerName:  "container-one",
+										FixedResources: &v1alpha1.FixedResources{},
+									},
+								},
+							},
+							DurationPolicy: v1alpha1.DurationPolicy{
+								PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+							},
+							Triggers: []v1alpha1.BoostTrigger{
+								{
+									Type: podCreateType,
+								},
+							},
+						},
+					}
+				})
+				It("does not error", func() {
+					_, err = w.ValidateCreate(context.TODO(), &boost)
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
+			When("ContainerRestart trigger is valid", func() {
+				BeforeEach(func() {
+					containerRestartType := v1alpha1.BoostTriggerTypeContainerRestart
+					containerName := "*"
+					boost = v1alpha1.StartupCPUBoost{
+						Spec: v1alpha1.StartupCPUBoostSpec{
+							ResourcePolicy: v1alpha1.ResourcePolicy{
+								ContainerPolicies: []v1alpha1.ContainerPolicy{
+									{
+										ContainerName:  "container-one",
+										FixedResources: &v1alpha1.FixedResources{},
+									},
+								},
+							},
+							DurationPolicy: v1alpha1.DurationPolicy{
+								PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+							},
+							Triggers: []v1alpha1.BoostTrigger{
+								{
+									Type:          containerRestartType,
+									ContainerName: &containerName,
+								},
+							},
+						},
+					}
+				})
+				It("does not error", func() {
+					_, err = w.ValidateCreate(context.TODO(), &boost)
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
+			When("PodConditionTransition trigger is valid", func() {
+				BeforeEach(func() {
+					transitionType := v1alpha1.BoostTriggerTypePodConditionTransition
+					conditionType := "Ready"
+					fromStatus := "False"
+					toStatus := "True"
+					boost = v1alpha1.StartupCPUBoost{
+						Spec: v1alpha1.StartupCPUBoostSpec{
+							ResourcePolicy: v1alpha1.ResourcePolicy{
+								ContainerPolicies: []v1alpha1.ContainerPolicy{
+									{
+										ContainerName:  "container-one",
+										FixedResources: &v1alpha1.FixedResources{},
+									},
+								},
+							},
+							DurationPolicy: v1alpha1.DurationPolicy{
+								PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+							},
+							Triggers: []v1alpha1.BoostTrigger{
+								{
+									Type:         transitionType,
+									ConditionType: &conditionType,
+									FromStatus:   &fromStatus,
+									ToStatus:     &toStatus,
+								},
+							},
+						},
+					}
+				})
+				It("does not error", func() {
+					_, err = w.ValidateCreate(context.TODO(), &boost)
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
+			When("PodConditionTransition trigger missing required fields", func() {
+				BeforeEach(func() {
+					transitionType := v1alpha1.BoostTriggerTypePodConditionTransition
+					boost = v1alpha1.StartupCPUBoost{
+						Spec: v1alpha1.StartupCPUBoostSpec{
+							ResourcePolicy: v1alpha1.ResourcePolicy{
+								ContainerPolicies: []v1alpha1.ContainerPolicy{
+									{
+										ContainerName:  "container-one",
+										FixedResources: &v1alpha1.FixedResources{},
+									},
+								},
+							},
+							DurationPolicy: v1alpha1.DurationPolicy{
+								PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+							},
+							Triggers: []v1alpha1.BoostTrigger{
+								{
+									Type: transitionType,
+									// Missing conditionType, fromStatus, toStatus
+								},
+							},
+						},
+					}
+				})
+				It("errors", func() {
+					_, err = w.ValidateCreate(context.TODO(), &boost)
+					Expect(err).To(HaveOccurred())
+				})
+			})
+			When("Startup CPU Boost has no triggers (backward compatibility)", func() {
+				BeforeEach(func() {
+					boost = v1alpha1.StartupCPUBoost{
+						Spec: v1alpha1.StartupCPUBoostSpec{
+							ResourcePolicy: v1alpha1.ResourcePolicy{
+								ContainerPolicies: []v1alpha1.ContainerPolicy{
+									{
+										ContainerName:  "container-one",
+										FixedResources: &v1alpha1.FixedResources{},
+									},
+								},
+							},
+							DurationPolicy: v1alpha1.DurationPolicy{
+								PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+							},
+							// Triggers field omitted (nil/empty)
+						},
+					}
+				})
+				It("does not error (backward compatible)", func() {
+					_, err = w.ValidateCreate(context.TODO(), &boost)
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
+		})
 	})
 })

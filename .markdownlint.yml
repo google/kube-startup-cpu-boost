@@ -15,3 +15,6 @@
 MD013:
   line_length: 100
   tables: false
+# Ignore docs directory - these are agentic docs not part of the deliverable
+ignore:
+  - 'docs/**'

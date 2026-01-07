@@ -106,6 +106,65 @@ type ResourcePolicy struct {
 	ContainerPolicies []ContainerPolicy `json:"containerPolicies,omitempty"`
 }
 
+// BoostTriggerType defines the type of trigger for boost activation
+// +kubebuilder:validation:Enum=PodCreate;ContainerRestart;PodConditionTransition
+type BoostTriggerType string
+
+const (
+	// BoostTriggerTypePodCreate triggers boost on pod creation (admission time)
+	BoostTriggerTypePodCreate BoostTriggerType = "PodCreate"
+	// BoostTriggerTypeContainerRestart triggers boost when container restartCount increases
+	BoostTriggerTypeContainerRestart BoostTriggerType = "ContainerRestart"
+	// BoostTriggerTypePodConditionTransition triggers boost on pod condition transitions
+	BoostTriggerTypePodConditionTransition BoostTriggerType = "PodConditionTransition"
+)
+
+// BoostTrigger defines when a boost activation should begin
+type BoostTrigger struct {
+	// Type selects the trigger variant
+	// +kubebuilder:validation:Required
+	Type BoostTriggerType `json:"type"`
+
+	// ContainerName specifies which container to watch for ContainerRestart trigger.
+	// Use "*" to match all containers. Optional, defaults to "*" if not specified.
+	// +kubebuilder:validation:Optional
+	ContainerName *string `json:"containerName,omitempty"`
+
+	// ConditionType specifies which pod condition to watch for PodConditionTransition trigger.
+	// Required when Type is PodConditionTransition.
+	// +kubebuilder:validation:Optional
+	ConditionType *string `json:"conditionType,omitempty"`
+
+	// FromStatus specifies the source condition status for PodConditionTransition trigger.
+	// Must be one of: "True", "False", "Unknown".
+	// Required when Type is PodConditionTransition.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=True;False;Unknown
+	FromStatus *string `json:"fromStatus,omitempty"`
+
+	// ToStatus specifies the target condition status for PodConditionTransition trigger.
+	// Must be one of: "True", "False", "Unknown".
+	// Required when Type is PodConditionTransition.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=True;False;Unknown
+	ToStatus *string `json:"toStatus,omitempty"`
+}
+
+// CooldownPolicy defines rate limiting controls for repeat boost activations
+type CooldownPolicy struct {
+	// MinIntervalSeconds specifies the minimum time in seconds between activations
+	// for the same Pod+Boost combination. Optional, no cooldown if not specified.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum:=0
+	MinIntervalSeconds *int32 `json:"minIntervalSeconds,omitempty"`
+
+	// MaxActivationsPerHour specifies the maximum number of activations allowed
+	// per hour for the same Pod+Boost combination. Optional, no limit if not specified.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum:=1
+	MaxActivationsPerHour *int32 `json:"maxActivationsPerHour,omitempty"`
+}
+
 // StartupCPUBoostSpec defines the desired state of StartupCPUBoost
 type StartupCPUBoostSpec struct {
 	// ResourcePolicy specifies policies for container resource increase
@@ -113,6 +172,14 @@ type StartupCPUBoostSpec struct {
 	// DurationPolicy specifies policies for resource boost duration
 	// +kubebuilder:validation:Required
 	DurationPolicy DurationPolicy `json:"durationPolicy,omitempty"`
+	// Triggers define when boosts are (re)activated.
+	// If omitted or empty, defaults to [{type: PodCreate}] for backward compatibility.
+	// +kubebuilder:validation:Optional
+	Triggers []BoostTrigger `json:"triggers,omitempty"`
+	// Cooldown limits repeated activations to prevent pathological re-trigger loops.
+	// Optional, no cooldown if not specified.
+	// +kubebuilder:validation:Optional
+	Cooldown *CooldownPolicy `json:"cooldown,omitempty"`
 }
 
 // StartupCPUBoostStatus defines the observed state of StartupCPUBoost
