@@ -15,9 +15,11 @@
 package pod_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
+	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -175,6 +177,166 @@ var _ = Describe("Pod", func() {
 					annot.InitCPULimits[containerOneName], annot.InitCPURequests[containerOneName],
 					annot.InitCPULimits[containerTwoName], annot.InitCPURequests[containerTwoName])
 				Expect(string(patchData)).To(Equal(expectedPatch))
+			})
+		})
+	})
+	Describe("Activation state tracking", func() {
+		var (
+			annotation *bpod.BoostPodAnnotation
+		)
+		BeforeEach(func() {
+			annotation = bpod.NewBoostAnnotation()
+		})
+		Describe("GetActivationState", func() {
+			It("initializes activation state if nil", func() {
+				annotation.ActivationState = nil
+				state := annotation.GetActivationState()
+				Expect(state).NotTo(BeNil())
+				Expect(state.LastActivationTime).NotTo(BeNil())
+				Expect(state.ActivationHistory).NotTo(BeNil())
+			})
+			It("initializes nested maps if nil", func() {
+				annotation.ActivationState.LastActivationTime = nil
+				annotation.ActivationState.ActivationHistory = nil
+				state := annotation.GetActivationState()
+				Expect(state.LastActivationTime).NotTo(BeNil())
+				Expect(state.ActivationHistory).NotTo(BeNil())
+			})
+		})
+		Describe("Current activation", func() {
+			It("sets and gets current activation", func() {
+				triggerType := autoscaling.BoostTriggerTypePodCreate
+				startTime := time.Now()
+				duration := int64(300) // 5 minutes
+				annotation.SetCurrentActivation(triggerType, startTime, "FixedDuration", &duration, nil)
+				activation := annotation.GetCurrentActivation()
+				Expect(activation).NotTo(BeNil())
+				Expect(activation.TriggerType).To(Equal(triggerType))
+				Expect(activation.ExpiryConditionType).To(Equal("FixedDuration"))
+				Expect(activation.ExpiryFixedDuration).NotTo(BeNil())
+				Expect(*activation.ExpiryFixedDuration).To(Equal(int64(300)))
+			})
+			It("clears current activation", func() {
+				triggerType := autoscaling.BoostTriggerTypePodCreate
+				startTime := time.Now()
+				annotation.SetCurrentActivation(triggerType, startTime, "FixedDuration", nil, nil)
+				Expect(annotation.GetCurrentActivation()).NotTo(BeNil())
+				annotation.ClearCurrentActivation()
+				Expect(annotation.GetCurrentActivation()).To(BeNil())
+			})
+			It("returns nil when no current activation", func() {
+				annotation.ActivationState = nil
+				Expect(annotation.GetCurrentActivation()).To(BeNil())
+			})
+		})
+		Describe("Last activation time", func() {
+			It("sets and gets last activation time for trigger type", func() {
+				triggerType := autoscaling.BoostTriggerTypeContainerRestart
+				activationTime := time.Now()
+				annotation.SetLastActivationTime(triggerType, activationTime)
+				retrievedTime, found := annotation.GetLastActivationTime(triggerType)
+				Expect(found).To(BeTrue())
+				Expect(retrievedTime.Unix()).To(Equal(activationTime.Unix()))
+			})
+			It("returns false when trigger type not found", func() {
+				triggerType := autoscaling.BoostTriggerTypeContainerRestart
+				_, found := annotation.GetLastActivationTime(triggerType)
+				Expect(found).To(BeFalse())
+			})
+			It("tracks multiple trigger types independently", func() {
+				time1 := time.Now()
+				time2 := time.Now().Add(5 * time.Minute)
+				annotation.SetLastActivationTime(autoscaling.BoostTriggerTypePodCreate, time1)
+				annotation.SetLastActivationTime(autoscaling.BoostTriggerTypeContainerRestart, time2)
+				retrieved1, found1 := annotation.GetLastActivationTime(autoscaling.BoostTriggerTypePodCreate)
+				retrieved2, found2 := annotation.GetLastActivationTime(autoscaling.BoostTriggerTypeContainerRestart)
+				Expect(found1).To(BeTrue())
+				Expect(found2).To(BeTrue())
+				Expect(retrieved1.Unix()).To(Equal(time1.Unix()))
+				Expect(retrieved2.Unix()).To(Equal(time2.Unix()))
+			})
+		})
+		Describe("Activation history", func() {
+			It("adds activation to history", func() {
+				activationTime := time.Now()
+				annotation.AddActivationToHistory(activationTime)
+				Expect(annotation.GetActivationHistoryCount()).To(Equal(1))
+			})
+			It("removes activations older than 1 hour", func() {
+				now := time.Now()
+				oldTime := now.Add(-2 * time.Hour)
+				recentTime := now.Add(-30 * time.Minute)
+				annotation.AddActivationToHistory(oldTime)
+				annotation.AddActivationToHistory(recentTime)
+				annotation.AddActivationToHistory(now)
+				// Only recentTime and now should remain
+				Expect(annotation.GetActivationHistoryCount()).To(Equal(2))
+			})
+			It("returns zero count when activation state is nil", func() {
+				annotation.ActivationState = nil
+				Expect(annotation.GetActivationHistoryCount()).To(Equal(0))
+			})
+			It("tracks multiple activations", func() {
+				now := time.Now()
+				for i := 0; i < 5; i++ {
+					annotation.AddActivationToHistory(now.Add(time.Duration(i) * time.Minute))
+				}
+				Expect(annotation.GetActivationHistoryCount()).To(Equal(5))
+			})
+		})
+		Describe("Backward compatibility", func() {
+			It("handles annotation without activation state", func() {
+				oldAnnotation := &bpod.BoostPodAnnotation{
+					BoostTimestamp:  time.Now(),
+					InitCPURequests: map[string]string{"container": "500m"},
+					InitCPULimits:   map[string]string{"container": "1"},
+					// ActivationState is nil
+				}
+				jsonData := oldAnnotation.ToJSON()
+				// Parse it back
+				var parsed bpod.BoostPodAnnotation
+				err := json.Unmarshal([]byte(jsonData), &parsed)
+				Expect(err).NotTo(HaveOccurred())
+				// Should be able to get activation state (initializes on demand)
+				state := parsed.GetActivationState()
+				Expect(state).NotTo(BeNil())
+			})
+			It("handles annotation with empty activation state", func() {
+				oldAnnotation := &bpod.BoostPodAnnotation{
+					BoostTimestamp:  time.Now(),
+					InitCPURequests: map[string]string{"container": "500m"},
+					InitCPULimits:   map[string]string{"container": "1"},
+					ActivationState: &bpod.ActivationState{},
+				}
+				jsonData := oldAnnotation.ToJSON()
+				// Parse it back
+				var parsed bpod.BoostPodAnnotation
+				err := json.Unmarshal([]byte(jsonData), &parsed)
+				Expect(err).NotTo(HaveOccurred())
+				// Should initialize nested structures
+				state := parsed.GetActivationState()
+				Expect(state.LastActivationTime).NotTo(BeNil())
+				Expect(state.ActivationHistory).NotTo(BeNil())
+			})
+		})
+		Describe("JSON serialization", func() {
+			It("serializes and deserializes activation state correctly", func() {
+				triggerType := autoscaling.BoostTriggerTypePodCreate
+				startTime := time.Now()
+				duration := int64(300)
+				annotation.SetCurrentActivation(triggerType, startTime, "FixedDuration", &duration, nil)
+				annotation.SetLastActivationTime(autoscaling.BoostTriggerTypeContainerRestart, time.Now())
+				annotation.AddActivationToHistory(time.Now())
+				jsonData := annotation.ToJSON()
+				// Parse it back
+				var parsed bpod.BoostPodAnnotation
+				err := json.Unmarshal([]byte(jsonData), &parsed)
+				Expect(err).NotTo(HaveOccurred())
+				// Verify activation state
+				activation := parsed.GetCurrentActivation()
+				Expect(activation).NotTo(BeNil())
+				Expect(activation.TriggerType).To(Equal(triggerType))
+				Expect(parsed.GetActivationHistoryCount()).To(Equal(1))
 			})
 		})
 	})
