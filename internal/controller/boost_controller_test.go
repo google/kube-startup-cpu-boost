@@ -17,14 +17,18 @@ package controller_test
 import (
 	"context"
 
+	"fmt"
+
 	"github.com/go-logr/logr"
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/controller"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -140,6 +144,8 @@ var _ = Describe("BoostController", func() {
 				mockManager.EXPECT().GetRegularCPUBoost(gomock.Any(), gomock.Eq(name),
 					gomock.Eq(namespace)).Times(1).Return(mockBoost, true)
 				mockBoost.EXPECT().Stats().Times(1).Return(stats)
+				mockBoost.EXPECT().HasContainerRestartTrigger().Return(false).AnyTimes()
+				mockClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			})
 			When("there existing status is up to date", func() {
 				BeforeEach(func() {
@@ -222,6 +228,173 @@ var _ = Describe("BoostController", func() {
 		})
 		It("calls manager with valid update", func() {
 			mgrMockCall.Times(1)
+		})
+	})
+	Describe("Reconcile with ContainerRestart trigger", func() {
+		var (
+			req       ctrl.Request
+			name      string
+			namespace string
+			result    ctrl.Result
+			err       error
+		)
+		BeforeEach(func() {
+			name = "boost-001"
+			namespace = "demo"
+			req = ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: name, Namespace: namespace},
+			}
+		})
+		JustBeforeEach(func() {
+			result, err = boostCtrl.Reconcile(context.TODO(), req)
+		})
+		When("boost has ContainerRestart trigger and matching pods", func() {
+			var (
+				totalContainerBoosts  = 10
+				activeContainerBoosts = 5
+			)
+			BeforeEach(func() {
+				stats := boost.StartupCPUBoostStats{
+					TotalContainerBoosts:  totalContainerBoosts,
+					ActiveContainerBoosts: activeContainerBoosts,
+				}
+				mockManager.EXPECT().GetRegularCPUBoost(gomock.Any(), gomock.Eq(name),
+					gomock.Eq(namespace)).Times(1).Return(mockBoost, true)
+				mockBoost.EXPECT().Stats().Times(1).Return(stats)
+				mockBoost.EXPECT().HasContainerRestartTrigger().Return(true).Times(1)
+				mockBoost.EXPECT().Namespace().Return(namespace).AnyTimes()
+				mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName),
+					gomock.Any()).
+					Times(1).
+					DoAndReturn(func(c context.Context, cc client.ObjectKey, obj client.Object,
+						opts ...client.GetOption) error {
+						boostObj := obj.(*autoscaling.StartupCPUBoost)
+						boostObj.Name = name
+						boostObj.Namespace = namespace
+						return nil
+					})
+				// Mock pod list (empty for this test - just verify the method is called)
+				mockClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						podListOut := list.(*corev1.PodList)
+						*podListOut = corev1.PodList{Items: []corev1.Pod{}}
+						return nil
+					}).Times(1)
+				mockSubResClient := mock.NewMockSubResourceClient(mockCtrl)
+				mockSubResClient.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				mockClient.EXPECT().Status().Return(mockSubResClient).AnyTimes()
+			})
+			It("should call applyRuntimeBoostsForContainerRestart", func() {
+				Expect(err).To(BeNil())
+				Expect(result).To(Equal(ctrl.Result{}))
+			})
+		})
+		When("boost has ContainerRestart trigger with matching pods that have restarts", func() {
+			var (
+				totalContainerBoosts  = 10
+				activeContainerBoosts = 5
+				mockSubResClient      *mock.MockSubResourceClient
+			)
+			BeforeEach(func() {
+				stats := boost.StartupCPUBoostStats{
+					TotalContainerBoosts:  totalContainerBoosts,
+					ActiveContainerBoosts: activeContainerBoosts,
+				}
+				mockManager.EXPECT().GetRegularCPUBoost(gomock.Any(), gomock.Eq(name),
+					gomock.Eq(namespace)).Times(1).Return(mockBoost, true)
+				mockBoost.EXPECT().Stats().Times(1).Return(stats)
+				mockBoost.EXPECT().HasContainerRestartTrigger().Return(true).Times(1)
+				mockBoost.EXPECT().Namespace().Return(namespace).AnyTimes()
+				mockBoost.EXPECT().Name().Return(name).AnyTimes()
+				mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName),
+					gomock.Any()).
+					Times(1).
+					DoAndReturn(func(c context.Context, cc client.ObjectKey, obj client.Object,
+						opts ...client.GetOption) error {
+						boostObj := obj.(*autoscaling.StartupCPUBoost)
+						boostObj.Name = name
+						boostObj.Namespace = namespace
+						return nil
+					})
+				// Mock pod list with pods that have restarts
+				mockClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						podListOut := list.(*corev1.PodList)
+						annotation := bpod.NewBoostAnnotation()
+						annotation.SetLastRestartCount("container-one", 0)
+						*podListOut = corev1.PodList{
+							Items: []corev1.Pod{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "pod-1",
+										Namespace: namespace,
+										Annotations: map[string]string{
+											bpod.BoostAnnotationKey: annotation.ToJSON(),
+										},
+									},
+									Status: corev1.PodStatus{
+										ContainerStatuses: []corev1.ContainerStatus{
+											{
+												Name:         "container-one",
+												RestartCount: 1, // Increased from 0
+											},
+										},
+									},
+								},
+							},
+						}
+						return nil
+					}).Times(1)
+				mockBoost.EXPECT().Matches(gomock.Any()).Return(true).AnyTimes()
+				mockBoost.EXPECT().ShouldActivateForContainerRestart("container-one").Return(true).AnyTimes()
+				mockBoost.EXPECT().ApplyBoostAtRuntime(gomock.Any(), gomock.Any(), autoscaling.BoostTriggerTypeContainerRestart).
+					Return(true, nil).AnyTimes()
+				mockSubResClient = mock.NewMockSubResourceClient(mockCtrl)
+				mockSubResClient.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				mockClient.EXPECT().Status().Return(mockSubResClient).AnyTimes()
+			})
+			It("should apply boost to pods with restarts", func() {
+				Expect(err).To(BeNil())
+				Expect(result).To(Equal(ctrl.Result{}))
+			})
+		})
+		When("boost has ContainerRestart trigger but List fails", func() {
+			var (
+				totalContainerBoosts  = 10
+				activeContainerBoosts = 5
+			)
+			BeforeEach(func() {
+				stats := boost.StartupCPUBoostStats{
+					TotalContainerBoosts:  totalContainerBoosts,
+					ActiveContainerBoosts: activeContainerBoosts,
+				}
+				mockManager.EXPECT().GetRegularCPUBoost(gomock.Any(), gomock.Eq(name),
+					gomock.Eq(namespace)).Times(1).Return(mockBoost, true)
+				mockBoost.EXPECT().Stats().Times(1).Return(stats)
+				mockBoost.EXPECT().HasContainerRestartTrigger().Return(true).Times(1)
+				mockBoost.EXPECT().Namespace().Return(namespace).AnyTimes()
+				mockClient.EXPECT().Get(gomock.Any(), gomock.Eq(req.NamespacedName),
+					gomock.Any()).
+					Times(1).
+					DoAndReturn(func(c context.Context, cc client.ObjectKey, obj client.Object,
+						opts ...client.GetOption) error {
+						boostObj := obj.(*autoscaling.StartupCPUBoost)
+						boostObj.Name = name
+						boostObj.Namespace = namespace
+						return nil
+					})
+				// Mock pod list failure
+				mockClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(fmt.Errorf("list failed")).Times(1)
+				mockSubResClient := mock.NewMockSubResourceClient(mockCtrl)
+				mockSubResClient.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				mockClient.EXPECT().Status().Return(mockSubResClient).AnyTimes()
+			})
+			It("should handle list error gracefully", func() {
+				// Error is logged but doesn't fail reconciliation
+				Expect(err).To(BeNil())
+				Expect(result).To(Equal(ctrl.Result{}))
+			})
 		})
 	})
 })

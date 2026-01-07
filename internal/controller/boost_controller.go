@@ -16,6 +16,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,6 +33,7 @@ import (
 	"github.com/go-logr/logr"
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -85,6 +87,14 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		activeCondition.Message = BoostActiveConditionTrueMessage
 		newBoostObj.Status.ActiveContainerBoosts = int32(stats.ActiveContainerBoosts)
 		newBoostObj.Status.TotalContainerBoosts = int32(stats.TotalContainerBoosts)
+
+		// Check for ContainerRestart triggers and apply runtime boosts if needed
+		if boost.HasContainerRestartTrigger() {
+			if err := r.applyRuntimeBoostsForContainerRestart(ctx, boost, log); err != nil {
+				log.Error(err, "failed to apply runtime boosts for ContainerRestart triggers")
+				// Don't fail reconciliation, just log the error
+			}
+		}
 	}
 	meta.SetStatusCondition(&newBoostObj.Status.Conditions, activeCondition)
 	if !equality.Semantic.DeepEqual(newBoostObj.Status, boostObj.Status) {
@@ -177,4 +187,62 @@ func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
 func shouldUseLegacyRevertMode(serverVersion string) (legacyMode bool) {
 	return version.CompareKubeAwareVersionStrings(WantedServerVersionForNewRevert,
 		serverVersion) < 0
+}
+
+// applyRuntimeBoostsForContainerRestart applies runtime boosts to pods that have ContainerRestart triggers
+// This is called during reconciliation when ContainerRestart triggers are detected
+func (r *StartupCPUBoostReconciler) applyRuntimeBoostsForContainerRestart(ctx context.Context, boost boost.StartupCPUBoost, log logr.Logger) error {
+	// List all pods in the boost namespace
+	podList := &corev1.PodList{}
+	if err := r.Client.List(ctx, podList, client.InNamespace(boost.Namespace())); err != nil {
+		return fmt.Errorf("failed to list pods: %w", err)
+	}
+
+	// Filter to pods that match the boost selector
+	matchingPods := make([]*corev1.Pod, 0)
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if boost.Matches(pod) {
+			matchingPods = append(matchingPods, pod)
+		}
+	}
+
+	// For each matching pod, check if boost should be applied
+	for _, pod := range matchingPods {
+		// Get pod annotation to check restart counts
+		annotation, err := bpod.BoostAnnotationFromPod(pod)
+		if err != nil {
+			// Pod doesn't have boost annotation yet, skip (will be handled on first activation)
+			continue
+		}
+
+		// Update restart counts and get containers that restarted
+		incrementedContainers := annotation.UpdateLastRestartCounts(pod)
+		if len(incrementedContainers) == 0 {
+			continue
+		}
+
+		// Check if boost should activate for any restarted container
+		shouldActivate := false
+		for containerName := range incrementedContainers {
+			if boost.ShouldActivateForContainerRestart(containerName) {
+				shouldActivate = true
+				break
+			}
+		}
+
+		if shouldActivate {
+			log.Info("applying runtime boost for ContainerRestart trigger", "pod", pod.Name, "namespace", pod.Namespace)
+			applied, err := boost.ApplyBoostAtRuntime(ctx, pod, autoscaling.BoostTriggerTypeContainerRestart)
+			if err != nil {
+				log.Error(err, "failed to apply runtime boost", "pod", pod.Name)
+				continue
+			}
+			if applied {
+				log.Info("runtime boost applied successfully", "pod", pod.Name)
+			}
+		}
+	}
+
+	return nil
 }

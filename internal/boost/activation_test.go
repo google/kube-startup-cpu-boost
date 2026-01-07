@@ -117,6 +117,59 @@ var _ = Describe("Activation", func() {
 				Expect(activation.ExpiryCondition.PodCondition.Status).To(Equal(corev1.ConditionTrue))
 			})
 		})
+		When("neither fixed nor pod condition policy is specified", func() {
+			It("should create activation with empty expiry condition", func() {
+				trigger := autoscaling.BoostTrigger{
+					Type: autoscaling.BoostTriggerTypePodCreate,
+				}
+				durationPolicy := autoscaling.DurationPolicy{
+					Fixed:        nil,
+					PodCondition: nil,
+				}
+				activation := cpuboost.NewBoostActivation(trigger, durationPolicy)
+				Expect(activation.TriggerType).To(Equal(autoscaling.BoostTriggerTypePodCreate))
+				Expect(activation.ExpiryCondition.Type).To(Equal(cpuboost.ExpiryConditionType("")))
+				Expect(activation.ExpiryCondition.FixedDuration).To(BeNil())
+				Expect(activation.ExpiryCondition.PodCondition).To(BeNil())
+			})
+		})
+		When("fixed duration policy has minutes unit", func() {
+			It("should create activation with duration in minutes", func() {
+				trigger := autoscaling.BoostTrigger{
+					Type: autoscaling.BoostTriggerTypePodCreate,
+				}
+				durationPolicy := autoscaling.DurationPolicy{
+					Fixed: &autoscaling.FixedDurationPolicy{
+						Unit:  autoscaling.FixedDurationPolicyUnitMin,
+						Value: 5,
+					},
+				}
+				activation := cpuboost.NewBoostActivation(trigger, durationPolicy)
+				Expect(activation.TriggerType).To(Equal(autoscaling.BoostTriggerTypePodCreate))
+				Expect(activation.ExpiryCondition.Type).To(Equal(cpuboost.ExpiryConditionTypeFixedDuration))
+				Expect(activation.ExpiryCondition.FixedDuration).NotTo(BeNil())
+				Expect(*activation.ExpiryCondition.FixedDuration).To(Equal(5 * time.Minute))
+			})
+		})
+		When("fixed duration policy has unknown unit", func() {
+			It("should default to seconds", func() {
+				trigger := autoscaling.BoostTrigger{
+					Type: autoscaling.BoostTriggerTypePodCreate,
+				}
+				durationPolicy := autoscaling.DurationPolicy{
+					Fixed: &autoscaling.FixedDurationPolicy{
+						Unit:  "UnknownUnit", // Invalid unit
+						Value: 60,
+					},
+				}
+				activation := cpuboost.NewBoostActivation(trigger, durationPolicy)
+				Expect(activation.TriggerType).To(Equal(autoscaling.BoostTriggerTypePodCreate))
+				Expect(activation.ExpiryCondition.Type).To(Equal(cpuboost.ExpiryConditionTypeFixedDuration))
+				Expect(activation.ExpiryCondition.FixedDuration).NotTo(BeNil())
+				// Should default to seconds
+				Expect(*activation.ExpiryCondition.FixedDuration).To(Equal(60 * time.Second))
+			})
+		})
 	})
 
 	Describe("BoostActivation.IsExpired", func() {
@@ -210,6 +263,109 @@ var _ = Describe("Activation", func() {
 					},
 				}
 				Expect(activation.IsExpired(pod)).To(BeTrue())
+			})
+		})
+		When("expiry condition type is unknown", func() {
+			It("should return false for unknown expiry type", func() {
+				activation := cpuboost.BoostActivation{
+					ExpiryCondition: cpuboost.ExpiryCondition{
+						Type: cpuboost.ExpiryConditionType("UnknownType"),
+					},
+				}
+				pod := &corev1.Pod{
+					Status: corev1.PodStatus{
+						StartTime: &metav1.Time{Time: time.Now()},
+					},
+				}
+				// Default case should return false
+				Expect(activation.IsExpired(pod)).To(BeFalse())
+			})
+		})
+		When("fixed duration type but FixedDuration is nil", func() {
+			It("should return false when FixedDuration is nil", func() {
+				activation := cpuboost.BoostActivation{
+					ExpiryCondition: cpuboost.ExpiryCondition{
+						Type:          cpuboost.ExpiryConditionTypeFixedDuration,
+						FixedDuration: nil,
+					},
+				}
+				pod := &corev1.Pod{
+					Status: corev1.PodStatus{
+						StartTime: &metav1.Time{Time: time.Now()},
+					},
+				}
+				Expect(activation.IsExpired(pod)).To(BeFalse())
+			})
+		})
+		When("pod condition type but PodCondition is nil", func() {
+			It("should return false when PodCondition is nil", func() {
+				activation := cpuboost.BoostActivation{
+					ExpiryCondition: cpuboost.ExpiryCondition{
+						Type:         cpuboost.ExpiryConditionTypePodCondition,
+						PodCondition: nil,
+					},
+				}
+				pod := &corev1.Pod{
+					Status: corev1.PodStatus{
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionTrue,
+							},
+						},
+					},
+				}
+				Expect(activation.IsExpired(pod)).To(BeFalse())
+			})
+		})
+		When("pod condition type but condition not found in pod", func() {
+			It("should return false when condition type doesn't match", func() {
+				activation := cpuboost.BoostActivation{
+					ExpiryCondition: cpuboost.ExpiryCondition{
+						Type: cpuboost.ExpiryConditionTypePodCondition,
+						PodCondition: &cpuboost.PodConditionExpiry{
+							Type:   string(corev1.PodScheduled),
+							Status: corev1.ConditionTrue,
+						},
+					},
+				}
+				pod := &corev1.Pod{
+					Status: corev1.PodStatus{
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionTrue,
+							},
+						},
+					},
+				}
+				// Condition type doesn't match, should return false
+				Expect(activation.IsExpired(pod)).To(BeFalse())
+			})
+		})
+		When("pod condition type but condition status doesn't match", func() {
+			It("should return false when condition status doesn't match", func() {
+				activation := cpuboost.BoostActivation{
+					ExpiryCondition: cpuboost.ExpiryCondition{
+						Type: cpuboost.ExpiryConditionTypePodCondition,
+						PodCondition: &cpuboost.PodConditionExpiry{
+							Type:   string(corev1.PodReady),
+							Status: corev1.ConditionTrue,
+						},
+					},
+				}
+				pod := &corev1.Pod{
+					Status: corev1.PodStatus{
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionFalse, // Different status
+							},
+						},
+					},
+				}
+				// Condition status doesn't match, should return false
+				Expect(activation.IsExpired(pod)).To(BeFalse())
 			})
 		})
 	})

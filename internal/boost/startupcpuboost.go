@@ -70,6 +70,10 @@ type StartupCPUBoost interface {
 	// ShouldActivateForContainerRestart checks if boost should activate for a container restart
 	// Returns true if ContainerRestart trigger is configured and matches the container name
 	ShouldActivateForContainerRestart(containerName string) bool
+	// ApplyBoostAtRuntime applies boost to a pod at runtime using the /resize subresource
+	// This is used for runtime triggers like ContainerRestart
+	// Returns true if boost was successfully applied, false if already active or error occurred
+	ApplyBoostAtRuntime(ctx context.Context, pod *corev1.Pod, triggerType autoscaling.BoostTriggerType) (bool, error)
 }
 
 const (
@@ -299,6 +303,118 @@ func (b *StartupCPUBoostImpl) ShouldActivateForContainerRestart(containerName st
 		}
 	}
 	return false
+}
+
+// ApplyBoostAtRuntime applies boost to a pod at runtime using the /resize subresource
+// This is used for runtime triggers like ContainerRestart
+// Returns true if boost was successfully applied, false if already active or error occurred
+func (b *StartupCPUBoostImpl) ApplyBoostAtRuntime(ctx context.Context, pod *corev1.Pod, triggerType autoscaling.BoostTriggerType) (bool, error) {
+	b.Lock()
+	defer b.Unlock()
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name, "trigger", triggerType)
+
+	// Get or create boost annotation
+	annotation, err := bpod.BoostAnnotationFromPod(pod)
+	if err != nil {
+		// Annotation doesn't exist yet, create new one
+		annotation = bpod.NewBoostAnnotation()
+	}
+
+	// Check if boost is already active (idempotent check)
+	currentActivation := annotation.GetCurrentActivation()
+	if currentActivation != nil {
+		log.V(5).Info("boost already active, skipping runtime application", "currentTrigger", currentActivation.TriggerType)
+		return false, nil
+	}
+
+	// Find the matching trigger to get duration policy
+	var matchingTrigger *autoscaling.BoostTrigger
+	for i := range b.triggers {
+		if b.triggers[i].Type == triggerType {
+			matchingTrigger = &b.triggers[i]
+			break
+		}
+	}
+	if matchingTrigger == nil {
+		return false, fmt.Errorf("no matching trigger found for type %s", triggerType)
+	}
+
+	// Create boost activation to determine expiry
+	activation := NewBoostActivation(*matchingTrigger, b.durationPolicy)
+
+	// Store original resources in annotation if not already stored
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
+		containerName := container.Name
+
+		// Store original resources if not already stored
+		if _, exists := annotation.InitCPURequests[containerName]; !exists {
+			if cpuRequests, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
+				annotation.InitCPURequests[containerName] = cpuRequests.String()
+			}
+		}
+		if _, exists := annotation.InitCPULimits[containerName]; !exists {
+			if cpuLimits, ok := container.Resources.Limits[corev1.ResourceCPU]; ok {
+				annotation.InitCPULimits[containerName] = cpuLimits.String()
+			}
+		}
+	}
+
+	// Create a function to get resource policy for a container
+	getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+		policy, ok := b.resourcePolicies[containerName]
+		if !ok {
+			return nil, false
+		}
+		return policy.NewResources, true
+	}
+
+	// Apply boost resources via /resize subresource
+	// Note: We don't support removeLimits or podLevelResourcesEnabled in runtime boost
+	// These are webhook-only features
+	removeLimits := false
+	podLevelResourcesEnabled := false
+
+	resourcesPatch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, removeLimits, podLevelResourcesEnabled)
+	if err := b.client.SubResource(ResizeSubResourceName).Patch(ctx, pod, resourcesPatch); err != nil {
+		log.Error(err, "failed to apply boost resources via /resize subresource")
+		return false, fmt.Errorf("failed to apply boost resources: %w", err)
+	}
+
+	// Update activation state in annotation
+	now := time.Now()
+	var expiryFixedDuration *int64
+	var expiryPodCondition *bpod.PodConditionExpiryEntry
+	expiryType := "FixedDuration"
+
+	if activation.ExpiryCondition.Type == ExpiryConditionTypeFixedDuration && activation.ExpiryCondition.FixedDuration != nil {
+		durationSeconds := int64(activation.ExpiryCondition.FixedDuration.Seconds())
+		expiryFixedDuration = &durationSeconds
+	} else if activation.ExpiryCondition.Type == ExpiryConditionTypePodCondition && activation.ExpiryCondition.PodCondition != nil {
+		expiryType = "PodCondition"
+		expiryPodCondition = &bpod.PodConditionExpiryEntry{
+			Type:   activation.ExpiryCondition.PodCondition.Type,
+			Status: string(activation.ExpiryCondition.PodCondition.Status),
+		}
+	}
+
+	annotation.SetCurrentActivation(triggerType, now, expiryType, expiryFixedDuration, expiryPodCondition)
+	annotation.SetLastActivationTime(triggerType, now)
+	annotation.AddActivationToHistory(now)
+
+	// Apply boost labels and annotations
+	labelsPatch := bpod.NewApplyBoostLabelsPatch(annotation, b.name)
+	if err := b.client.Patch(ctx, pod, labelsPatch); err != nil {
+		log.Error(err, "failed to apply boost labels and annotations")
+		return false, fmt.Errorf("failed to apply boost labels: %w", err)
+	}
+
+	// Update pod tracking
+	b.pods[pod.Name] = pod
+	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodUpdateEvent, pod})
+
+	log.Info("boost applied successfully at runtime", "trigger", triggerType)
+	return true, nil
 }
 
 // loggerFromContext provides Logger from a current context with configured

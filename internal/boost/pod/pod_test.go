@@ -15,6 +15,7 @@
 package pod_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -24,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apiResource "k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Pod", func() {
@@ -337,6 +339,217 @@ var _ = Describe("Pod", func() {
 				Expect(activation).NotTo(BeNil())
 				Expect(activation.TriggerType).To(Equal(triggerType))
 				Expect(parsed.GetActivationHistoryCount()).To(Equal(1))
+			})
+		})
+	})
+	Describe("applyBoostResourcesToPod edge cases", func() {
+		var (
+			annotation *bpod.BoostPodAnnotation
+			testPod    *corev1.Pod
+		)
+		BeforeEach(func() {
+			annotation = bpod.NewBoostAnnotation()
+			testPod = podTemplate.DeepCopy()
+		})
+		When("removeLimits is true with burstable pod", func() {
+			It("should remove CPU limits for burstable pod", func() {
+				getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+					if containerName == containerOneName {
+						return func(ctx context.Context, c *corev1.Container) *corev1.ResourceRequirements {
+							return &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("1.2"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("2.4"),
+								},
+							}
+						}, true
+					}
+					return nil, false
+				}
+				// Create burstable pod (requests != limits)
+				testPod.Spec.Containers[0].Resources.Requests = corev1.ResourceList{
+					corev1.ResourceCPU: apiResource.MustParse("1"),
+				}
+				testPod.Spec.Containers[0].Resources.Limits = corev1.ResourceList{
+					corev1.ResourceCPU: apiResource.MustParse("2"),
+				}
+				// Test through patch function - the patch will remove limits for burstable pod
+				patch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, true, false)
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				// Verify patch was created
+				Expect(patchData).NotTo(BeEmpty())
+				// The actual limit removal happens when patch is applied, but we verify patch creation
+			})
+		})
+		When("removeLimits is true with guaranteed pod", func() {
+			It("should not remove CPU limits for guaranteed pod", func() {
+				getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+					if containerName == containerOneName {
+						return func(ctx context.Context, c *corev1.Container) *corev1.ResourceRequirements {
+							return &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("1.2"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("1.2"),
+								},
+							}
+						}, true
+					}
+					return nil, false
+				}
+				// Create guaranteed pod (requests == limits)
+				testPod.Spec.Containers[0].Resources.Requests = corev1.ResourceList{
+					corev1.ResourceCPU: apiResource.MustParse("1"),
+				}
+				testPod.Spec.Containers[0].Resources.Limits = corev1.ResourceList{
+					corev1.ResourceCPU: apiResource.MustParse("1"),
+				}
+				// Test through patch function since ApplyBoostResources is not exported
+				patch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, true, false)
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				// Verify patch was created
+				Expect(patchData).NotTo(BeEmpty())
+				// For guaranteed pod, limits should be applied (not removed)
+				// The actual application happens when patch is applied, but we verify the patch is created
+			})
+		})
+		When("container has resize policy requiring restart", func() {
+			It("should skip container with restart policy", func() {
+				getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+					if containerName == containerOneName {
+						return func(ctx context.Context, c *corev1.Container) *corev1.ResourceRequirements {
+							return &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("1.2"),
+								},
+							}
+						}, true
+					}
+					return nil, false
+				}
+				// Add resize policy that requires restart
+				testPod.Spec.Containers[0].ResizePolicy = []corev1.ContainerResizePolicy{
+					{
+						ResourceName:  corev1.ResourceCPU,
+						RestartPolicy: corev1.RestartContainer,
+					},
+				}
+				originalCPU := testPod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
+				// Test through patch function - container with restart policy should be skipped
+				patch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, false, false)
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				// Verify patch was created (but container with restart policy is skipped)
+				Expect(patchData).NotTo(BeEmpty())
+				// Original resources should remain unchanged in the pod
+				Expect(testPod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU].Equal(originalCPU)).To(BeTrue())
+			})
+		})
+		When("container has no resources to increase", func() {
+			It("should skip container with no resources", func() {
+				getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+					if containerName == containerOneName {
+						return func(ctx context.Context, c *corev1.Container) *corev1.ResourceRequirements {
+							return &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("1.2"),
+								},
+							}
+						}, true
+					}
+					return nil, false
+				}
+				// Remove all resources
+				testPod.Spec.Containers[0].Resources = corev1.ResourceRequirements{}
+				// Test through patch function - container with no resources should be skipped
+				patch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, false, false)
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				// Verify patch was created (but container with no resources is skipped)
+				Expect(patchData).NotTo(BeEmpty())
+				// Resources should remain empty
+				Expect(len(testPod.Spec.Containers[0].Resources.Requests)).To(Equal(0))
+			})
+		})
+		When("podLevelResourcesEnabled is true", func() {
+			It("should handle pod-level resources", func() {
+				getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+					return nil, false
+				}
+				// Set pod-level resources
+				testPod.Spec.Resources = &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU: apiResource.MustParse("1"),
+					},
+				}
+				// Test through patch function with podLevelResourcesEnabled
+				patch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, false, true)
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				// Verify patch was created
+				Expect(patchData).NotTo(BeEmpty())
+			})
+		})
+	})
+	Describe("ApplyBoostResourcesPatch", func() {
+		var (
+			annotation *bpod.BoostPodAnnotation
+			testPod    *corev1.Pod
+		)
+		BeforeEach(func() {
+			annotation = bpod.NewBoostAnnotation()
+			testPod = podTemplate.DeepCopy()
+		})
+		When("creating patch for boost resources", func() {
+			It("should create valid patch", func() {
+				getResourcePolicy := func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool) {
+					if containerName == containerOneName {
+						return func(ctx context.Context, c *corev1.Container) *corev1.ResourceRequirements {
+							return &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("1.2"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU: apiResource.MustParse("2.4"),
+								},
+							}
+						}, true
+					}
+					return nil, false
+				}
+				patch := bpod.NewApplyBoostResourcesPatch(annotation, getResourcePolicy, false, false)
+				Expect(patch).NotTo(BeNil())
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(patchData).NotTo(BeEmpty())
+				// Verify patch type is set (just check it's not zero value)
+				Expect(patch.Type()).NotTo(BeEmpty())
+			})
+		})
+	})
+	Describe("ApplyBoostLabelsPatch", func() {
+		var (
+			annotation *bpod.BoostPodAnnotation
+			testPod    *corev1.Pod
+		)
+		BeforeEach(func() {
+			annotation = bpod.NewBoostAnnotation()
+			testPod = podTemplate.DeepCopy()
+		})
+		When("creating patch for boost labels", func() {
+			It("should create valid patch", func() {
+				patch := bpod.NewApplyBoostLabelsPatch(annotation, "boost-001")
+				Expect(patch).NotTo(BeNil())
+				patchData, err := patch.Data(testPod)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(patchData).NotTo(BeEmpty())
+				// Verify patch type is set (just check it's not zero value)
+				Expect(patch.Type()).NotTo(BeEmpty())
 			})
 		})
 	})

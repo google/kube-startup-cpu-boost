@@ -270,3 +270,18 @@ func (mr *MockStartupCPUBoostMockRecorder) ShouldActivateForContainerRestart(con
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldActivateForContainerRestart", reflect.TypeOf((*MockStartupCPUBoost)(nil).ShouldActivateForContainerRestart), containerName)
 }
+
+// ApplyBoostAtRuntime mocks base method.
+func (m *MockStartupCPUBoost) ApplyBoostAtRuntime(ctx context.Context, pod *v1.Pod, triggerType v1alpha1.BoostTriggerType) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyBoostAtRuntime", ctx, pod, triggerType)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyBoostAtRuntime indicates an expected call of ApplyBoostAtRuntime.
+func (mr *MockStartupCPUBoostMockRecorder) ApplyBoostAtRuntime(ctx, pod, triggerType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBoostAtRuntime", reflect.TypeOf((*MockStartupCPUBoost)(nil).ApplyBoostAtRuntime), ctx, pod, triggerType)
+}

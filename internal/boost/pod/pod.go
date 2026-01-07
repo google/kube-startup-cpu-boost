@@ -17,6 +17,7 @@
 package pod
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -374,4 +375,199 @@ func (a *BoostPodAnnotation) UpdateLastRestartCounts(pod *corev1.Pod) map[string
 	}
 
 	return incremented
+}
+
+// applyBoostResourcesToPod applies boost resources to a pod (mutates pod in-place)
+// This is a helper function used by patch functions
+func applyBoostResourcesToPod(pod *corev1.Pod, annotation *BoostPodAnnotation, getResourcePolicy func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool), removeLimits bool, podLevelResourcesEnabled bool) error {
+	// Store original resources in annotation if not already stored
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
+		containerName := container.Name
+
+		// Store original resources if not already stored
+		if _, exists := annotation.InitCPURequests[containerName]; !exists {
+			if cpuRequests, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
+				annotation.InitCPURequests[containerName] = cpuRequests.String()
+			}
+		}
+		if _, exists := annotation.InitCPULimits[containerName]; !exists {
+			if cpuLimits, ok := container.Resources.Limits[corev1.ResourceCPU]; ok {
+				annotation.InitCPULimits[containerName] = cpuLimits.String()
+			}
+		}
+
+		// Get resource policy for this container
+		newResourcesFunc, ok := getResourcePolicy(containerName)
+		if !ok {
+			continue
+		}
+
+		// Check if resize requires restart
+		if resizeRequiresRestart(*container, corev1.ResourceCPU) {
+			continue
+		}
+
+		// Check if container has resources to increase
+		if !hasResourcesToIncrease(*container) {
+			continue
+		}
+
+		// Calculate new resources
+		newResources := newResourcesFunc(context.Background(), container)
+
+		// Apply new resources
+		if newResources.Requests != nil {
+			if container.Resources.Requests == nil {
+				container.Resources.Requests = corev1.ResourceList{}
+			}
+			for k, v := range newResources.Requests {
+				container.Resources.Requests[k] = v
+			}
+		}
+		if newResources.Limits != nil {
+			if container.Resources.Limits == nil {
+				container.Resources.Limits = corev1.ResourceList{}
+			}
+			// Handle limit removal for burstable/besteffort pods
+			if removeLimits {
+				originalQosClass := computePodQOSForBoost(pod, podLevelResourcesEnabled)
+				if originalQosClass == corev1.PodQOSBurstable || originalQosClass == corev1.PodQOSBestEffort {
+					delete(container.Resources.Limits, corev1.ResourceCPU)
+				} else {
+					for k, v := range newResources.Limits {
+						container.Resources.Limits[k] = v
+					}
+				}
+			} else {
+				for k, v := range newResources.Limits {
+					container.Resources.Limits[k] = v
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ApplyBoostLabelsAndAnnotations applies boost labels and annotations to a pod
+func ApplyBoostLabelsAndAnnotations(pod *corev1.Pod, annotation *BoostPodAnnotation, boostName string) {
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations[BoostAnnotationKey] = annotation.ToJSON()
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+	pod.Labels[BoostLabelKey] = boostName
+}
+
+// Helper function to check if resize requires restart
+func resizeRequiresRestart(c corev1.Container, r corev1.ResourceName) bool {
+	for _, p := range c.ResizePolicy {
+		if p.ResourceName != r {
+			continue
+		}
+		return p.RestartPolicy == corev1.RestartContainer
+	}
+	return false
+}
+
+// Helper function to check if container has resources to increase
+func hasResourcesToIncrease(c corev1.Container) bool {
+	return !c.Resources.Requests.Cpu().IsZero() || !c.Resources.Limits.Cpu().IsZero()
+}
+
+// computePodQOSForBoost computes pod QOS class for boost application
+// This is a simplified version that doesn't require the full webhook context
+func computePodQOSForBoost(pod *corev1.Pod, podLevelResourcesEnabled bool) corev1.PodQOSClass {
+	// Simplified QOS computation - we only need to distinguish burstable/besteffort
+	// for limit removal logic
+	hasRequests := false
+	hasLimits := false
+
+	if podLevelResourcesEnabled && pod.Spec.Resources != nil {
+		if len(pod.Spec.Resources.Requests) > 0 {
+			hasRequests = true
+		}
+		if len(pod.Spec.Resources.Limits) > 0 {
+			hasLimits = true
+		}
+	} else {
+		for _, container := range pod.Spec.Containers {
+			if len(container.Resources.Requests) > 0 {
+				hasRequests = true
+			}
+			if len(container.Resources.Limits) > 0 {
+				hasLimits = true
+			}
+		}
+	}
+
+	if !hasRequests && !hasLimits {
+		return corev1.PodQOSBestEffort
+	}
+	return corev1.PodQOSBurstable
+}
+
+// NewApplyBoostResourcesPatch creates a patch for applying boost resources via /resize subresource
+func NewApplyBoostResourcesPatch(annotation *BoostPodAnnotation, getResourcePolicy func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool), removeLimits bool, podLevelResourcesEnabled bool) client.Patch {
+	return &applyBoostResourcesPatch{
+		annotation:               annotation,
+		getResourcePolicy:        getResourcePolicy,
+		removeLimits:             removeLimits,
+		podLevelResourcesEnabled: podLevelResourcesEnabled,
+	}
+}
+
+type applyBoostResourcesPatch struct {
+	annotation               *BoostPodAnnotation
+	getResourcePolicy        func(containerName string) (func(context.Context, *corev1.Container) *corev1.ResourceRequirements, bool)
+	removeLimits             bool
+	podLevelResourcesEnabled bool
+}
+
+func (p *applyBoostResourcesPatch) Type() types.PatchType {
+	return types.MergePatchType
+}
+
+func (p *applyBoostResourcesPatch) Data(obj client.Object) ([]byte, error) {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil, errors.New("applyBoostResourcesPatch applies only on *corev1.Pod objects")
+	}
+	patchData, err := buildPodPatch(pod, func(pod *corev1.Pod) error {
+		return applyBoostResourcesToPod(pod, p.annotation, p.getResourcePolicy, p.removeLimits, p.podLevelResourcesEnabled)
+	})
+	if err != nil {
+		return []byte(EmptyPatchString), nil
+	}
+	return patchData, nil
+}
+
+// NewApplyBoostLabelsPatch creates a patch for applying boost labels and annotations
+func NewApplyBoostLabelsPatch(annotation *BoostPodAnnotation, boostName string) client.Patch {
+	return &applyBoostLabelsPatch{
+		annotation: annotation,
+		boostName:  boostName,
+	}
+}
+
+type applyBoostLabelsPatch struct {
+	annotation *BoostPodAnnotation
+	boostName  string
+}
+
+func (p *applyBoostLabelsPatch) Type() types.PatchType {
+	return types.MergePatchType
+}
+
+func (p *applyBoostLabelsPatch) Data(obj client.Object) ([]byte, error) {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil, errors.New("applyBoostLabelsPatch applies only on *corev1.Pod objects")
+	}
+	return buildPodPatch(pod, func(pod *corev1.Pod) error {
+		ApplyBoostLabelsAndAnnotations(pod, p.annotation, p.boostName)
+		return nil
+	})
 }
