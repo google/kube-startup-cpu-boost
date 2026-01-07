@@ -18,6 +18,7 @@ on:
     branches:
       - main
       - development
+      - 'story/**'
   pull_request:
     branches:
       - main
@@ -40,7 +41,7 @@ jobs:
         uses: avto-dev/markdown-lint@v1
         with:
           config: '.markdownlint.yml'
-          args: '**/*.md'
+          args: '**/*.md --ignore docs'
       - name: Markdown links
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:

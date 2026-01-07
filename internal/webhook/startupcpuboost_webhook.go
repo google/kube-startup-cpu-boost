@@ -73,6 +73,9 @@ func validate(boost *v1alpha1.StartupCPUBoost) error {
 	if err := validateDurationPolicy(boost.Spec.DurationPolicy); err != nil {
 		allErrs = append(allErrs, err)
 	}
+	if errs := validateTriggers(boost.Spec.Triggers); len(errs) > 0 {
+		allErrs = append(allErrs, errs...)
+	}
 	if len(allErrs) > 0 {
 		return apierrors.NewInvalid(
 			schema.GroupKind{Group: "autoscaling.x-k8s.io", Kind: "StartupCPUBoost"},
@@ -116,6 +119,31 @@ func validateContainerPolicies(policies []v1alpha1.ContainerPolicy) field.ErrorL
 				policies[i],
 				"one type of resource policy should be defined",
 			))
+		}
+	}
+	return allErrs
+}
+
+func validateTriggers(triggers []v1alpha1.BoostTrigger) field.ErrorList {
+	var allErrs field.ErrorList
+	baseFldPath := field.NewPath("spec").Child("triggers")
+	for i := range triggers {
+		fldPath := baseFldPath.Index(i)
+		trigger := triggers[i]
+		// Validate PodConditionTransition trigger requires conditionType, fromStatus, and toStatus
+		if trigger.Type == v1alpha1.BoostTriggerTypePodConditionTransition {
+			if trigger.ConditionType == nil || *trigger.ConditionType == "" {
+				allErrs = append(allErrs, field.Required(fldPath.Child("conditionType"),
+					"conditionType is required for PodConditionTransition trigger"))
+			}
+			if trigger.FromStatus == nil || *trigger.FromStatus == "" {
+				allErrs = append(allErrs, field.Required(fldPath.Child("fromStatus"),
+					"fromStatus is required for PodConditionTransition trigger"))
+			}
+			if trigger.ToStatus == nil || *trigger.ToStatus == "" {
+				allErrs = append(allErrs, field.Required(fldPath.Child("toStatus"),
+					"toStatus is required for PodConditionTransition trigger"))
+			}
 		}
 	}
 	return allErrs
