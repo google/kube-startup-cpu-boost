@@ -88,6 +88,26 @@ spec:
           spec:
             description: StartupCPUBoostSpec defines the desired state of StartupCPUBoost
             properties:
+              cooldown:
+                description: |-
+                  Cooldown limits repeated activations to prevent pathological re-trigger loops.
+                  Optional, no cooldown if not specified.
+                properties:
+                  maxActivationsPerHour:
+                    description: |-
+                      MaxActivationsPerHour specifies the maximum number of activations allowed
+                      per hour for the same Pod+Boost combination. Optional, no limit if not specified.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  minIntervalSeconds:
+                    description: |-
+                      MinIntervalSeconds specifies the minimum time in seconds between activations
+                      for the same Pod+Boost combination. Optional, no cooldown if not specified.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
               durationPolicy:
                 description: DurationPolicy specifies policies for resource boost
                   duration
@@ -180,6 +200,55 @@ spec:
                 required:
                 - containerPolicies
                 type: object
+              triggers:
+                description: |-
+                  Triggers define when boosts are (re)activated.
+                  If omitted or empty, defaults to [{type: PodCreate}] for backward compatibility.
+                items:
+                  description: BoostTrigger defines when a boost activation should
+                    begin
+                  properties:
+                    conditionType:
+                      description: |-
+                        ConditionType specifies which pod condition to watch for PodConditionTransition trigger.
+                        Required when Type is PodConditionTransition.
+                      type: string
+                    containerName:
+                      description: |-
+                        ContainerName specifies which container to watch for ContainerRestart trigger.
+                        Use "*" to match all containers. Optional, defaults to "*" if not specified.
+                      type: string
+                    fromStatus:
+                      description: |-
+                        FromStatus specifies the source condition status for PodConditionTransition trigger.
+                        Must be one of: "True", "False", "Unknown".
+                        Required when Type is PodConditionTransition.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    toStatus:
+                      description: |-
+                        ToStatus specifies the target condition status for PodConditionTransition trigger.
+                        Must be one of: "True", "False", "Unknown".
+                        Required when Type is PodConditionTransition.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: Type selects the trigger variant
+                      enum:
+                      - PodCreate
+                      - ContainerRestart
+                      - PodConditionTransition
+                      type: string
+                  required:
+                  - type
+                  type: object
+                type: array
             required:
             - durationPolicy
             type: object

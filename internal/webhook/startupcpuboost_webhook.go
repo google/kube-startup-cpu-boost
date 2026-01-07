@@ -32,15 +32,27 @@ import (
 type StartupCPUBoostWebhook struct{}
 
 var _ webhook.CustomValidator = &StartupCPUBoostWebhook{}
+var _ webhook.CustomDefaulter = &StartupCPUBoostWebhook{}
 
 func setupWebhookForStartupCPUBoost(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.StartupCPUBoost{}).
+		WithDefaulter(&StartupCPUBoostWebhook{}).
 		WithValidator(&StartupCPUBoostWebhook{}).
 		Complete()
 }
 
+// +kubebuilder:webhook:path=/mutate-autoscaling-x-k8s-io-v1alpha1-startupcpuboost,mutating=true,failurePolicy=fail,sideEffects=None,groups=autoscaling.x-k8s.io,resources=startupcpuboosts,verbs=create;update,versions=v1alpha1,name=mstartupcpuboost.autoscaling.x-k8s.io,admissionReviewVersions=v1
 // +kubebuilder:webhook:path=/validate-autoscaling-x-k8s-io-v1alpha1-startupcpuboost,mutating=false,failurePolicy=fail,sideEffects=None,groups=autoscaling.x-k8s.io,resources=startupcpuboosts,verbs=create;update,versions=v1alpha1,name=vstartupcpuboost.autoscaling.x-k8s.io,admissionReviewVersions=v1
+
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
+func (w *StartupCPUBoostWebhook) Default(ctx context.Context, obj runtime.Object) error {
+	boost := obj.(*v1alpha1.StartupCPUBoost)
+	log := ctrl.LoggerFrom(ctx).WithName("boost-default-webhook")
+	log.V(5).Info("handling defaulting", "startupcpuboost", klog.KObj(boost))
+	defaultTriggers(boost)
+	return nil
+}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (w *StartupCPUBoostWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -147,4 +159,16 @@ func validateTriggers(triggers []v1alpha1.BoostTrigger) field.ErrorList {
 		}
 	}
 	return allErrs
+}
+
+// defaultTriggers sets default trigger to PodCreate if triggers are empty or nil
+// This maintains backward compatibility - CRs without triggers default to PodCreate behavior
+func defaultTriggers(boost *v1alpha1.StartupCPUBoost) {
+	if len(boost.Spec.Triggers) == 0 {
+		boost.Spec.Triggers = []v1alpha1.BoostTrigger{
+			{
+				Type: v1alpha1.BoostTriggerTypePodCreate,
+			},
+		}
+	}
 }

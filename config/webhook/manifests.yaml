@@ -24,6 +24,26 @@ webhooks:
     - pods
   sideEffects: None
   timeoutSeconds: 2
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-autoscaling-x-k8s-io-v1alpha1-startupcpuboost
+  failurePolicy: Fail
+  name: mstartupcpuboost.autoscaling.x-k8s.io
+  rules:
+  - apiGroups:
+    - autoscaling.x-k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - startupcpuboosts
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
