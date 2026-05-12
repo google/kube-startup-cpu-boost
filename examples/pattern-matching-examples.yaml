@@ -1,0 +1,92 @@
+---
+# Examples demonstrating container name pattern matching.
+#
+# The operator applies container policies based on a specific precedence order,
+# not the order they appear in the YAML file.
+#
+# Precedence Order:
+# 1. Exact Match (e.g., "my-app")
+# 2. Glob Pattern (e.g., "*-sidecar")
+# 3. Regular Expression (e.g., "^(app|api).*$")
+# 4. Universal Wildcard ("*")
+#
+---
+apiVersion: autoscaling.x-k8s.io/v1alpha1
+kind: StartupCPUBoost
+metadata:
+  name: pattern-precedence-example
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: my-microservices-app
+  resourcePolicy:
+    containerPolicies:
+    # The order here is intentionally mixed to demonstrate that precedence,
+    # not file order, determines which policy is applied.
+
+    # 4. Universal Wildcard (lowest precedence)
+    # Matches any container not matched by a more specific pattern.
+    - containerName: '*'
+      percentageIncrease:
+        value: 25
+
+    # 3. Regular Expression
+    # Matches containers like 'auth-service', 'payment-service'.
+    - containerName: '^(auth|payment)-.*$'
+      percentageIncrease:
+        value: 200
+
+    # 2. Glob Pattern
+    # Matches containers like 'envoy-sidecar', 'istio-proxy-sidecar'.
+    - containerName: '*-sidecar'
+      percentageIncrease:
+        value: 75
+
+    # 1. Exact Match (highest precedence)
+    # Matches only the container named 'api-gateway'.
+    - containerName: 'api-gateway'
+      fixedResources:
+        requests: "2"
+        limits: "4"
+
+  durationPolicy:
+    podCondition:
+      type: Ready
+      status: "True"
+---
+apiVersion: autoscaling.x-k8s.io/v1alpha1
+kind: StartupCPUBoost
+metadata:
+  name: advanced-glob-example
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: web-services
+  resourcePolicy:
+    containerPolicies:
+    # A more specific glob takes precedence over a less specific one.
+    # 'web-app-v2' is more specific than 'web-*' because it's longer.
+    - containerName: 'web-app-v2'
+      percentageIncrease:
+        value: 150
+    - containerName: 'web-*'
+      percentageIncrease:
+        value: 100
+
+    # Question mark matches a single character. Matches 'db-1', 'db-2', etc.
+    - containerName: 'db-?'
+      fixedResources:
+        requests: "0.5"
+        limits: "1"
+
+    # Character class matches a range. Matches 'cache-0', 'cache-1', etc.
+    - containerName: 'cache-[0-9]'
+      fixedResources:
+        requests: "0.3"
+        limits: "0.8"
+  durationPolicy:
+    fixedDuration:
+      unit: Seconds
+      value: 90

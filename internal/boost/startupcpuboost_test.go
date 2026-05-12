@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -103,6 +103,172 @@ var _ = Describe("StartupCPUBoost", func() {
 				fixedPolicy, _ := p.(*resource.FixedPolicy)
 				Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
 				Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
+			})
+		})
+		When("the spec has wildcard container policy", func() {
+			var (
+				wildcardFixedReq = apiResource.MustParse("0.5")
+				wildcardFixedLim = apiResource.MustParse("1.5")
+			)
+			BeforeEach(func() {
+				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						{
+							ContainerName: "*",
+							FixedResources: &autoscaling.FixedResources{
+								Requests: wildcardFixedReq,
+								Limits:   wildcardFixedLim,
+							},
+						},
+					},
+				}
+			})
+			It("does not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns wildcard policy for any container name", func() {
+				// Test with a container name that has no specific entry
+				p, ok := boost.ResourcePolicy("any-container")
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(wildcardFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(wildcardFixedLim))
+			})
+			It("returns wildcard policy for another container name", func() {
+				p, ok := boost.ResourcePolicy("another-container")
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(wildcardFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(wildcardFixedLim))
+			})
+		})
+		When("the spec has both specific and wildcard container policies", func() {
+			var (
+				containerOneName            = "container-one"
+				containerOnePercValue int64 = 120
+				wildcardFixedReq            = apiResource.MustParse("0.5")
+				wildcardFixedLim            = apiResource.MustParse("1.5")
+			)
+			BeforeEach(func() {
+				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						{
+							ContainerName: containerOneName,
+							PercentageIncrease: &autoscaling.PercentageIncrease{
+								Value: containerOnePercValue,
+							},
+						},
+						{
+							ContainerName: "*",
+							FixedResources: &autoscaling.FixedResources{
+								Requests: wildcardFixedReq,
+								Limits:   wildcardFixedLim,
+							},
+						},
+					},
+				}
+			})
+			It("does not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns specific policy for exact container match", func() {
+				p, ok := boost.ResourcePolicy(containerOneName)
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+				percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+				Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
+			})
+			It("returns wildcard policy for non-matching container", func() {
+				p, ok := boost.ResourcePolicy("other-container")
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(wildcardFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(wildcardFixedLim))
+			})
+		})
+		When("the spec has mixed exact, glob, and regex policies", func() {
+			var (
+				exactContainerName      = "app-frontend"
+				exactPercValue    int64 = 200
+				globPattern             = "*-db"
+				globFixedReq            = apiResource.MustParse("1.2")
+				globFixedLim            = apiResource.MustParse("2.2")
+				regexPattern            = "^app-.*$"
+				regexFixedReq           = apiResource.MustParse("0.8")
+				regexFixedLim           = apiResource.MustParse("1.8")
+				wildcardFixedReq        = apiResource.MustParse("0.1")
+				wildcardFixedLim        = apiResource.MustParse("0.2")
+			)
+			BeforeEach(func() {
+				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+					ContainerPolicies: []autoscaling.ContainerPolicy{
+						// Order is intentionally mixed to test sorting
+						{
+							ContainerName: regexPattern, // Regex
+							FixedResources: &autoscaling.FixedResources{
+								Requests: regexFixedReq,
+								Limits:   regexFixedLim,
+							},
+						},
+						{
+							ContainerName: exactContainerName, // Exact
+							PercentageIncrease: &autoscaling.PercentageIncrease{
+								Value: exactPercValue,
+							},
+						},
+						{
+							ContainerName: "*", // Wildcard glob
+							FixedResources: &autoscaling.FixedResources{
+								Requests: wildcardFixedReq,
+								Limits:   wildcardFixedLim,
+							},
+						},
+						{
+							ContainerName: globPattern, // More specific glob
+							FixedResources: &autoscaling.FixedResources{
+								Requests: globFixedReq,
+								Limits:   globFixedLim,
+							},
+						},
+					},
+				}
+			})
+			It("does not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("returns exact policy for the exact match", func() {
+				p, ok := boost.ResourcePolicy(exactContainerName)
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+				percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+				Expect(percPolicy.Percentage()).To(Equal(exactPercValue))
+			})
+			It("returns glob policy for the glob match", func() {
+				p, ok := boost.ResourcePolicy("postgres-db")
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(globFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(globFixedLim))
+			})
+			It("returns regex policy for the regex match that is not an exact or glob match", func() {
+				p, ok := boost.ResourcePolicy("app-backend")
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(regexFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(regexFixedLim))
+			})
+			It("returns wildcard policy for a non-matching container", func() {
+				p, ok := boost.ResourcePolicy("other-unmatched-container")
+				Expect(ok).To(BeTrue())
+				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+				fixedPolicy, _ := p.(*resource.FixedPolicy)
+				Expect(fixedPolicy.Requests()).To(Equal(wildcardFixedReq))
+				Expect(fixedPolicy.Limits()).To(Equal(wildcardFixedLim))
 			})
 		})
 		When("the spec has container policy without resource policy", func() {

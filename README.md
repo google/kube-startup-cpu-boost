@@ -24,6 +24,7 @@ Note: this is not an officially supported Google product.
   * [[Boost resources] fixed target](#boost-resources-fixed-target)
   * [[Boost duration] fixed time](#boost-duration-fixed-time)
   * [[Boost duration] POD condition](#boost-duration-pod-condition)
+  * [[Boost resources] pattern matching for containers](#boost-resources-pattern-matching-for-containers)
 * [Configuration](#configuration)
 * [Metrics](#metrics)
 * [License](#license)
@@ -200,6 +201,82 @@ Define the POD condition, the resource boost effect will last until the conditio
        type: Ready
        status: "True" 
   ```
+
+### [Boost resources] pattern matching for containers
+
+You can define `containerPolicies` that apply to one or more containers by using pattern matching on the container name. This allows for flexible and powerful policy definitions.
+
+The operator supports three types of patterns:
+
+#### **1. Exact Match**
+Matches a specific container name exactly. This pattern has the **highest precedence**.
+```yaml
+containerPolicies:
+- containerName: my-app-container
+  percentageIncrease:
+    value: 50
+```
+
+#### **2. Glob Patterns** 
+Use wildcard patterns familiar from shell commands. Glob patterns have a higher precedence than Regex patterns and the universal wildcard (`*`). More specific globs (e.g., `app-*-db`) are prioritized over less specific ones (e.g., `*-db`).
+
+Supported wildcards:
+- `*`: matches any sequence of characters.
+- `?`: matches any single character.
+- `[]`: matches any character within the brackets. Can be negated with `!`.
+```yaml
+containerPolicies:
+# Matches istio-sidecar, envoy-sidecar, etc.
+- containerName: '*-sidecar'
+  percentageIncrease:
+    value: 30
+# Matches app-v1, app-v2, etc.
+- containerName: 'app-v?'
+  percentageIncrease:
+    value: 25
+```
+
+#### **3. Regular Expressions**
+For complex patterns, use regular expressions. The pattern must start with `^` and/or end with `$`. Regex patterns have a lower precedence than Exact and Glob patterns but higher than the universal wildcard (`*`).
+```yaml
+containerPolicies:
+# Matches containers starting with app or api
+- containerName: '^(app|api).*$'
+  percentageIncrease:
+    value: 40
+```
+
+#### **Precedence and Evaluation**
+When multiple `containerPolicies` are defined, they are evaluated based on pattern specificity, not the order in the YAML file. The first policy that matches a container's name, based on the precedence order below, will be applied.
+
+The precedence order is:
+1.  **Exact Match** (e.g., `app-frontend`)
+2.  **Glob Pattern** (e.g., `*-db`, `app-*`)
+3.  **Regular Expression** (e.g., `^app-.*$`)
+4.  **Universal Wildcard** (`*`)
+
+**Example: Mixed Policies**
+
+Given the following policies, the `app-frontend` container will get the `200%` increase (exact match), `api-backend` will get the `150%` increase (regex match), `cache-db` will get the `100%` increase (glob match), and any other container will get the `50%` increase (wildcard).
+
+```yaml
+spec:
+  resourcePolicy:
+    containerPolicies:
+    # Order does not matter; policies are sorted by precedence.
+    - containerName: '*' # 4th (Wildcard)
+      percentageIncrease:
+        value: 50
+    - containerName: '^(api)-.*$' # 3rd (Regex)
+      percentageIncrease:
+        value: 150
+    - containerName: '*-db' # 2nd (Glob)
+      percentageIncrease:
+        value: 100
+    - containerName: 'app-frontend' # 1st (Exact)
+      percentageIncrease:
+        value: 200
+```
 
 ## Configuration
 

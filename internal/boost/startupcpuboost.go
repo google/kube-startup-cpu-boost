@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	"github.com/google/kube-startup-cpu-boost/internal/boost/pattern"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
@@ -88,18 +90,24 @@ type StartupCPUBoostStats struct {
 	TotalContainerBoosts int
 }
 
+// containerPolicyEntry holds a matcher and its associated policy
+type containerPolicyEntry struct {
+	matcher *pattern.Matcher
+	policy  resource.ContainerPolicy
+}
+
 // StartupCPUBoostImpl is an implementation of a StartupCPUBoost CRD
 type StartupCPUBoostImpl struct {
 	sync.RWMutex
-	name             string
-	namespace        string
-	selector         labels.Selector
-	durationPolicies map[string]duration.Policy
-	resourcePolicies map[string]resource.ContainerPolicy
-	pods             map[string]*corev1.Pod
-	client           client.Client
-	stats            StartupCPUBoostStats
-	legacyRevertMode bool
+	name              string
+	namespace         string
+	selector          labels.Selector
+	durationPolicies  map[string]duration.Policy
+	containerPolicies []containerPolicyEntry
+	pods              map[string]*corev1.Pod
+	client            client.Client
+	stats             StartupCPUBoostStats
+	legacyRevertMode  bool
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
@@ -112,16 +120,20 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 	if err != nil {
 		return nil, err
 	}
+	containerPolicies, err := buildContainerPolicies(resourcePolicies)
+	if err != nil {
+		return nil, err
+	}
 	return &StartupCPUBoostImpl{
-		name:             boost.Name,
-		namespace:        boost.Namespace,
-		selector:         selector,
-		durationPolicies: mapDurationPolicy(boost.Spec.DurationPolicy),
-		resourcePolicies: resourcePolicies,
-		pods:             make(map[string]*corev1.Pod),
-		client:           client,
-		stats:            StartupCPUBoostStats{},
-		legacyRevertMode: legacyRevertMode,
+		name:              boost.Name,
+		namespace:         boost.Namespace,
+		selector:          selector,
+		durationPolicies:  mapDurationPolicy(boost.Spec.DurationPolicy),
+		containerPolicies: containerPolicies,
+		pods:              make(map[string]*corev1.Pod),
+		client:            client,
+		stats:             StartupCPUBoostStats{},
+		legacyRevertMode:  legacyRevertMode,
 	}, nil
 }
 
@@ -136,9 +148,17 @@ func (b *StartupCPUBoostImpl) Namespace() string {
 }
 
 // ResourcePolicy returns the resource policy for a given container
+// It uses pattern matching with the following priority:
+// 1. Try all patterns in order (exact matches first, then glob, then regex)
+// 2. Return the first matching policy
+// 3. If multiple policies match, the first one defined in the spec is used
 func (b *StartupCPUBoostImpl) ResourcePolicy(containerName string) (resource.ContainerPolicy, bool) {
-	policy, ok := b.resourcePolicies[containerName]
-	return policy, ok
+	for _, entry := range b.containerPolicies {
+		if entry.matcher.Matches(containerName) {
+			return entry.policy, true
+		}
+	}
+	return nil, false
 }
 
 // DurationPolicies returns configured duration policies
@@ -245,8 +265,12 @@ func (b *StartupCPUBoostImpl) UpdateFromSpec(ctx context.Context, boost *autosca
 	if err != nil {
 		return err
 	}
+	containerPolicies, err := buildContainerPolicies(resourcePolicies)
+	if err != nil {
+		return err
+	}
 	b.selector = selector
-	b.resourcePolicies = resourcePolicies
+	b.containerPolicies = containerPolicies
 	b.durationPolicies = mapDurationPolicy(boost.Spec.DurationPolicy)
 	return nil
 }
@@ -378,6 +402,58 @@ func mapResourcePolicy(spec autoscaling.ResourcePolicy) (map[string]resource.Con
 		return nil, errors.Join(errs...)
 	}
 	return policies, nil
+}
+
+// buildContainerPolicies converts the resource policies to container policy entries with pattern matchers
+// It creates matchers for each container name pattern (exact, glob, or regex)
+func buildContainerPolicies(policies map[string]resource.ContainerPolicy) ([]containerPolicyEntry, error) {
+	var errs []error
+	var entries []containerPolicyEntry
+
+	for containerName, policy := range policies {
+		matcher, err := pattern.NewMatcher(containerName)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("invalid pattern for container %s: %w", containerName, err))
+			continue
+		}
+		entries = append(entries, containerPolicyEntry{
+			matcher: matcher,
+			policy:  policy,
+		})
+	}
+
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	// Sort policies by specificity (exact > glob > regex > wildcard) to ensure correct precedence
+	sort.Slice(entries, func(i, j int) bool {
+		m1 := entries[i].matcher
+		m2 := entries[j].matcher
+
+		// Handle wildcard '*' as the lowest priority
+		isM1Wildcard := m1.Pattern() == "*"
+		isM2Wildcard := m2.Pattern() == "*"
+		if isM1Wildcard != isM2Wildcard {
+			return isM2Wildcard // m2 is wildcard, so m1 comes first.
+		}
+
+		if m1.IsExact() != m2.IsExact() {
+			return m1.IsExact() // Exact comes before glob/regex
+		}
+
+		// Between globs and regex, glob is more specific
+		if m1.IsGlob() != m2.IsGlob() {
+			return m1.IsGlob() // Glob comes before regex
+		}
+
+		// For patterns of same type, sort by length (desc) as a proxy for specificity,
+		// then alphabetically for stability.
+		if len(m1.Pattern()) != len(m2.Pattern()) {
+			return len(m1.Pattern()) > len(m2.Pattern())
+		}
+		return m1.Pattern() < m2.Pattern()
+	})
+	return entries, nil
 }
 
 // fixedPolicyToDuration maps the attributes from FixedDurationPolicy API spec to the
