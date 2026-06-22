@@ -114,7 +114,9 @@ gcloud container clusters create poc \
    spec:
      resourcePolicy:
        containerPolicies:
-       - containerName: spring-demo-app
+       - matchContainers:
+           type: ExactName
+           value: spring-rest-jpa
          percentageIncrease:
            value: 50
      durationPolicy:
@@ -146,6 +148,32 @@ spec:
        values: ["spring-rest-jpa"]
 ```
 
+### [Boost resources] container matcher
+
+Define the container(s) that will be subject for resource boost with a container matcher.
+
+The matcher can be defined with an exact container name or a regex pattern
+matching container name using [Go syntax](https://pkg.go.dev/regexp).
+
+```yaml
+spec:
+  resourcePolicy:
+    containerPolicies:
+     - containerName: spring-rest-jpa # legacy container name matcher
+       percentageIncrease:
+         value: 50
+    - matchContainers:
+        type: ExactName
+        value: spring-rest-jpa
+      percentageIncrease:
+        value: 50
+    - matchContainers:
+        type: RegexName
+        value: "spring-.+"
+      percentageIncrease:
+        value: 50
+```
+
 ### [Boost resources] percentage increase
 
 Define the percentage increase for a target container(s). The CPU requests and limits of selected
@@ -155,9 +183,11 @@ container(s) will be increase by the given percentage value.
 spec:
   resourcePolicy:
     containerPolicies:
-     - containerName: spring-rest-jpa
-       percentageIncrease:
-         value: 50
+    - matchContainers:
+        type: ExactName
+        value: spring-rest-jpa
+      percentageIncrease:
+        value: 50
 ```
 
 ### [Boost resources] fixed target
@@ -170,7 +200,9 @@ higher than the ones in the container.
 spec:
   resourcePolicy:
     containerPolicies:
-     - containerName: spring-rest-jpa
+     - matchContainers:
+         type: ExactName
+         value: spring-rest-jpa
        fixedResources:
          requests: "1"
          limits: "2"
