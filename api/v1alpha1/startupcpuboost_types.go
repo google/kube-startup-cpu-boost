@@ -157,7 +157,3 @@ type StartupCPUBoostList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []StartupCPUBoost `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&StartupCPUBoost{}, &StartupCPUBoostList{})
-}

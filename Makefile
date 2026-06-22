@@ -67,6 +67,10 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: lint
+lint: staticcheck ## Run staticcheck against code.
+	$(STATICCHECK) ./...
+
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
@@ -148,10 +152,12 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+STATICCHECK ?= $(LOCALBIN)/staticcheck
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.3.0
-CONTROLLER_TOOLS_VERSION ?= v0.16.3
+CONTROLLER_TOOLS_VERSION ?= v0.21.0
+STATICCHECK_VERSION ?= 2026.1
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -173,6 +179,12 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+.PHONY: staticcheck
+staticcheck: $(STATICCHECK) ## Download staticcheck locally if necessary. If wrong version is installed, it will be overwritten.
+$(STATICCHECK): $(LOCALBIN)
+	test -s $(LOCALBIN)/staticcheck && $(LOCALBIN)/staticcheck -version | grep -q $(STATICCHECK_VERSION) || \
+	GOBIN=$(LOCALBIN) go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 
 HELM_CHART_ROOT ?= charts/kube-startup-cpu-boost
 HELMIFY ?= $(LOCALBIN)/helmify -original-name ${HELM_CHART_ROOT}

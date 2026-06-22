@@ -48,7 +48,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           check-latest: true
       - name: Get dependencies
         run: go mod download
@@ -61,5 +61,5 @@ jobs:
       - name: Lint
         uses: dominikh/staticcheck-action@v1
         with:
-          version: "2024.1.1"
+          version: "2026.1"
           install-go: false

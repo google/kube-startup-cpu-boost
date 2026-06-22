@@ -20,46 +20,41 @@ import (
 
 	"github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 type StartupCPUBoostWebhook struct{}
 
-var _ webhook.CustomValidator = &StartupCPUBoostWebhook{}
+var _ admission.Validator[*v1alpha1.StartupCPUBoost] = &StartupCPUBoostWebhook{}
 
 func setupWebhookForStartupCPUBoost(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&v1alpha1.StartupCPUBoost{}).
+	return ctrl.NewWebhookManagedBy(mgr, &v1alpha1.StartupCPUBoost{}).
 		WithValidator(&StartupCPUBoostWebhook{}).
 		Complete()
 }
 
 // +kubebuilder:webhook:path=/validate-autoscaling-x-k8s-io-v1alpha1-startupcpuboost,mutating=false,failurePolicy=fail,sideEffects=None,groups=autoscaling.x-k8s.io,resources=startupcpuboosts,verbs=create;update,versions=v1alpha1,name=vstartupcpuboost.autoscaling.x-k8s.io,admissionReviewVersions=v1
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (w *StartupCPUBoostWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	boost := obj.(*v1alpha1.StartupCPUBoost)
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (w *StartupCPUBoostWebhook) ValidateCreate(ctx context.Context, boost *v1alpha1.StartupCPUBoost) (admission.Warnings, error) {
 	log := ctrl.LoggerFrom(ctx).WithName("boost-validate-webhook")
-	log.V(5).Info("handling create validation", "boos", klog.KObj(boost))
+	log.V(5).Info("handling create validation", "boost", klog.KObj(boost))
 	return nil, validate(boost)
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
-func (w *StartupCPUBoostWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	boost := newObj.(*v1alpha1.StartupCPUBoost)
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type
+func (w *StartupCPUBoostWebhook) ValidateUpdate(ctx context.Context, oldObj, boost *v1alpha1.StartupCPUBoost) (admission.Warnings, error) {
 	log := ctrl.LoggerFrom(ctx).WithName("boost-validate-webhook")
 	log.V(5).Info("handling update validation", "startupcpuboost", klog.KObj(boost))
 	return nil, validate(boost)
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (w *StartupCPUBoostWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type
+func (w *StartupCPUBoostWebhook) ValidateDelete(ctx context.Context, obj *v1alpha1.StartupCPUBoost) (admission.Warnings, error) {
 	return nil, nil
 }
 

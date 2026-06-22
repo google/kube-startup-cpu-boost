@@ -20,7 +20,6 @@
 //	mockgen -package mock --copyright_file hack/boilerplate.go.txt --destination internal/mock/k8s_subresourceclient.go sigs.k8s.io/controller-runtime/pkg/client SubResourceClient
 //
 
-// Package mock is a generated GoMock package.
 package mock
 
 import (
@@ -28,6 +27,7 @@ import (
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,6 +53,25 @@ func NewMockSubResourceClient(ctrl *gomock.Controller) *MockSubResourceClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockSubResourceClient) EXPECT() *MockSubResourceClientMockRecorder {
 	return m.recorder
+}
+
+// Apply mocks base method.
+func (m *MockSubResourceClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, obj}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Apply", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Apply indicates an expected call of Apply.
+func (mr *MockSubResourceClientMockRecorder) Apply(ctx, obj any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, obj}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Apply", reflect.TypeOf((*MockSubResourceClient)(nil).Apply), varargs...)
 }
 
 // Create mocks base method.
