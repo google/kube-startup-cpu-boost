@@ -21,6 +21,7 @@ import (
 
 	promclient "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 )
@@ -95,7 +96,7 @@ func (m *metricsFeatureGateValidator) GetFeatureGates() (FeatureGates, error) {
 		return nil, err
 	}
 	defer reader.Close()
-	parser := expfmt.TextParser{}
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	metricFamilies, err := parser.TextToMetricFamilies(reader)
 	if err != nil {
 		return nil, err
