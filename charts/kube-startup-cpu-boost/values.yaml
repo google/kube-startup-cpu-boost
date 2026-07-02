@@ -9,6 +9,7 @@ controllerManager:
         type: RuntimeDefault
     env:
       leaderElection: "true"
+      removeLimits: "true"
     image:
       repository: ghcr.io/google/kube-startup-cpu-boost
       tag: v0.17.1 #x-release-please-version

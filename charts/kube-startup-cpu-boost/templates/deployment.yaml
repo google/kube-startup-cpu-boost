@@ -46,6 +46,8 @@ spec:
               fieldPath: metadata.namespace
         - name: LEADER_ELECTION
           value: {{ quote .Values.controllerManager.manager.env.leaderElection }}
+        - name: REMOVE_LIMITS
+          value: {{ quote .Values.controllerManager.manager.env.removeLimits }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         - name: WEBHOOK_SERVICE_NAME
