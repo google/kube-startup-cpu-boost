@@ -1,6 +1,21 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.18.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.17.1...v0.18.0) (2026-07-02)
+
+
+### Features
+
+* **chart:** supporting nodeSelector and tolerations ([#149](https://github.com/google/kube-startup-cpu-boost/issues/149)) ([904de8f](https://github.com/google/kube-startup-cpu-boost/commit/904de8fd175ae45a4ba361769d9230083a2b67ab))
+* container matcher with regex support ([#154](https://github.com/google/kube-startup-cpu-boost/issues/154)) ([1730b09](https://github.com/google/kube-startup-cpu-boost/commit/1730b097cf5500438ed3beff9789524d98767bdc))
+* **helm:** adding remove limits env var support ([#157](https://github.com/google/kube-startup-cpu-boost/issues/157)) ([9db464d](https://github.com/google/kube-startup-cpu-boost/commit/9db464d376b167ab516871db4d6ea02e6d00c354))
+
+
+### Bug Fixes
+
+* **helm:** removed hardcoded names in cert rotator ([#156](https://github.com/google/kube-startup-cpu-boost/issues/156)) ([a4b54fc](https://github.com/google/kube-startup-cpu-boost/commit/a4b54fcb7bbed32a89bfe68f915be1e6c2ab296c))
+* **manifests:** exclude sys ns'es from webhook ([#155](https://github.com/google/kube-startup-cpu-boost/issues/155)) ([ef7b47c](https://github.com/google/kube-startup-cpu-boost/commit/ef7b47cfa5ece8f44c3dad1a208abfc58fb91b53))
+
 ## [0.17.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.17.0...v0.17.1) (2025-09-01)
 
 
