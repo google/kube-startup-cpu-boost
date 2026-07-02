@@ -67,42 +67,89 @@ var _ = Describe("StartupCPUBoost", func() {
 				containerTwoFixedReq        = apiResource.MustParse("1")
 				containerTwoFixedLim        = apiResource.MustParse("2")
 			)
-			BeforeEach(func() {
-				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
-					ContainerPolicies: []autoscaling.ContainerPolicy{
-						{
-							ContainerName: containerOneName,
-							PercentageIncrease: &autoscaling.PercentageIncrease{
-								Value: containerOnePercValue,
+			Context("with deprecated container name policy", func() {
+				BeforeEach(func() {
+					spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+						ContainerPolicies: []autoscaling.ContainerPolicy{
+							{
+								ContainerName: containerOneName,
+								PercentageIncrease: &autoscaling.PercentageIncrease{
+									Value: containerOnePercValue,
+								},
+							},
+							{
+								ContainerName: containerTwoName,
+								FixedResources: &autoscaling.FixedResources{
+									Requests: containerTwoFixedReq,
+									Limits:   containerTwoFixedLim,
+								},
 							},
 						},
-						{
-							ContainerName: containerTwoName,
-							FixedResources: &autoscaling.FixedResources{
-								Requests: containerTwoFixedReq,
-								Limits:   containerTwoFixedLim,
+					}
+				})
+				It("does not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+				It("returns valid resource policy for container one", func() {
+					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerOneName})
+					Expect(ok).To(BeTrue())
+					Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+					percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+					Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
+				})
+				It("returns valid resource policy for container two", func() {
+					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerTwoName})
+					Expect(ok).To(BeTrue())
+					Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+					fixedPolicy, _ := p.(*resource.FixedPolicy)
+					Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
+					Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
+				})
+			})
+			Context("with match containers policy", func() {
+				BeforeEach(func() {
+					spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+						ContainerPolicies: []autoscaling.ContainerPolicy{
+							{
+								MatchContainers: &autoscaling.MatchContainers{
+									Type:  autoscaling.MatchContainersTypeExactName,
+									Value: containerOneName,
+								},
+								PercentageIncrease: &autoscaling.PercentageIncrease{
+									Value: containerOnePercValue,
+								},
+							},
+							{
+								MatchContainers: &autoscaling.MatchContainers{
+									Type:  autoscaling.MatchContainersTypeRegexName,
+									Value: "^container-two$",
+								},
+								FixedResources: &autoscaling.FixedResources{
+									Requests: containerTwoFixedReq,
+									Limits:   containerTwoFixedLim,
+								},
 							},
 						},
-					},
-				}
-			})
-			It("does not error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-			It("returns valid resource policy for container one", func() {
-				p, ok := boost.ResourcePolicy(containerOneName)
-				Expect(ok).To(BeTrue())
-				Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
-				percPolicy, _ := p.(*resource.PercentageContainerPolicy)
-				Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
-			})
-			It("returns valid resource policy for container two", func() {
-				p, ok := boost.ResourcePolicy(containerTwoName)
-				Expect(ok).To(BeTrue())
-				Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
-				fixedPolicy, _ := p.(*resource.FixedPolicy)
-				Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
-				Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
+					}
+				})
+				It("does not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+				It("returns valid resource policy for container matching exact rule", func() {
+					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerOneName})
+					Expect(ok).To(BeTrue())
+					Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
+					percPolicy, _ := p.(*resource.PercentageContainerPolicy)
+					Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
+				})
+				It("returns valid resource policy for container matching regex rule", func() {
+					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerTwoName})
+					Expect(ok).To(BeTrue())
+					Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
+					fixedPolicy, _ := p.(*resource.FixedPolicy)
+					Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
+					Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
+				})
 			})
 		})
 		When("the spec has container policy without resource policy", func() {
@@ -110,7 +157,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
 					ContainerPolicies: []autoscaling.ContainerPolicy{
 						{
-							ContainerName: "container-one",
+							MatchContainers: &autoscaling.MatchContainers{
+								Type:  autoscaling.MatchContainersTypeExactName,
+								Value: "container-one",
+							},
 						},
 					},
 				}
@@ -124,7 +174,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				spec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
 					ContainerPolicies: []autoscaling.ContainerPolicy{
 						{
-							ContainerName: "container-one",
+							MatchContainers: &autoscaling.MatchContainers{
+								Type:  autoscaling.MatchContainersTypeExactName,
+								Value: "container-one",
+							},
 						},
 					},
 				}
@@ -409,7 +462,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				updatedSpec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
 					ContainerPolicies: []autoscaling.ContainerPolicy{
 						{
-							ContainerName: "test",
+							MatchContainers: &autoscaling.MatchContainers{
+								Type:  autoscaling.MatchContainersTypeExactName,
+								Value: "test",
+							},
 							PercentageIncrease: &autoscaling.PercentageIncrease{
 								Value: 1000,
 							},
@@ -419,7 +475,7 @@ var _ = Describe("StartupCPUBoost", func() {
 
 			})
 			JustBeforeEach(func() {
-				resourcePolicy, resourcePolicyFound = boost.ResourcePolicy("test")
+				resourcePolicy, resourcePolicyFound = boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: "test"})
 			})
 			It("finds resource policy", func() {
 				Expect(resourcePolicyFound).To(BeTrue())

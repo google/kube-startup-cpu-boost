@@ -100,7 +100,10 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 						ResourcePolicy: v1alpha1.ResourcePolicy{
 							ContainerPolicies: []v1alpha1.ContainerPolicy{
 								{
-									ContainerName: "container-one",
+									MatchContainers: &v1alpha1.MatchContainers{
+										Type:  v1alpha1.MatchContainersTypeExactName,
+										Value: "container-one",
+									},
 								},
 							},
 						},
@@ -127,7 +130,10 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 						ResourcePolicy: v1alpha1.ResourcePolicy{
 							ContainerPolicies: []v1alpha1.ContainerPolicy{
 								{
-									ContainerName:      "container-one",
+									MatchContainers: &v1alpha1.MatchContainers{
+										Type:  v1alpha1.MatchContainersTypeExactName,
+										Value: "container-one",
+									},
 									FixedResources:     &v1alpha1.FixedResources{},
 									PercentageIncrease: &v1alpha1.PercentageIncrease{},
 								},
@@ -156,7 +162,10 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 						ResourcePolicy: v1alpha1.ResourcePolicy{
 							ContainerPolicies: []v1alpha1.ContainerPolicy{
 								{
-									ContainerName:  "container-one",
+									MatchContainers: &v1alpha1.MatchContainers{
+										Type:  v1alpha1.MatchContainersTypeExactName,
+										Value: "container-one",
+									},
 									FixedResources: &v1alpha1.FixedResources{},
 								},
 							},
@@ -175,6 +184,96 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 				By("validating update event")
 				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has container with container name and matcher", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:   "container-one",
+									MatchContainers: &v1alpha1.MatchContainers{},
+									FixedResources:  &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).To(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has container matcher with invalid regex", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									MatchContainers: &v1alpha1.MatchContainers{
+										Type:  v1alpha1.MatchContainersTypeRegexName,
+										Value: "[invalid",
+									},
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("errors", func() {
+				By("validating create event")
+				_, err = w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).To(HaveOccurred())
+
+				By("validating update event")
+				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+		When("Startup CPU Boost has container with deprecated containerName", func() {
+			BeforeEach(func() {
+				boost = v1alpha1.StartupCPUBoost{
+					Spec: v1alpha1.StartupCPUBoostSpec{
+						ResourcePolicy: v1alpha1.ResourcePolicy{
+							ContainerPolicies: []v1alpha1.ContainerPolicy{
+								{
+									ContainerName:  "container-one",
+									FixedResources: &v1alpha1.FixedResources{},
+								},
+							},
+						},
+						DurationPolicy: v1alpha1.DurationPolicy{
+							PodCondition: &v1alpha1.PodConditionDurationPolicy{},
+						},
+					},
+				}
+			})
+			It("returns deprecation warning", func() {
+				By("validating create event")
+				warnings, err := w.ValidateCreate(context.TODO(), &boost)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(warnings).To(ConsistOf("spec.resourcePolicy.containerPolicies[0].containerName is deprecated; use matchContainers with type=ExactName instead"))
+
+				By("validating update event")
+				warnings, err = w.ValidateUpdate(context.TODO(), nil, &boost)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(warnings).To(ConsistOf("spec.resourcePolicy.containerPolicies[0].containerName is deprecated; use matchContainers with type=ExactName instead"))
 			})
 		})
 	})

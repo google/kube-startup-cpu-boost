@@ -101,7 +101,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
+					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
 					managerCall.Return(boost, true)
 				})
 				It("retrieves resource policy for a container", func() {
@@ -190,7 +190,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
+					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
 					managerCall.Return(boost, true)
 				})
 				It("retrieves resource policy for a container", func() {
@@ -263,8 +263,8 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
-					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-two"))
+					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
+					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-two"))
 					managerCall.Return(boost, true)
 				})
 				It("retrieves resource policy for a container", func() {
@@ -427,8 +427,8 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				BeforeEach(func() {
 					boost := mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-one"))
-					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Eq("container-two"))
+					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
+					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-two"))
 					managerCall.Return(boost, true)
 				})
 				It("retrieves resource policy for a container", func() {
@@ -568,4 +568,17 @@ func buildContainerResourcePatch(containerIdx int, requirement string, operation
 		Path:      fmt.Sprintf("/spec/containers/%d/resources/%s/cpu", containerIdx, requirement),
 		Value:     valueToSet,
 	}
+}
+
+type containerNameMatcher string
+
+func (m containerNameMatcher) Matches(x any) bool {
+	if c, ok := x.(*corev1.Container); ok && c != nil {
+		return c.Name == string(m)
+	}
+	return false
+}
+
+func (m containerNameMatcher) String() string {
+	return "container with name " + string(m)
 }

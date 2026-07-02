@@ -25,9 +25,15 @@ import (
 // +kubebuilder:validation:Enum=Seconds;Minutes
 type FixedDurationPolicyUnit string
 
+// MatchContainersType defines the type of the match containers rule
+// +kubebuilder:validation:Enum=ExactName;RegexName
+type MatchContainersType string
+
 const (
-	FixedDurationPolicyUnitSec FixedDurationPolicyUnit = "Seconds"
-	FixedDurationPolicyUnitMin FixedDurationPolicyUnit = "Minutes"
+	FixedDurationPolicyUnitSec   FixedDurationPolicyUnit = "Seconds"
+	FixedDurationPolicyUnitMin   FixedDurationPolicyUnit = "Minutes"
+	MatchContainersTypeExactName MatchContainersType     = "ExactName"
+	MatchContainersTypeRegexName MatchContainersType     = "RegexName"
 )
 
 // FixedDurationPolicy defines the fixed time duration policy
@@ -81,12 +87,28 @@ type PercentageIncrease struct {
 	Value int64 `json:"value,omitempty"`
 }
 
+// MatchContainers specifies container matching rules
+type MatchContainers struct {
+	// Type of the match containers rule
+	// +kubebuilder:validation:Required
+	Type MatchContainersType `json:"type,omitempty"`
+	// Value of the match containers rule
+	// +kubebuilder:validation:Required
+	Value string `json:"value,omitempty"`
+}
+
 // ContainerPolicy defines the policy used to determine the target
 // resources for a container
 type ContainerPolicy struct {
-	// ContainerName specifies the name of container for a given policy
-	// +kubebuilder:validation:Required
+	// ContainerName specifies the name of container for a given policy.
+	//
+	// Deprecated: ContainerName is deprecated in v1alpha1 and will be removed in a future API version.
+	// Please use MatchContainers with Type=ExactName instead.
+	// +kubebuilder:validation:Optional
 	ContainerName string `json:"containerName,omitempty"`
+	// MatchContainers specifies container matching rules for a given policy
+	// +kubebuilder:validation:Optional
+	MatchContainers *MatchContainers `json:"matchContainers,omitempty"`
 	// PercentageIncrease specifies the CPU resource policy that increases
 	// CPU resources by the given percentage value
 	// +kubebuilder:validation:Optional

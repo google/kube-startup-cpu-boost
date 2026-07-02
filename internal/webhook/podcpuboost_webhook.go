@@ -78,7 +78,7 @@ func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boos
 	originalQosClass := computePodQOS(pod, h.podLevelResourcesEnabled)
 	annotation := bpod.NewBoostAnnotation()
 	for i, container := range pod.Spec.Containers {
-		policy, found := b.ResourcePolicy(container.Name)
+		policy, found := b.ResourcePolicy(ctx, &container)
 		if !found {
 			continue
 		}

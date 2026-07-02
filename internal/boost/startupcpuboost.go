@@ -42,7 +42,7 @@ type StartupCPUBoost interface {
 	// Namespace returns startup-cpu-boost namespace
 	Namespace() string
 	// ResourcePolicy returns the resource policy for a given container
-	ResourcePolicy(containerName string) (resource.ContainerPolicy, bool)
+	ResourcePolicy(ctx context.Context, container *corev1.Container) (resource.ContainerPolicy, bool)
 	// DurationPolicies returns configured duration policies
 	DurationPolicies() map[string]duration.Policy
 	// Pod returns a POD if tracked by startup-cpu-boost
@@ -88,6 +88,11 @@ type StartupCPUBoostStats struct {
 	TotalContainerBoosts int
 }
 
+type containerPolicyEntry struct {
+	matcher resource.ContainerMatcher
+	policy  resource.ContainerPolicy
+}
+
 // StartupCPUBoostImpl is an implementation of a StartupCPUBoost CRD
 type StartupCPUBoostImpl struct {
 	sync.RWMutex
@@ -95,7 +100,7 @@ type StartupCPUBoostImpl struct {
 	namespace        string
 	selector         labels.Selector
 	durationPolicies map[string]duration.Policy
-	resourcePolicies map[string]resource.ContainerPolicy
+	resourcePolicies []containerPolicyEntry
 	pods             map[string]*corev1.Pod
 	client           client.Client
 	stats            StartupCPUBoostStats
@@ -108,7 +113,7 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 	if err != nil {
 		return nil, err
 	}
-	resourcePolicies, err := mapResourcePolicy(boost.Spec.ResourcePolicy)
+	resourcePolicies, err := mapResourcePolicies(boost.Spec.ResourcePolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -136,9 +141,15 @@ func (b *StartupCPUBoostImpl) Namespace() string {
 }
 
 // ResourcePolicy returns the resource policy for a given container
-func (b *StartupCPUBoostImpl) ResourcePolicy(containerName string) (resource.ContainerPolicy, bool) {
-	policy, ok := b.resourcePolicies[containerName]
-	return policy, ok
+func (b *StartupCPUBoostImpl) ResourcePolicy(ctx context.Context, container *corev1.Container) (resource.ContainerPolicy, bool) {
+	b.RLock()
+	defer b.RUnlock()
+	for _, entry := range b.resourcePolicies {
+		if entry.matcher != nil && entry.matcher.Matches(ctx, container) {
+			return entry.policy, true
+		}
+	}
+	return nil, false
 }
 
 // DurationPolicies returns configured duration policies
@@ -241,7 +252,7 @@ func (b *StartupCPUBoostImpl) UpdateFromSpec(ctx context.Context, boost *autosca
 	if err != nil {
 		return err
 	}
-	resourcePolicies, err := mapResourcePolicy(boost.Spec.ResourcePolicy)
+	resourcePolicies, err := mapResourcePolicies(boost.Spec.ResourcePolicy)
 	if err != nil {
 		return err
 	}
@@ -352,12 +363,46 @@ func mapDurationPolicy(policiesSpec autoscaling.DurationPolicy) map[string]durat
 	return policies
 }
 
-// mapResourcePolicy maps the Resource Policy from the API spec to the map of policy
-// implementations with container name keys
-func mapResourcePolicy(spec autoscaling.ResourcePolicy) (map[string]resource.ContainerPolicy, error) {
+func containerPolicyMatcher(policySpec autoscaling.ContainerPolicy) resource.ContainerMatcher {
+	//lint:ignore SA1019 backwards-compatible support for deprecated ContainerName
+	if name := policySpec.ContainerName; name != "" {
+		return resource.FixedNameContainerMatcher{
+			Name: name,
+		}
+	}
+	if policySpec.MatchContainers != nil {
+		return mapMatchContainersPolicy(policySpec.MatchContainers)
+	}
+	return nil
+}
+
+func mapMatchContainersPolicy(policySpec *autoscaling.MatchContainers) resource.ContainerMatcher {
+	switch policySpec.Type {
+	case autoscaling.MatchContainersTypeExactName:
+		return resource.FixedNameContainerMatcher{
+			Name: policySpec.Value,
+		}
+	case autoscaling.MatchContainersTypeRegexName:
+		return resource.RegexNameContainerMatcher{
+			Expr: policySpec.Value,
+		}
+	default:
+		return nil
+	}
+}
+
+// mapResourcePolicies maps the Resource Policy from the API spec to a slice of container policy entries
+func mapResourcePolicies(spec autoscaling.ResourcePolicy) ([]containerPolicyEntry, error) {
 	var errs []error
-	policies := make(map[string]resource.ContainerPolicy)
+	var entries []containerPolicyEntry
 	for _, policySpec := range spec.ContainerPolicies {
+		matcher := containerPolicyMatcher(policySpec)
+		if matcher == nil {
+			errs = append(errs,
+				fmt.Errorf("container policy must specify either containerName or matchContainers"))
+			continue
+		}
+
 		var policy resource.ContainerPolicy
 		var cnt int
 		if fixedResources := policySpec.FixedResources; fixedResources != nil {
@@ -369,15 +414,26 @@ func mapResourcePolicy(spec autoscaling.ResourcePolicy) (map[string]resource.Con
 			cnt++
 		}
 		if cnt != 1 {
-			errs = append(errs, fmt.Errorf("invalid number of resource policies fo container %s; must be one", policySpec.ContainerName))
+			//lint:ignore SA1019 backwards-compatible support for deprecated ContainerName
+			name := policySpec.ContainerName
+			if name == "" && policySpec.MatchContainers != nil {
+				name = policySpec.MatchContainers.Value
+			}
+			errs = append(
+				errs,
+				fmt.Errorf("invalid number of resource policies for container %s; must be one",
+					name))
 			continue
 		}
-		policies[policySpec.ContainerName] = policy
+		entries = append(entries, containerPolicyEntry{
+			matcher: matcher,
+			policy:  policy,
+		})
 	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
-	return policies, nil
+	return entries, nil
 }
 
 // fixedPolicyToDuration maps the attributes from FixedDurationPolicy API spec to the

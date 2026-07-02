@@ -48,7 +48,10 @@ var _ = BeforeSuite(func() {
 			ResourcePolicy: autoscaling.ResourcePolicy{
 				ContainerPolicies: []autoscaling.ContainerPolicy{
 					{
-						ContainerName: "demo",
+						MatchContainers: &autoscaling.MatchContainers{
+							Type:  autoscaling.MatchContainersTypeExactName,
+							Value: "demo",
+						},
 						PercentageIncrease: &autoscaling.PercentageIncrease{
 							Value: 120,
 						},
