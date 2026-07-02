@@ -11,7 +11,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: kube-startup-cpu-boost-webhook-service
+      name: {{ include "kube-startup-cpu-boost.fullname" . }}-webhook-service
       namespace: '{{ .Release.Namespace }}'
       path: /validate-autoscaling-x-k8s-io-v1alpha1-startupcpuboost
   failurePolicy: Fail

@@ -48,6 +48,14 @@ spec:
           value: {{ quote .Values.controllerManager.manager.env.leaderElection }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
+        - name: WEBHOOK_SERVICE_NAME
+          value: {{ include "kube-startup-cpu-boost.fullname" . }}-webhook-service
+        - name: WEBHOOK_SECRET_NAME
+          value: {{ include "kube-startup-cpu-boost.fullname" . }}-webhook-secret
+        - name: MUTATING_WEBHOOK_NAME
+          value: {{ include "kube-startup-cpu-boost.fullname" . }}-mutating-webhook-configuration
+        - name: VALIDATING_WEBHOOK_NAME
+          value: {{ include "kube-startup-cpu-boost.fullname" . }}-validating-webhook-configuration
         image: {{ .Values.controllerManager.manager.image.repository }}:{{ .Values.controllerManager.manager.image.tag
           | default .Chart.AppVersion }}
         livenessProbe:
@@ -93,4 +101,4 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: kube-startup-cpu-boost-webhook-secret
+          secretName: {{ include "kube-startup-cpu-boost.fullname" . }}-webhook-secret

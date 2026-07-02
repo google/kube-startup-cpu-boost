@@ -130,7 +130,7 @@ func main() {
 	}
 
 	certsReady := make(chan struct{})
-	if err = util.ManageCerts(mgr, cfg.Namespace, certsReady); err != nil {
+	if err = util.ManageCerts(mgr, cfg, certsReady); err != nil {
 		setupLog.Error(err, "Unable to set up certificates")
 		os.Exit(1)
 	}

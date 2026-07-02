@@ -32,6 +32,10 @@ const (
 	HTTP2EnvVar                  = "HTTP2"
 	RemoveLimitsEnvVar           = "REMOVE_LIMITS"
 	ValidateFeatureEnabledEnvVar = "VALIDATE_FEATURE_ENABLED"
+	WebhookServiceNameEnvVar     = "WEBHOOK_SERVICE_NAME"
+	WebhookSecretNameEnvVar      = "WEBHOOK_SECRET_NAME"
+	MutatingWebhookNameEnvVar    = "MUTATING_WEBHOOK_NAME"
+	ValidatingWebhookNameEnvVar  = "VALIDATING_WEBHOOK_NAME"
 )
 
 type LookupEnvFunc func(key string) (string, bool)
@@ -61,6 +65,10 @@ func (p *EnvConfigProvider) LoadConfig() (*Config, error) {
 	errs = p.loadHTTP2(&config, errs)
 	errs = p.loadRemoveLimits(&config, errs)
 	errs = p.loadValidateFeatureEnabled(&config, errs)
+	p.loadWebhookServiceName(&config)
+	p.loadWebhookSecretName(&config)
+	p.loadMutatingWebhookName(&config)
+	p.loadValidatingWebhookName(&config)
 	var err error
 	if len(errs) > 0 {
 		err = errors.Join(errs...)
@@ -172,4 +180,28 @@ func (p *EnvConfigProvider) loadValidateFeatureEnabled(config *Config, curErrs [
 		}
 	}
 	return
+}
+
+func (p *EnvConfigProvider) loadWebhookServiceName(config *Config) {
+	if v, ok := p.lookupFunc(WebhookServiceNameEnvVar); ok {
+		config.WebhookServiceName = v
+	}
+}
+
+func (p *EnvConfigProvider) loadWebhookSecretName(config *Config) {
+	if v, ok := p.lookupFunc(WebhookSecretNameEnvVar); ok {
+		config.WebhookSecretName = v
+	}
+}
+
+func (p *EnvConfigProvider) loadMutatingWebhookName(config *Config) {
+	if v, ok := p.lookupFunc(MutatingWebhookNameEnvVar); ok {
+		config.MutatingWebhookName = v
+	}
+}
+
+func (p *EnvConfigProvider) loadValidatingWebhookName(config *Config) {
+	if v, ok := p.lookupFunc(ValidatingWebhookNameEnvVar); ok {
+		config.ValidatingWebhookName = v
+	}
 }
