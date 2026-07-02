@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   kube-startup-cpu-boost:
   - apiVersion: v2
+    appVersion: 0.18.0
+    created: "2026-07-02T14:45:08.37126589Z"
+    description: A Helm chart for kube-startup-cpu-boost operator
+    digest: b67a8ea3ae9b3b6d9e0c1d1aad6c93e2f6412dc8d0f7d7031a42b5bb5af53582
+    name: kube-startup-cpu-boost
+    type: application
+    urls:
+    - https://github.com/google/kube-startup-cpu-boost/releases/download/v0.18.0-chart/kube-startup-cpu-boost-0.18.0.tgz
+    version: 0.18.0
+  - apiVersion: v2
     appVersion: 0.17.1
     created: "2025-09-01T14:09:03.891063025Z"
     description: A Helm chart for kube-startup-cpu-boost operator
@@ -21,4 +31,4 @@ entries:
     urls:
     - https://github.com/google/kube-startup-cpu-boost/releases/download/v0.17.0-chart/kube-startup-cpu-boost-0.17.0.tgz
     version: 0.17.0
-generated: "2025-09-01T14:09:03.89107617Z"
+generated: "2026-07-02T14:45:08.371278704Z"
