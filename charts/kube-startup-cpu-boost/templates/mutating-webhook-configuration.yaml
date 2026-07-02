@@ -22,6 +22,11 @@ webhooks:
       operator: NotIn
       values:
       - kube-startup-cpu-boost
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - kube-system
+      - kube-node-lease
   rules:
   - apiGroups:
     - ""
