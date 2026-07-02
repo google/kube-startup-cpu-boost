@@ -59,8 +59,20 @@ var _ = Describe("Config", func() {
 		It("has valid RemoveLimits", func() {
 			Expect(cfg.RemoveLimits).To(Equal(config.RemoveLimitsDefault))
 		})
-		It("has valid RemoveLimits", func() {
+		It("has valid ValidateFeatureEnabled", func() {
 			Expect(cfg.ValidateFeatureEnabled).To(Equal(config.ValidateFeatureEnabledDefault))
+		})
+		It("has valid WebhookServiceName", func() {
+			Expect(cfg.WebhookServiceName).To(Equal(config.WebhookServiceNameDefault))
+		})
+		It("has valid WebhookSecretName", func() {
+			Expect(cfg.WebhookSecretName).To(Equal(config.WebhookSecretNameDefault))
+		})
+		It("has valid MutatingWebhookName", func() {
+			Expect(cfg.MutatingWebhookName).To(Equal(config.MutatingWebhookNameDefault))
+		})
+		It("has valid ValidatingWebhookName", func() {
+			Expect(cfg.ValidatingWebhookName).To(Equal(config.ValidatingWebhookNameDefault))
 		})
 	})
 })

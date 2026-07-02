@@ -27,6 +27,10 @@ const (
 	HTTP2Default                  = false
 	RemoveLimitsDefault           = true
 	ValidateFeatureEnabledDefault = true
+	WebhookServiceNameDefault     = "kube-startup-cpu-boost-webhook-service"
+	WebhookSecretNameDefault      = "kube-startup-cpu-boost-webhook-secret"
+	MutatingWebhookNameDefault    = "kube-startup-cpu-boost-mutating-webhook-configuration"
+	ValidatingWebhookNameDefault  = "kube-startup-cpu-boost-validating-webhook-configuration"
 )
 
 // ConfigProvider provides the Kube Startup CPU Boost configuration
@@ -61,6 +65,14 @@ type Config struct {
 	// ValidateFeatureEnabled determines if InPlacePodVerticalScaling feature state
 	// is validated at operator's start
 	ValidateFeatureEnabled bool
+	// WebhookServiceName is the name of the webhook service
+	WebhookServiceName string
+	// WebhookSecretName is the name of the webhook TLS secret
+	WebhookSecretName string
+	// MutatingWebhookName is the name of the MutatingWebhookConfiguration
+	MutatingWebhookName string
+	// ValidatingWebhookName is the name of the ValidatingWebhookConfiguration
+	ValidatingWebhookName string
 }
 
 // LoadDefaults loads the default configuration values
@@ -76,4 +88,8 @@ func (c *Config) LoadDefaults() {
 	c.HTTP2 = HTTP2Default
 	c.RemoveLimits = RemoveLimitsDefault
 	c.ValidateFeatureEnabled = ValidateFeatureEnabledDefault
+	c.WebhookServiceName = WebhookServiceNameDefault
+	c.WebhookSecretName = WebhookSecretNameDefault
+	c.MutatingWebhookName = MutatingWebhookNameDefault
+	c.ValidatingWebhookName = ValidatingWebhookNameDefault
 }

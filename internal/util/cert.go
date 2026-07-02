@@ -17,19 +17,16 @@ package util
 import (
 	"fmt"
 
+	"github.com/google/kube-startup-cpu-boost/internal/config"
 	cert "github.com/open-policy-agent/cert-controller/pkg/rotator"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
-	certDir                    = "/tmp/k8s-webhook-server/serving-certs"
-	boostMutatingWebHookName   = "kube-startup-cpu-boost-mutating-webhook-configuration"
-	boostValidatingWebHookName = "kube-startup-cpu-boost-validating-webhook-configuration"
-	caName                     = "kube-startup-cpu-boost-ca"
-	caOrganization             = "kube-startup-cpu-boost"
-	webhookServiceName         = "kube-startup-cpu-boost-webhook-service"
-	webhookSecretName          = "kube-startup-cpu-boost-webhook-secret"
+	certDir        = "/tmp/k8s-webhook-server/serving-certs"
+	caName         = "kube-startup-cpu-boost-ca"
+	caOrganization = "kube-startup-cpu-boost"
 )
 
 //+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=mutatingwebhookconfigurations,verbs=list;watch
@@ -37,12 +34,12 @@ const (
 //+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=mutatingwebhookconfigurations,resourceNames=kube-startup-cpu-boost-mutating-webhook-configuration,verbs=get;update
 //+kubebuilder:rbac:groups="admissionregistration.k8s.io",resources=validatingwebhookconfigurations,resourceNames=kube-startup-cpu-boost-validating-webhook-configuration,verbs=get;update
 
-func ManageCerts(mgr ctrl.Manager, namespace string, setupFinished chan struct{}) error {
-	dnsName := fmt.Sprintf("%s.%s.svc", webhookServiceName, namespace)
+func ManageCerts(mgr ctrl.Manager, cfg *config.Config, setupFinished chan struct{}) error {
+	dnsName := fmt.Sprintf("%s.%s.svc", cfg.WebhookServiceName, cfg.Namespace)
 	return cert.AddRotator(mgr, &cert.CertRotator{
 		SecretKey: types.NamespacedName{
-			Namespace: namespace,
-			Name:      webhookSecretName,
+			Namespace: cfg.Namespace,
+			Name:      cfg.WebhookSecretName,
 		},
 		CertDir:        certDir,
 		CAName:         caName,
@@ -51,10 +48,10 @@ func ManageCerts(mgr ctrl.Manager, namespace string, setupFinished chan struct{}
 		IsReady:        setupFinished,
 		Webhooks: []cert.WebhookInfo{{
 			Type: cert.Mutating,
-			Name: boostMutatingWebHookName,
+			Name: cfg.MutatingWebhookName,
 		}, {
 			Type: cert.Validating,
-			Name: boostValidatingWebHookName,
+			Name: cfg.ValidatingWebhookName,
 		}},
 		RequireLeaderElection: false,
 	})

@@ -28,7 +28,7 @@ rules:
 - apiGroups:
   - admissionregistration.k8s.io
   resourceNames:
-  - kube-startup-cpu-boost-mutating-webhook-configuration
+  - {{ include "kube-startup-cpu-boost.fullname" . }}-mutating-webhook-configuration
   resources:
   - mutatingwebhookconfigurations
   verbs:
@@ -45,7 +45,7 @@ rules:
 - apiGroups:
   - admissionregistration.k8s.io
   resourceNames:
-  - kube-startup-cpu-boost-validating-webhook-configuration
+  - {{ include "kube-startup-cpu-boost.fullname" . }}-validating-webhook-configuration
   resources:
   - validatingwebhookconfigurations
   verbs:

@@ -147,5 +147,37 @@ var _ = Describe("EnvProvider", func() {
 				Expect(cfg.ValidateFeatureEnabled).To(BeFalse())
 			})
 		})
+		When("webhookServiceName variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.WebhookServiceNameEnvVar] = "custom-webhook-service"
+			})
+			It("has valid WebhookServiceName", func() {
+				Expect(cfg.WebhookServiceName).To(Equal("custom-webhook-service"))
+			})
+		})
+		When("webhookSecretName variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.WebhookSecretNameEnvVar] = "custom-webhook-secret"
+			})
+			It("has valid WebhookSecretName", func() {
+				Expect(cfg.WebhookSecretName).To(Equal("custom-webhook-secret"))
+			})
+		})
+		When("mutatingWebhookName variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.MutatingWebhookNameEnvVar] = "custom-mutating-webhook"
+			})
+			It("has valid MutatingWebhookName", func() {
+				Expect(cfg.MutatingWebhookName).To(Equal("custom-mutating-webhook"))
+			})
+		})
+		When("validatingWebhookName variable is set", func() {
+			BeforeEach(func() {
+				lookupFuncMap[config.ValidatingWebhookNameEnvVar] = "custom-validating-webhook"
+			})
+			It("has valid ValidatingWebhookName", func() {
+				Expect(cfg.ValidatingWebhookName).To(Equal("custom-validating-webhook"))
+			})
+		})
 	})
 })

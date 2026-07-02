@@ -82,7 +82,7 @@ Helm installation uses self-hosted Helm chart repo [kube-startup-cpu-boost](http
 ```sh
 helm repo add kube-startup-cpu-boost https://google.github.io/kube-startup-cpu-boost
 helm repo update
-helm install -n kube-startup-cpu-boost-system kube-startup-cpu-boost kube-startup-cpu-boost/kube-startup-cpu-boost
+helm install --create-namespace -n kube-startup-cpu-boost-system kube-startup-cpu-boost kube-startup-cpu-boost/kube-startup-cpu-boost
 ```
 
 ### Installation on GKE cluster
