@@ -16,6 +16,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -110,7 +111,7 @@ func (r *StartupCPUBoostReconciler) SetupWithManager(mgr ctrl.Manager,
 	if err != nil {
 		return err
 	}
-	r.LegacyRevertMode = shouldUseLegacyRevertMode(serverVersion)
+	r.LegacyRevertMode = ShouldUseLegacyRevertMode(serverVersion)
 	ctrl.Log.WithName("boost-controller-setup").WithValues("legacyRevertMode", r.LegacyRevertMode).
 		V(5).Info("setting legacy revert mode")
 	return ctrl.NewControllerManagedBy(mgr).
@@ -130,12 +131,14 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost create event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	boost, err := boost.NewStartupCPUBoost(r.Client, boostObj, r.LegacyRevertMode)
+	cpuBoost, err := boost.NewStartupCPUBoost(r.Client, boostObj, r.LegacyRevertMode)
 	if err != nil {
 		log.Error(err, "boost creation error")
 	}
-	if err := r.Manager.AddRegularCPUBoost(ctx, boost); err != nil {
-		log.Error(err, "boost registration error")
+	if err := r.Manager.AddRegularCPUBoost(ctx, cpuBoost); err != nil {
+		if !errors.Is(err, boost.ErrStartupCPUBoostAlreadyExists) {
+			log.Error(err, "boost registration error")
+		}
 	}
 	return true
 }
@@ -172,9 +175,9 @@ func (r *StartupCPUBoostReconciler) Generic(e event.GenericEvent) bool {
 	return true
 }
 
-// shouldUseLegacyRevertMode determines if legacy resource revert mode should be used
+// ShouldUseLegacyRevertMode determines if legacy resource revert mode should be used
 // basing on server version
-func shouldUseLegacyRevertMode(serverVersion string) (legacyMode bool) {
+func ShouldUseLegacyRevertMode(serverVersion string) (legacyMode bool) {
 	return version.CompareKubeAwareVersionStrings(WantedServerVersionForNewRevert,
 		serverVersion) < 0
 }

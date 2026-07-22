@@ -136,6 +136,17 @@ func main() {
 	}
 
 	boostMgr := boost.NewManager(mgr.GetClient())
+	crdSync := boost.NewCRDSynchronizer(boost.CRDSynchronizerConfig{
+		Client:           mgr.GetClient(),
+		Cache:            mgr.GetCache(),
+		Manager:          boostMgr,
+		LegacyRevertMode: controller.ShouldUseLegacyRevertMode(versionInfo.GitVersion),
+		Elected:          mgr.Elected(),
+	})
+	if err := mgr.Add(crdSync); err != nil {
+		setupLog.Error(err, "unable to add CRD synchronizer to controller-runtime manager")
+		os.Exit(1)
+	}
 	controllersReady := make(chan struct{})
 	go setupControllers(mgr, boostMgr, cfg, podLevelResourcesEnabled, versionInfo.GitVersion, certsReady,
 		controllersReady)
@@ -143,7 +154,7 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := setupReadyzCheck(mgr, boostMgr, controllersReady); err != nil {
+	if err := setupReadyzCheck(mgr, crdSync, controllersReady); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
@@ -186,7 +197,7 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 	//+kubebuilder:scaffold:builder
 }
 
-func setupReadyzCheck(mgr ctrl.Manager, boostMgr boost.Manager,
+func setupReadyzCheck(mgr ctrl.Manager, crdSync boost.CRDSynchronizer,
 	controllersReadyChan chan struct{}) error {
 	if err := mgr.AddReadyzCheck("readyz", func(req *http.Request) error {
 		controllersReady := false
@@ -198,8 +209,8 @@ func setupReadyzCheck(mgr ctrl.Manager, boostMgr boost.Manager,
 		if !controllersReady {
 			return fmt.Errorf("controllers are not ready")
 		}
-		if !boostMgr.IsRunning(req.Context()) {
-			return fmt.Errorf("boost manager is not running")
+		if !crdSync.HasSynced() {
+			return fmt.Errorf("crd synchronizer cache is not synced yet")
 		}
 		return nil
 	}); err != nil {

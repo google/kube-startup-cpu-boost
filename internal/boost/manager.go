@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	errStartupCPUBoostAlreadyExists = errors.New("startupCPUBoost already exists")
+	ErrStartupCPUBoostAlreadyExists = errors.New("startupCPUBoost already exists")
 )
 
 const (
@@ -148,7 +148,7 @@ func (m *managerImpl) AddRegularCPUBoost(ctx context.Context, boost StartupCPUBo
 	defer m.Unlock()
 	log := m.log.WithValues("boost", boost.Name(), "namespace", boost.Namespace())
 	if _, ok := m.regularBoosts.Get(boost.Name(), boost.Namespace()); ok {
-		return errStartupCPUBoostAlreadyExists
+		return ErrStartupCPUBoostAlreadyExists
 	}
 	defer log.Info("regular boost registered successfully")
 	defer m.postProcessNewBoost(ctx, boost)
