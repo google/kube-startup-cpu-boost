@@ -1,6 +1,15 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.19.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.18.0...v0.19.0) (2026-07-22)
+
+
+### Features
+
+* **core:** crd caching for multi-replica setup ([#159](https://github.com/google/kube-startup-cpu-boost/issues/159)) ([53b61d1](https://github.com/google/kube-startup-cpu-boost/commit/53b61d1ad69cdb771df1bde8d9c31c4854042eb7))
+* **helm:** added pod disruption budget ([ce37660](https://github.com/google/kube-startup-cpu-boost/commit/ce376606ca21ab53ec3ad5fedb3bfdf2cafb68c5))
+* **kustomize:** added HA patch and PDB ([cad24af](https://github.com/google/kube-startup-cpu-boost/commit/cad24af485c107f920e9d4831bbd91dab18377ce))
+
 ## [0.18.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.17.1...v0.18.0) (2026-07-02)
 
 
