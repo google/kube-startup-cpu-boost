@@ -1,0 +1,23 @@
+{{- if .Values.controllerManager.pdb.create }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kube-startup-cpu-boost-controller-manager
+  labels:
+    app.kubernetes.io/component: manager
+    app.kubernetes.io/created-by: kube-startup-cpu-boost
+    app.kubernetes.io/part-of: kube-startup-cpu-boost
+    control-plane: controller-manager
+  {{- include "kube-startup-cpu-boost.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.controllerManager.pdb.minAvailable }}
+  minAvailable: {{ .Values.controllerManager.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.controllerManager.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.controllerManager.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+    {{- include "kube-startup-cpu-boost.selectorLabels" . | nindent 6 }}
+{{- end }}

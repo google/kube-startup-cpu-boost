@@ -24,6 +24,10 @@ controllerManager:
   podSecurityContext:
     runAsNonRoot: true
   replicas: 1
+  pdb:
+    create: false
+    minAvailable: 1
+    # maxUnavailable: 1
   tolerations: []
   serviceAccount:
     annotations: {}
