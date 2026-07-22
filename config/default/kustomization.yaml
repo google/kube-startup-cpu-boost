@@ -21,14 +21,17 @@ resources:
 - ../manager
 - ../internalcert
 - ../webhook
-
 # [PROMETHEUS] To enable prometheus metrics collection, uncomment the following line
-# NOTE: check resources inside prometheus folder to select desired collection method
+# NOTE: check resources inside prometheus folder to select desired collection method.
 #- ../prometheus
+
+components:
+# [HA] Uncomment below to enable multi-replica HA mode.
+# NOTE: check resources inside ha folder and adjust accordingly.
+# - ../ha
 
 patches:
 - path: manager_config_patch.yaml
 - path: manager_webhook_patch.yaml
-
 # Uncomment below for local development
 #- path: manager_config_dev_patch.yaml
