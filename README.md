@@ -103,6 +103,32 @@ gcloud container clusters create poc \
     --region europe-central2
 ```
 
+### Running HA setup
+
+Kube Startup CPU Boost supports multi-replica High Availability (HA) deployments. Running an HA
+setup requires leader election to be enabled (`LEADER_ELECTION=true`), which is
+**enabled by default**.
+
+#### Helm
+
+When installing via Helm, you can scale replicas and enable a `PodDisruptionBudget` to ensure at
+least one replica remains available during cluster maintenance:
+
+```sh
+helm install \
+  --create-namespace -n kube-startup-cpu-boost-system \
+  kube-startup-cpu-boost kube-startup-cpu-boost/kube-startup-cpu-boost \
+  --set controllerManager.replicas=2 \
+  --set controllerManager.pdb.create=true \
+  --set controllerManager.pdb.minAvailable=1
+```
+
+#### Kustomize
+
+When installing via Kustomize from source (`config/default`), uncomment the HA component in
+`config/default/kustomization.yaml`. This will increase number of replicas and
+add `PodDisruptionBudget`.
+
 ## Usage
 
 1. Create a `StartupCPUBoost` object in your workload's namespace
