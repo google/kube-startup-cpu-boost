@@ -503,6 +503,25 @@ var _ = Describe("Manager", func() {
 				})
 				itShouldRevertBoost()
 			})
+			When("The startup-cpu-boost was created with both fixed and pod condition duration policies", func() {
+				BeforeEach(func() {
+					spec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
+						Unit:  autoscaling.FixedDurationPolicyUnitSec,
+						Value: durationSeconds,
+					}
+					spec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionTrue,
+					}
+				})
+				JustBeforeEach(func() {
+					c <- time.Now()
+					time.Sleep(500 * time.Millisecond)
+					cancel()
+					<-done
+				})
+				itShouldRevertBoost()
+			})
 		})
 	})
 })

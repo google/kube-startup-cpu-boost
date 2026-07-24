@@ -63,14 +63,14 @@ var _ = Describe("StartupCPUBoost webhook", func() {
 					},
 				}
 			})
-			It("errors", func() {
+			It("does not error", func() {
 				By("validating create event")
 				_, err = w.ValidateCreate(context.TODO(), &boost)
-				Expect(err).To(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
 
 				By("validating update event")
 				_, err = w.ValidateUpdate(context.TODO(), nil, &boost)
-				Expect(err).To(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 		When("Startup CPU Boost has one duration policy", func() {
