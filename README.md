@@ -266,6 +266,9 @@ Define a Pod condition; the resource boost effect will remain active until the c
        status: "True" 
   ```
 
+> **Note:** You can define multiple duration policies in a single boost (i.e. both `podCondition`
+and `fixedDuration`). When combined, the boost is removed as soon as **either** condition is met.
+
 ## Configuration
 
 The Kube Startup CPU Boost operator can be configured with environment variables.
