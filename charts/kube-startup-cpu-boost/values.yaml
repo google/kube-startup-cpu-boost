@@ -21,6 +21,20 @@ controllerManager:
         cpu: 10m
         memory: 64Mi
   nodeSelector: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
+            - arm64
+          - key: kubernetes.io/os
+            operator: In
+            values:
+            - linux
   podSecurityContext:
     runAsNonRoot: true
   replicas: 1
@@ -29,6 +43,7 @@ controllerManager:
     minAvailable: 1
     # maxUnavailable: 1
   tolerations: []
+  topologySpreadConstraints: []
   serviceAccount:
     annotations: {}
 kubernetesClusterDomain: cluster.local
