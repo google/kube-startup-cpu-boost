@@ -40,7 +40,7 @@ jobs:
           config: '.markdownlint.yml'
           args: '**/*.md'
       - name: Markdown links
-        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        uses: tcort/github-action-markdown-link-check@v1
         with:
           config-file: '.mlc_config.json'
           base-branch: main
