@@ -22,20 +22,10 @@ spec:
       annotations:
         kubectl.kubernetes.io/default-container: manager
     spec:
+      {{- with .Values.controllerManager.affinity }}
       affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/arch
-                operator: In
-                values:
-                - amd64
-                - arm64
-              - key: kubernetes.io/os
-                operator: In
-                values:
-                - linux
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - command:
         - /manager
@@ -95,6 +85,10 @@ spec:
       {{- end }}
       {{- with .Values.controllerManager.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controllerManager.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: kube-startup-cpu-boost-controller-manager
