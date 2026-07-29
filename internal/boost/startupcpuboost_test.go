@@ -35,21 +35,27 @@ import (
 
 var _ = Describe("StartupCPUBoost", func() {
 	var (
-		spec             *autoscaling.StartupCPUBoost
-		boost            cpuboost.StartupCPUBoost
-		legacyRevertMode bool
-		err              error
-		pod              *corev1.Pod
+		spec       *autoscaling.StartupCPUBoost
+		config     *cpuboost.StartupCPUBoostConfig
+		boost      cpuboost.StartupCPUBoost
+		err        error
+		pod        *corev1.Pod
+		mockCtrl   *gomock.Controller
+		mockClient *mock.MockClient
 	)
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		mockClient = mock.NewMockClient(mockCtrl)
 		pod = podTemplate.DeepCopy()
 		spec = specTemplate.DeepCopy()
-		legacyRevertMode = false
+		config = &cpuboost.StartupCPUBoostConfig{
+			Client: mockClient,
+		}
 		metrics.ClearBoostMetrics(spec.Namespace, spec.Name)
 	})
 	Describe("Instantiates from the API specification", func() {
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
+			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 		})
 		It("does not error", func() {
 			Expect(err).NotTo(HaveOccurred())
@@ -229,16 +235,8 @@ var _ = Describe("StartupCPUBoost", func() {
 		})
 	})
 	Describe("Upserts a POD", func() {
-		var (
-			mockCtrl   *gomock.Controller
-			mockClient *mock.MockClient
-		)
-		BeforeEach(func() {
-			mockCtrl = gomock.NewController(GinkgoT())
-			mockClient = mock.NewMockClient(mockCtrl)
-		})
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(mockClient, spec, legacyRevertMode)
+			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		When("POD does not exist", func() {
@@ -326,7 +324,7 @@ var _ = Describe("StartupCPUBoost", func() {
 					})
 					When("legacy revert mode is used", func() {
 						BeforeEach(func() {
-							legacyRevertMode = true
+							config.LegacyRevertMode = true
 							mockClient.EXPECT().
 								Update(gomock.Any(), gomock.Eq(pod)).
 								Return(nil)
@@ -388,7 +386,7 @@ var _ = Describe("StartupCPUBoost", func() {
 	})
 	Describe("Deletes a pod", func() {
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
+			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		When("Pod exists", func() {
@@ -433,7 +431,7 @@ var _ = Describe("StartupCPUBoost", func() {
 			updatedSpec = spec.DeepCopy()
 		})
 		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(nil, spec, legacyRevertMode)
+			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 			Expect(err).ShouldNot(HaveOccurred())
 			err = boost.UpdateFromSpec(context.TODO(), updatedSpec)
 		})

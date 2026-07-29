@@ -58,6 +58,20 @@ func (m *MockStartupCPUBoost) EXPECT() *MockStartupCPUBoostMockRecorder {
 	return m.recorder
 }
 
+// BoostResources mocks base method.
+func (m *MockStartupCPUBoost) BoostResources(ctx context.Context, pod *v1.Pod) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BoostResources", ctx, pod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BoostResources indicates an expected call of BoostResources.
+func (mr *MockStartupCPUBoostMockRecorder) BoostResources(ctx, pod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BoostResources", reflect.TypeOf((*MockStartupCPUBoost)(nil).BoostResources), ctx, pod)
+}
+
 // DeletePod mocks base method.
 func (m *MockStartupCPUBoost) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	m.ctrl.T.Helper()
