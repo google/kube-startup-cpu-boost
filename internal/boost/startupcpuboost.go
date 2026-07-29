@@ -53,6 +53,8 @@ type StartupCPUBoost interface {
 	DeletePod(ctx context.Context, pod *corev1.Pod) error
 	// ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
 	ValidatePolicy(ctx context.Context, name string) []*corev1.Pod
+	// BoostResources boosts resources resorces of a running POD (i.e. on container restart)
+	BoostResources(ctx context.Context, pod *corev1.Pod) error
 	// RevertResources updates POD's container resource requests and limits to their original
 	// values using the data from StartupCPUBoost annotation
 	RevertResources(ctx context.Context, pod *corev1.Pod) error
@@ -69,6 +71,12 @@ const (
 	StartupCPUBoostStatsPodUpdateEvent = 2
 	StartupCPUBoostStatsPodDeleteEvent = 3
 	ResizeSubResourceName              = "resize"
+)
+
+var (
+	ErrNilBoost  = errors.New("boost spec cannot be nil")
+	ErrNilConfig = errors.New("config cannot be nil")
+	ErrNilClient = errors.New("k8s client cannot be nil")
 )
 
 type StartupCPUBoostStatsEventType int32
@@ -105,10 +113,38 @@ type StartupCPUBoostImpl struct {
 	client           client.Client
 	stats            StartupCPUBoostStats
 	legacyRevertMode bool
+	boostOnRestart   bool
+}
+
+// StartupCPUBoostConfig holds configuration for a boost
+type StartupCPUBoostConfig struct {
+	// Client is a k8s client
+	Client client.Client
+	// LegacyRevertMode controls if pre k8s resource reversion mode should be used
+	LegacyRevertMode bool
+	// BoostOnRestart controls if POD resources should be boosted on container restarts
+	BoostOnRestart bool
+}
+
+// Validate validates the configuration
+func (c *StartupCPUBoostConfig) Validate() error {
+	if c == nil {
+		return ErrNilConfig
+	}
+	if c.Client == nil {
+		return ErrNilClient
+	}
+	return nil
 }
 
 // NewStartupCPUBoost constructs startup-cpu-boost implementation from a given API spec
-func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost, legacyRevertMode bool) (StartupCPUBoost, error) {
+func NewStartupCPUBoost(boost *autoscaling.StartupCPUBoost, cfg *StartupCPUBoostConfig) (StartupCPUBoost, error) {
+	if boost == nil {
+		return nil, ErrNilBoost
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	selector, err := metav1.LabelSelectorAsSelector(&boost.Selector)
 	if err != nil {
 		return nil, err
@@ -124,9 +160,10 @@ func NewStartupCPUBoost(client client.Client, boost *autoscaling.StartupCPUBoost
 		durationPolicies: mapDurationPolicy(boost.Spec.DurationPolicy),
 		resourcePolicies: resourcePolicies,
 		pods:             make(map[string]*corev1.Pod),
-		client:           client,
+		client:           cfg.Client,
 		stats:            StartupCPUBoostStats{},
-		legacyRevertMode: legacyRevertMode,
+		legacyRevertMode: cfg.LegacyRevertMode,
+		boostOnRestart:   cfg.BoostOnRestart,
 	}, nil
 }
 
@@ -222,6 +259,11 @@ func (b *StartupCPUBoostImpl) ValidatePolicy(ctx context.Context, name string) (
 		}
 	}
 	return
+}
+
+// BoostResources boosts resources of a running POD (i.e. on container restart)
+func (b *StartupCPUBoostImpl) BoostResources(ctx context.Context, pod *corev1.Pod) error {
+	panic("unimplemented")
 }
 
 // RevertResources updates POD's container resource requests and limits to their original

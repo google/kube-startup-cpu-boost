@@ -128,7 +128,11 @@ func (c *crdSynchronizerImpl) onAdd(obj any) {
 	}
 	log := c.log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost add from informer")
-	boost, err := NewStartupCPUBoost(c.client, boostObj, c.legacyRevertMode)
+	boostCfg := &StartupCPUBoostConfig{
+		Client:           c.client,
+		LegacyRevertMode: c.legacyRevertMode,
+	}
+	boost, err := NewStartupCPUBoost(boostObj, boostCfg)
 	if err != nil {
 		log.Error(err, "boost creation error")
 		return

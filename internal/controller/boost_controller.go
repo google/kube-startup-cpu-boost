@@ -131,7 +131,11 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost create event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
-	cpuBoost, err := boost.NewStartupCPUBoost(r.Client, boostObj, r.LegacyRevertMode)
+	bostConfig := &boost.StartupCPUBoostConfig{
+		Client:           r.Client,
+		LegacyRevertMode: r.LegacyRevertMode,
+	}
+	cpuBoost, err := boost.NewStartupCPUBoost(boostObj, bostConfig)
 	if err != nil {
 		log.Error(err, "boost creation error")
 	}
