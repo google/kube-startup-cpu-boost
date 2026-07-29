@@ -27,20 +27,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: 3.9
       - name: Check license headers
         run: python3 scripts/license_header_check.py $GITHUB_WORKSPACE
       - name: Markdown linter
-        uses: avto-dev/markdown-lint@v1
+        uses: avto-dev/markdown-lint@04d43ee9191307b50935a753da3b775ab695eceb # v1.5.0
         with:
           config: '.markdownlint.yml'
           args: '**/*.md'
       - name: Markdown links
-        uses: tcort/github-action-markdown-link-check@v1
+        uses: tcort/github-action-markdown-link-check@e047c5b37f24ab722bbef1a27b6fab7f96bc4068 # v1.1.3
         with:
           config-file: '.mlc_config.json'
           base-branch: main
