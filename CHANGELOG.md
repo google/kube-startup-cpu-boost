@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.20.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.19.0...v0.20.0) (2026-07-29)
+
+
+### Features
+
+* **core:** allow multiple duration policies ([#164](https://github.com/google/kube-startup-cpu-boost/issues/164)) ([b8c3dc7](https://github.com/google/kube-startup-cpu-boost/commit/b8c3dc7740f3fbaaee06fedc8c6256ad84bc0819))
+* **helm:** added affinity and topologySpeadConstraints ([#162](https://github.com/google/kube-startup-cpu-boost/issues/162)) ([81aa3dc](https://github.com/google/kube-startup-cpu-boost/commit/81aa3dc69c09bf03dc01a39d7da6cce172d598e0))
+
 ## [0.19.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.18.0...v0.19.0) (2026-07-22)
 
 
