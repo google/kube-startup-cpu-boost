@@ -18,7 +18,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	"github.com/google/kube-startup-cpu-boost/internal/boost/pod"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/controller"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
@@ -57,9 +57,9 @@ var _ = Describe("BoostPodHandler", func() {
 			createEvent = event.CreateEvent{
 				Object: pod,
 			}
-			mgrMockCall = mgrMock.EXPECT().UpsertPod(
+			mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
 				gomock.Any(),
-				gomock.Eq(pod),
+				gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod}),
 			)
 		})
 		JustBeforeEach(func() {
@@ -98,9 +98,9 @@ var _ = Describe("BoostPodHandler", func() {
 			deleteEvent = event.DeleteEvent{
 				Object: pod,
 			}
-			mgrMockCall = mgrMock.EXPECT().DeletePod(
+			mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
 				gomock.Any(),
-				gomock.Eq(pod),
+				gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypePodDeleted, Pod: pod}),
 			)
 		})
 		JustBeforeEach(func() {
@@ -151,9 +151,9 @@ var _ = Describe("BoostPodHandler", func() {
 		})
 		When("Pod status conditions has not change", func() {
 			BeforeEach(func() {
-				mgrMockCall = mgrMock.EXPECT().UpsertPod(
+				mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
 					gomock.Any(),
-					gomock.Eq(newPod),
+					gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: newPod}),
 				).Times(0)
 			})
 			It("does not send reconciliation request", func() {
@@ -174,9 +174,9 @@ var _ = Describe("BoostPodHandler", func() {
 						Status: corev1.ConditionTrue,
 					},
 				}
-				mgrMockCall = mgrMock.EXPECT().UpsertPod(
+				mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
 					gomock.Any(),
-					gomock.Eq(newPod),
+					gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: newPod}),
 				)
 			})
 			When("There is no boost matching the POD", func() {
@@ -220,7 +220,7 @@ var _ = Describe("BoostPodHandler", func() {
 				m = &selector.MatchExpressions[0]
 			})
 			It("has a valid key", func() {
-				Expect(m.Key).To(Equal(pod.BoostLabelKey))
+				Expect(m.Key).To(Equal(bpod.BoostLabelKey))
 			})
 			It("has empty values list", func() {
 				Expect(m.Values).To(HaveLen(0))

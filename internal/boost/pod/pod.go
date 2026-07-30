@@ -30,12 +30,16 @@ import (
 )
 
 const (
-	BoostLabelKey      = "autoscaling.x-k8s.io/startup-cpu-boost"
-	BoostAnnotationKey = "autoscaling.x-k8s.io/startup-cpu-boost"
-	EmptyPatchString   = "{}"
+	BoostLabelKey        = "autoscaling.x-k8s.io/startup-cpu-boost"
+	BoostAnnotationKey   = "autoscaling.x-k8s.io/startup-cpu-boost"
+	BoostStateActive     = "Active"
+	BoostStateReverted   = "Reverted"
+	BoostStateInfeasible = "Infeasible"
+	EmptyPatchString     = "{}"
 )
 
 type BoostPodAnnotation struct {
+	State           string            `json:"state,omitempty"`
 	BoostTimestamp  time.Time         `json:"timestamp,omitempty"`
 	InitCPURequests map[string]string `json:"initCPURequests,omitempty"`
 	InitCPULimits   map[string]string `json:"initCPULimits,omitempty"`
@@ -45,6 +49,7 @@ type mutatePodFunc func(pod *corev1.Pod) error
 
 func NewBoostAnnotation() *BoostPodAnnotation {
 	return &BoostPodAnnotation{
+		State:           BoostStateActive,
 		BoostTimestamp:  time.Now(),
 		InitCPURequests: make(map[string]string),
 		InitCPULimits:   make(map[string]string),
@@ -81,6 +86,25 @@ func RevertResourceBoost(pod *corev1.Pod) error {
 func revertBoostLabels(pod *corev1.Pod) error {
 	delete(pod.Labels, BoostLabelKey)
 	delete(pod.Annotations, BoostAnnotationKey)
+	return nil
+}
+
+// RevertResourceBoostWithBoostOnRestart reverts the boost resources, labels and annotations
+// when boost on pod restart feature is enabled.
+func RevertResourceBoostWithBoostOnRestart(pod *corev1.Pod) error {
+	if err := revertBoostResources(pod); err != nil {
+		return err
+	}
+	return revertBoostLabelsWithBoostOnRestart(pod)
+}
+
+func revertBoostLabelsWithBoostOnRestart(pod *corev1.Pod) error {
+	boostAnnotation, err := BoostAnnotationFromPod(pod)
+	if err != nil {
+		return err
+	}
+	boostAnnotation.State = BoostStateReverted
+	pod.Annotations[BoostAnnotationKey] = boostAnnotation.ToJSON()
 	return nil
 }
 
@@ -128,7 +152,6 @@ func buildPodPatch(pod *corev1.Pod, mutatePodFunc mutatePodFunc) ([]byte, error)
 		return nil, err
 	}
 	return jsonpatch.CreateMergePatch(podJSON, updatedPodJSON)
-
 }
 
 func NewRevertBoostLabelsPatch() client.Patch {
@@ -148,6 +171,25 @@ func (p *revertBoostLabelsPatch) Data(obj client.Object) ([]byte, error) {
 		return nil, errors.New("revertBoostLabelsPatch applies only on *corev1.Pod objects")
 	}
 	return buildPodPatch(pod, revertBoostLabels)
+}
+
+func NewRevertBoostLabelsWithBoostOnRestartPatch() client.Patch {
+	return &revertBoostLabelsWithBoostOnRestartPatch{}
+}
+
+type revertBoostLabelsWithBoostOnRestartPatch struct {
+}
+
+func (p *revertBoostLabelsWithBoostOnRestartPatch) Type() types.PatchType {
+	return types.MergePatchType
+}
+
+func (p *revertBoostLabelsWithBoostOnRestartPatch) Data(obj client.Object) ([]byte, error) {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil, errors.New("revertBoostLabelsPatch applies only on *corev1.Pod objects")
+	}
+	return buildPodPatch(pod, revertBoostLabelsWithBoostOnRestart)
 }
 
 func NewRevertBootsResourcesPatch() client.Patch {

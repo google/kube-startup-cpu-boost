@@ -61,7 +61,7 @@ func (h *boostPodHandler) Create(ctx context.Context, e event.CreateEvent,
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod create")
-	boost, err := h.manager.UpsertPod(ctx, pod)
+	boost, err := h.manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})
 	if err != nil {
 		log.Error(err, "failed to handle pod create")
 		return
@@ -84,7 +84,7 @@ func (h *boostPodHandler) Delete(ctx context.Context, e event.DeleteEvent,
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod delete")
-	boost, err := h.manager.DeletePod(ctx, pod)
+	boost, err := h.manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodDeleted, Pod: pod})
 	if err != nil {
 		log.Error(err, "failed to handle pod delete")
 		return
@@ -112,7 +112,7 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent,
 		log.V(5).Info("pod update skipped: conditions did not change")
 		return
 	}
-	boost, err := h.manager.UpsertPod(ctx, pod)
+	boost, err := h.manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: pod})
 	if err != nil {
 		log.Error(err, "failed to handle pod update")
 		return
