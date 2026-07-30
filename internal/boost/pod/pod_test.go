@@ -33,6 +33,7 @@ var _ = Describe("Pod", func() {
 
 	BeforeEach(func() {
 		annot = &bpod.BoostPodAnnotation{
+			State:          bpod.BoostStateActive,
 			BoostTimestamp: time.Now(),
 			InitCPURequests: map[string]string{
 				containerOneName: "500m",
@@ -48,97 +49,129 @@ var _ = Describe("Pod", func() {
 			bpod.BoostAnnotationKey: annot.ToJSON(),
 		}
 	})
-
-	Describe("Reverts the POD container resources to original values", func() {
-		JustBeforeEach(func() {
-			err = bpod.RevertResourceBoost(pod)
-		})
-		When("POD is missing startup-cpu-boost annotation", func() {
-			BeforeEach(func() {
-				delete(pod.ObjectMeta.Annotations, bpod.BoostAnnotationKey)
+	Describe("Reverts the POD container resources", func() {
+		Context("boost on restart feature is disabled", func() {
+			JustBeforeEach(func() {
+				err = bpod.RevertResourceBoost(pod)
 			})
-			It("errors", func() {
-				Expect(err).Should(HaveOccurred())
+			When("POD is missing startup-cpu-boost annotation", func() {
+				BeforeEach(func() {
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
+				})
+				It("returns an error", func() {
+					Expect(err).To(HaveOccurred())
+				})
 			})
-		})
-		When("POD has valid startup-cpu-boost annotation", func() {
-			It("does not error", func() {
-				Expect(err).ShouldNot(HaveOccurred())
+			When("POD has valid startup-cpu-boost annotation", func() {
+				It("reverts pod metadata and resources", func() {
+					Expect(err).NotTo(HaveOccurred())
+					expectPodMetadataReverted(pod)
+					expectPodResourcesReverted(pod, annot)
+				})
 			})
-			It("removes startup-cpu-boost label", func() {
-				Expect(pod.Labels).NotTo(HaveKey(bpod.BoostLabelKey))
-			})
-			It("removes startup-cpu-boost annotation", func() {
-				Expect(pod.Annotations).NotTo(HaveKey(bpod.BoostAnnotationKey))
-			})
-			It("reverts CPU requests to initial values", func() {
-				cpuReqOne := pod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
-				cpuReqTwo := pod.Spec.Containers[1].Resources.Requests[corev1.ResourceCPU]
-				Expect(cpuReqOne.String()).Should(Equal(annot.InitCPURequests[containerOneName]))
-				Expect(cpuReqTwo.String()).Should(Equal(annot.InitCPURequests[containerTwoName]))
-			})
-			It("reverts CPU limits to initial values", func() {
-				cpuReqOne := pod.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU]
-				cpuReqTwo := pod.Spec.Containers[1].Resources.Limits[corev1.ResourceCPU]
-				Expect(cpuReqOne.String()).Should(Equal(annot.InitCPULimits[containerOneName]))
-				Expect(cpuReqTwo.String()).Should(Equal(annot.InitCPULimits[containerTwoName]))
-			})
-			When("Limits were removed during boost", func() {
+			When("limits were removed during boost", func() {
 				BeforeEach(func() {
 					pod.Spec.Containers[0].Resources.Limits = nil
 					pod.Spec.Containers[1].Resources.Limits = nil
 				})
-				It("does not error", func() {
-					Expect(err).ShouldNot(HaveOccurred())
+				It("reverts pod metadata and resources", func() {
+					Expect(err).NotTo(HaveOccurred())
+					expectPodMetadataReverted(pod)
+					expectPodResourcesReverted(pod, annot)
 				})
-				It("removes startup-cpu-boost label", func() {
-					Expect(pod.Labels).NotTo(HaveKey(bpod.BoostLabelKey))
+			})
+		})
+		Context("boost on restart feature is enabled", func() {
+			JustBeforeEach(func() {
+				err = bpod.RevertResourceBoostWithBoostOnRestart(pod)
+			})
+			When("POD is missing startup-cpu-boost annotation", func() {
+				BeforeEach(func() {
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
 				})
-				It("removes startup-cpu-boost annotation", func() {
-					Expect(pod.Annotations).NotTo(HaveKey(bpod.BoostAnnotationKey))
+				It("returns an error", func() {
+					Expect(err).To(HaveOccurred())
 				})
-				It("reverts CPU requests to initial values", func() {
-					cpuReqOne := pod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
-					cpuReqTwo := pod.Spec.Containers[1].Resources.Requests[corev1.ResourceCPU]
-					Expect(cpuReqOne.String()).Should(Equal(annot.InitCPURequests[containerOneName]))
-					Expect(cpuReqTwo.String()).Should(Equal(annot.InitCPURequests[containerTwoName]))
+			})
+			When("POD has valid startup-cpu-boost annotation", func() {
+				It("reverts pod metadata and resources", func() {
+					Expect(err).NotTo(HaveOccurred())
+					expectPodMetadataRevertedWithBoostOnRestart(pod, annot)
+					expectPodResourcesReverted(pod, annot)
 				})
-				It("reverts CPU limits to initial values", func() {
-					cpuReqOne := pod.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU]
-					cpuReqTwo := pod.Spec.Containers[1].Resources.Limits[corev1.ResourceCPU]
-					Expect(cpuReqOne.String()).Should(Equal(annot.InitCPULimits[containerOneName]))
-					Expect(cpuReqTwo.String()).Should(Equal(annot.InitCPULimits[containerTwoName]))
+			})
+			When("limits were removed during boost", func() {
+				BeforeEach(func() {
+					pod.Spec.Containers[0].Resources.Limits = nil
+					pod.Spec.Containers[1].Resources.Limits = nil
+				})
+				It("reverts pod metadata and resources", func() {
+					Expect(err).NotTo(HaveOccurred())
+					expectPodMetadataRevertedWithBoostOnRestart(pod, annot)
+					expectPodResourcesReverted(pod, annot)
 				})
 			})
 		})
 	})
 	Describe("Creates revert boost labels patch", func() {
-		var (
-			patchData []byte
-			err       error
-		)
-		JustBeforeEach(func() {
-			patch := bpod.NewRevertBoostLabelsPatch()
-			patchData, err = patch.Data(pod)
+		Context("boost on restart feature is disabled", func() {
+			var (
+				patchData []byte
+				err       error
+			)
+			JustBeforeEach(func() {
+				patch := bpod.NewRevertBoostLabelsPatch()
+				patchData, err = patch.Data(pod)
+			})
+			When("Pod is missing boost labels and annotations", func() {
+				BeforeEach(func() {
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
+					delete(pod.Labels, bpod.BoostLabelKey)
+				})
+				It("returns valid patch", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(string(patchData)).To(Equal("{}"))
+				})
+			})
+			When("Pod has boost labels and annotations", func() {
+				It("returns valid patch", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(string(patchData)).To(Equal("{\"metadata\":{\"annotations\":null,\"labels\":null}}"))
+				})
+			})
 		})
-		When("Pod is missing boost labels and annotations", func() {
-			BeforeEach(func() {
-				delete(pod.ObjectMeta.Annotations, bpod.BoostAnnotationKey)
-				delete(pod.ObjectMeta.Labels, bpod.BoostLabelKey)
+		Context("boost on restart feature is enabled", func() {
+			var (
+				patchData []byte
+				err       error
+			)
+			JustBeforeEach(func() {
+				patch := bpod.NewRevertBoostLabelsWithBoostOnRestartPatch()
+				patchData, err = patch.Data(pod)
 			})
-			It("doesn't error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			When("Pod is missing boost labels and annotations", func() {
+				BeforeEach(func() {
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
+					delete(pod.Labels, bpod.BoostLabelKey)
+				})
+				It("returns an error", func() {
+					Expect(err).To(HaveOccurred())
+				})
 			})
-			It("returns empty patch", func() {
-				Expect(string(patchData)).To(Equal("{}"))
-			})
-		})
-		When("Pod has boost labels and annotations", func() {
-			It("doesn't error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-			It("returns valid patch", func() {
-				Expect(string(patchData)).To(Equal("{\"metadata\":{\"annotations\":null,\"labels\":null}}"))
+			When("Pod has boost labels and annotations", func() {
+				It("returns valid patch", func() {
+					Expect(err).NotTo(HaveOccurred())
+					expectedAnnot := bpod.BoostPodAnnotation{
+						State:           bpod.BoostStateReverted,
+						BoostTimestamp:  annot.BoostTimestamp,
+						InitCPURequests: annot.InitCPURequests,
+						InitCPULimits:   annot.InitCPULimits,
+					}
+					expectedPatch := fmt.Sprintf(
+						"{\"metadata\":{\"annotations\":{\"%s\":%q}}}",
+						bpod.BoostAnnotationKey, expectedAnnot.ToJSON())
+					Expect(string(patchData)).To(Equal(expectedPatch))
+				})
 			})
 		})
 	})
@@ -153,21 +186,17 @@ var _ = Describe("Pod", func() {
 		})
 		When("Pod is missing boost labels and annotations", func() {
 			BeforeEach(func() {
-				delete(pod.ObjectMeta.Annotations, bpod.BoostAnnotationKey)
-				delete(pod.ObjectMeta.Labels, bpod.BoostLabelKey)
+				delete(pod.Annotations, bpod.BoostAnnotationKey)
+				delete(pod.Labels, bpod.BoostLabelKey)
 			})
-			It("doesn't error", func() {
+			It("returns valid patch", func() {
 				Expect(err).NotTo(HaveOccurred())
-			})
-			It("returns empty patch", func() {
 				Expect(string(patchData)).To(Equal("{}"))
 			})
 		})
 		When("Pod has boost labels and annotations", func() {
-			It("doesn't error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
 			It("returns valid patch", func() {
+				Expect(err).NotTo(HaveOccurred())
 				expectedPatch := fmt.Sprintf(
 					"{\"spec\":{\"containers\":[{\"name\":\"container-one\",\"resources\":{\"limits\":{\"cpu\":\"%s\"},"+
 						"\"requests\":{\"cpu\":\"%s\"}}},{\"name\":\"container-two\",\"resources\":{\"limits\":{\"cpu\":\"%s\"},"+
@@ -179,3 +208,33 @@ var _ = Describe("Pod", func() {
 		})
 	})
 })
+
+func expectPodMetadataRevertedWithBoostOnRestart(pod *corev1.Pod, annot *bpod.BoostPodAnnotation) {
+	GinkgoHelper()
+	Expect(pod.Labels).To(HaveKey(bpod.BoostLabelKey))
+	Expect(pod.Annotations).To(HaveKey(bpod.BoostAnnotationKey))
+	boostAnnot, err := bpod.BoostAnnotationFromPod(pod)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(boostAnnot.State).To(Equal(bpod.BoostStateReverted))
+	Expect(boostAnnot.InitCPURequests).To(Equal(annot.InitCPURequests))
+	Expect(boostAnnot.InitCPULimits).To(Equal(annot.InitCPULimits))
+}
+
+func expectPodMetadataReverted(pod *corev1.Pod) {
+	GinkgoHelper()
+	Expect(pod.Labels).NotTo(HaveKey(bpod.BoostLabelKey))
+	Expect(pod.Annotations).NotTo(HaveKey(bpod.BoostAnnotationKey))
+}
+
+func expectPodResourcesReverted(pod *corev1.Pod, annot *bpod.BoostPodAnnotation) {
+	GinkgoHelper()
+	cpuReqOne := pod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
+	cpuReqTwo := pod.Spec.Containers[1].Resources.Requests[corev1.ResourceCPU]
+	Expect(cpuReqOne.String()).To(Equal(annot.InitCPURequests[containerOneName]))
+	Expect(cpuReqTwo.String()).To(Equal(annot.InitCPURequests[containerTwoName]))
+
+	cpuLimOne := pod.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU]
+	cpuLimTwo := pod.Spec.Containers[1].Resources.Limits[corev1.ResourceCPU]
+	Expect(cpuLimOne.String()).To(Equal(annot.InitCPULimits[containerOneName]))
+	Expect(cpuLimTwo.String()).To(Equal(annot.InitCPULimits[containerTwoName]))
+}

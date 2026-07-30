@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	v1alpha1 "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
 	boost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	duration "github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	pod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	resource "github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
@@ -72,20 +73,6 @@ func (mr *MockStartupCPUBoostMockRecorder) BoostResources(ctx, pod any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BoostResources", reflect.TypeOf((*MockStartupCPUBoost)(nil).BoostResources), ctx, pod)
 }
 
-// DeletePod mocks base method.
-func (m *MockStartupCPUBoost) DeletePod(ctx context.Context, pod *v1.Pod) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeletePod", ctx, pod)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeletePod indicates an expected call of DeletePod.
-func (mr *MockStartupCPUBoostMockRecorder) DeletePod(ctx, pod any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePod", reflect.TypeOf((*MockStartupCPUBoost)(nil).DeletePod), ctx, pod)
-}
-
 // DurationPolicies mocks base method.
 func (m *MockStartupCPUBoost) DurationPolicies() map[string]duration.Policy {
 	m.ctrl.T.Helper()
@@ -98,6 +85,20 @@ func (m *MockStartupCPUBoost) DurationPolicies() map[string]duration.Policy {
 func (mr *MockStartupCPUBoostMockRecorder) DurationPolicies() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DurationPolicies", reflect.TypeOf((*MockStartupCPUBoost)(nil).DurationPolicies))
+}
+
+// HandlePodEvent mocks base method.
+func (m *MockStartupCPUBoost) HandlePodEvent(ctx context.Context, event *pod.PodEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandlePodEvent", ctx, event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandlePodEvent indicates an expected call of HandlePodEvent.
+func (mr *MockStartupCPUBoostMockRecorder) HandlePodEvent(ctx, event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandlePodEvent", reflect.TypeOf((*MockStartupCPUBoost)(nil).HandlePodEvent), ctx, event)
 }
 
 // Matches mocks base method.
@@ -212,20 +213,6 @@ func (m *MockStartupCPUBoost) UpdateFromSpec(ctx context.Context, boost *v1alpha
 func (mr *MockStartupCPUBoostMockRecorder) UpdateFromSpec(ctx, boost any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFromSpec", reflect.TypeOf((*MockStartupCPUBoost)(nil).UpdateFromSpec), ctx, boost)
-}
-
-// UpsertPod mocks base method.
-func (m *MockStartupCPUBoost) UpsertPod(ctx context.Context, pod *v1.Pod) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpsertPod", ctx, pod)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpsertPod indicates an expected call of UpsertPod.
-func (mr *MockStartupCPUBoostMockRecorder) UpsertPod(ctx, pod any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPod", reflect.TypeOf((*MockStartupCPUBoost)(nil).UpsertPod), ctx, pod)
 }
 
 // ValidatePolicy mocks base method.

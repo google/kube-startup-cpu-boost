@@ -29,6 +29,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -60,13 +61,9 @@ type Manager interface {
 	// in a manager. If multiple boost types matches, the most specific is returned.
 	GetCPUBoostForPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, bool)
 
-	// UpsertPod adds new or updates existing tracked POD to the manager and boosts.
+	// HandlePodEvent handles the POD event.
 	// If found, the matching cpu boost is returned.
-	UpsertPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error)
-
-	// DeletePod deletes the tracked POD from the manager and boosts.
-	// If found, the matching cpu boost is returned.
-	DeletePod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error)
+	HandlePodEvent(ctx context.Context, event *bpod.PodEvent) (StartupCPUBoost, error)
 
 	// SetStartupCPUBoostReconciler sets the boost object reconciler for the manager.
 	SetStartupCPUBoostReconciler(reconciler reconcile.Reconciler)
@@ -208,35 +205,34 @@ func (m *managerImpl) GetCPUBoostForPod(ctx context.Context,
 	return m.getMatchingBoost(pod)
 }
 
-// UpsertPod adds new or updates existing tracked POD to the manager and boosts.
+// HandlePodEvent handles the POD event.
 // If found, the matching cpu boost is returned.
-func (m *managerImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error) {
+func (m *managerImpl) HandlePodEvent(ctx context.Context, event *bpod.PodEvent) (StartupCPUBoost, error) {
 	m.Lock()
 	defer m.Unlock()
-	m.log.V(5).Info("handling pod upsert")
+
+	if err := event.Validate(); err != nil {
+		return nil, err
+	}
+
+	pod := event.Pod
+	m.log.V(5).Info("handling pod event", "type", event.Type)
+
 	if boost, ok := m.getMatchingBoost(pod); ok {
-		err := boost.UpsertPod(ctx, pod)
+		err := boost.HandlePodEvent(ctx, event)
 		if err == nil {
 			m.orphanedPods.Delete(pod.Name, pod.Namespace)
 		}
 		return boost, err
 	}
-	m.log.V(5).Info("boost not found, registering orphaned pod")
-	m.orphanedPods.Put(pod.Name, pod.Namespace, pod)
-	return nil, nil
-}
 
-// DeletePod deletes the tracked POD from the manager and boosts.
-// If found, the matching cpu boost is returned.
-func (m *managerImpl) DeletePod(ctx context.Context, pod *corev1.Pod) (StartupCPUBoost, error) {
-	m.Lock()
-	defer m.Unlock()
-	m.log.V(5).Info("handling pod delete")
-	if boost, ok := m.getMatchingBoost(pod); ok {
-		return boost, boost.DeletePod(ctx, pod)
+	if event.Type != bpod.PodEventTypePodDeleted {
+		m.log.V(5).Info("boost not found, registering orphaned pod")
+		m.orphanedPods.Put(pod.Name, pod.Namespace, pod)
+	} else {
+		m.log.V(5).Info("boost not found, removing orphaned pod if exists")
+		m.orphanedPods.Delete(pod.Name, pod.Namespace)
 	}
-	m.log.V(5).Info("boost not found, removing orphaned pod if exists")
-	m.orphanedPods.Delete(pod.Name, pod.Namespace)
 	return nil, nil
 }
 
@@ -307,7 +303,7 @@ func (m *managerImpl) mapOrphanedPods(ctx context.Context, boost StartupCPUBoost
 		if boost.Matches(orphanedPod) {
 			log := log.WithValues("pod", orphanedPod.Name)
 			log.V(5).Info("matched orphaned pod")
-			if err := boost.UpsertPod(ctx, orphanedPod); err != nil {
+			if err := boost.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: orphanedPod}); err != nil {
 				errs = append(errs, err)
 			} else {
 				mappedOrphanedPods = append(mappedOrphanedPods, orphanedPod)

@@ -47,10 +47,8 @@ type StartupCPUBoost interface {
 	DurationPolicies() map[string]duration.Policy
 	// Pod returns a POD if tracked by startup-cpu-boost
 	Pod(name string) (*corev1.Pod, bool)
-	// UpsertPod inserts new or updates existing POD to startup-cpu-boost tracking
-	UpsertPod(ctx context.Context, pod *corev1.Pod) error
-	// DeletePod removes the POD from the startup-cpu-boost tracking
-	DeletePod(ctx context.Context, pod *corev1.Pod) error
+	// HandlePodEvent handles the POD event.
+	HandlePodEvent(ctx context.Context, event *bpod.PodEvent) error
 	// ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
 	ValidatePolicy(ctx context.Context, name string) []*corev1.Pod
 	// BoostResources boosts resources resorces of a running POD (i.e. on container restart)
@@ -202,45 +200,23 @@ func (b *StartupCPUBoostImpl) Pod(name string) (*corev1.Pod, bool) {
 	return pod, ok
 }
 
-// UpsertPod inserts new or updates existing POD to startup-cpu-boost tracking
-// The update of existing POD triggers validation logic and may result in POD update
-func (b *StartupCPUBoostImpl) UpsertPod(ctx context.Context, pod *corev1.Pod) error {
-	b.Lock()
-	defer b.Unlock()
-	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
-	log.V(5).Info("handling pod upsert")
-	_, existing := b.pods[pod.Name]
-	b.pods[pod.Name] = pod
-	statsEvent := StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodCreateEvent, pod}
-	if existing {
-		statsEvent.Type = StartupCPUBoostStatsPodUpdateEvent
+// HandlePodEvent handles the POD event.
+func (b *StartupCPUBoostImpl) HandlePodEvent(ctx context.Context, event *bpod.PodEvent) error {
+	if err := event.Validate(); err != nil {
+		return err
 	}
-	b.updateStats(statsEvent)
-	log.V(5).Info("pod upserted successfully")
-	condPolicy, ok := b.durationPolicies[duration.PodConditionPolicyName]
-	if !ok {
-		log.V(5).Info("pod duration policy not found, skipping resource reversion")
+	switch event.Type {
+	case bpod.PodEventTypePodCreated:
+		return b.upsertPod(ctx, event.Pod)
+	case bpod.PodEventTypePodDeleted:
+		return b.deletePod(ctx, event.Pod)
+	case bpod.PodEventTypeConditionChanged:
+		return b.upsertPod(ctx, event.Pod)
+	default:
+		log := b.loggerFromContext(ctx).WithValues("event_type", event.Type, "pod", event.Pod.Name)
+		log.Info("unknown event type, skipping")
 		return nil
 	}
-	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
-		log.V(5).Info("reverting pod resources")
-		if err := b.revertResources(ctx, pod); err != nil {
-			return fmt.Errorf("pod resources reversion failed: %s", err)
-		}
-		log.Info("pod resources reverted successfully")
-	}
-	return nil
-}
-
-// DeletePod removes the POD from the startup-cpu-boost tracking
-func (b *StartupCPUBoostImpl) DeletePod(ctx context.Context, pod *corev1.Pod) error {
-	b.Lock()
-	defer b.Unlock()
-	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
-	log.V(5).Info("handling pod delete")
-	delete(b.pods, pod.Name)
-	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
-	return nil
 }
 
 // ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
@@ -301,6 +277,47 @@ func (b *StartupCPUBoostImpl) UpdateFromSpec(ctx context.Context, boost *autosca
 	b.selector = selector
 	b.resourcePolicies = resourcePolicies
 	b.durationPolicies = mapDurationPolicy(boost.Spec.DurationPolicy)
+	return nil
+}
+
+// upsertPod inserts new or updates existing POD to startup-cpu-boost tracking
+// The update of existing POD triggers validation logic and may result in POD update
+func (b *StartupCPUBoostImpl) upsertPod(ctx context.Context, pod *corev1.Pod) error {
+	b.Lock()
+	defer b.Unlock()
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
+	log.V(5).Info("handling pod upsert")
+	_, existing := b.pods[pod.Name]
+	b.pods[pod.Name] = pod
+	statsEvent := StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodCreateEvent, pod}
+	if existing {
+		statsEvent.Type = StartupCPUBoostStatsPodUpdateEvent
+	}
+	b.updateStats(statsEvent)
+	log.V(5).Info("pod upserted successfully")
+	condPolicy, ok := b.durationPolicies[duration.PodConditionPolicyName]
+	if !ok {
+		log.V(5).Info("pod duration policy not found, skipping resource reversion")
+		return nil
+	}
+	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
+		log.V(5).Info("reverting pod resources")
+		if err := b.revertResources(ctx, pod); err != nil {
+			return fmt.Errorf("pod resources reversion failed: %s", err)
+		}
+		log.Info("pod resources reverted successfully")
+	}
+	return nil
+}
+
+// deletePod removes the POD from the startup-cpu-boost tracking
+func (b *StartupCPUBoostImpl) deletePod(ctx context.Context, pod *corev1.Pod) error {
+	b.Lock()
+	defer b.Unlock()
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
+	log.V(5).Info("handling pod delete")
+	delete(b.pods, pod.Name)
+	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
 	return nil
 }
 

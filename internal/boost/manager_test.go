@@ -99,7 +99,7 @@ var _ = Describe("Manager", func() {
 
 				It("stores the boost and manages the orphaned pod", func(ctx context.Context) {
 					manager := cpuboost.NewManager(nil)
-					matchedBoost, err := manager.UpsertPod(ctx, pod)
+					matchedBoost, err := manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})
 					Expect(err).To(Succeed())
 					Expect(matchedBoost).To(BeNil())
 
@@ -220,7 +220,7 @@ var _ = Describe("Manager", func() {
 				manager := cpuboost.NewManager(nil)
 				Expect(manager.AddRegularCPUBoost(ctx, boost)).To(Succeed())
 
-				matchedBoost, err := manager.UpsertPod(ctx, pod)
+				matchedBoost, err := manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})
 				Expect(err).To(Succeed())
 				Expect(matchedBoost).To(Equal(boost))
 			})
@@ -229,7 +229,7 @@ var _ = Describe("Manager", func() {
 		When("there is no matching boost", func() {
 			It("returns nil matched boost without error", func(ctx context.Context) {
 				manager := cpuboost.NewManager(nil)
-				matchedBoost, err := manager.UpsertPod(ctx, pod)
+				matchedBoost, err := manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})
 				Expect(err).To(Succeed())
 				Expect(matchedBoost).To(BeNil())
 			})
@@ -253,9 +253,9 @@ var _ = Describe("Manager", func() {
 
 				manager := cpuboost.NewManager(nil)
 				Expect(manager.AddRegularCPUBoost(ctx, boost)).To(Succeed())
-				Expect(boost.UpsertPod(ctx, pod)).To(Succeed())
+				Expect(boost.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})).To(Succeed())
 
-				matchedBoost, err := manager.DeletePod(ctx, pod)
+				matchedBoost, err := manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodDeleted, Pod: pod})
 				Expect(err).To(Succeed())
 				Expect(matchedBoost).To(Equal(boost))
 
@@ -268,7 +268,7 @@ var _ = Describe("Manager", func() {
 		When("there is no matching boost", func() {
 			It("returns nil matched boost", func(ctx context.Context) {
 				manager := cpuboost.NewManager(nil)
-				matchedBoost, err := manager.DeletePod(ctx, pod)
+				matchedBoost, err := manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodDeleted, Pod: pod})
 				Expect(err).To(Succeed())
 				Expect(matchedBoost).To(BeNil())
 			})
@@ -327,7 +327,7 @@ var _ = Describe("Manager", func() {
 
 				boost, err := cpuboost.NewStartupCPUBoost(spec, config)
 				Expect(err).To(Succeed())
-				Expect(boost.UpsertPod(ctx, pod)).To(Succeed())
+				Expect(boost.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})).To(Succeed())
 				Expect(manager.AddRegularCPUBoost(ctx, boost)).To(Succeed())
 
 				startCtx, cancel := context.WithCancel(ctx)
@@ -448,7 +448,7 @@ var _ = Describe("Manager", func() {
 
 					boost, err := cpuboost.NewStartupCPUBoost(spec, config)
 					Expect(err).To(Succeed())
-					Expect(boost.UpsertPod(ctx, pod)).To(Succeed())
+					Expect(boost.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypePodCreated, Pod: pod})).To(Succeed())
 					Expect(manager.AddRegularCPUBoost(ctx, boost)).To(Succeed())
 
 					Expect(manager.UpdateRegularCPUBoost(ctx, updatedSpec)).To(Succeed())

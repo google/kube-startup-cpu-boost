@@ -234,177 +234,193 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 	})
-	Describe("Upserts a POD", func() {
-		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-		When("POD does not exist", func() {
-			JustBeforeEach(func() {
-				err = boost.UpsertPod(context.TODO(), pod)
-			})
-			It("doesn't error", func() {
-				Expect(err).ShouldNot(HaveOccurred())
-			})
-			It("stores a POD", func() {
-				p, ok := boost.Pod(pod.Name)
-				Expect(ok).To(BeTrue())
-				Expect(p.Name).To(Equal(pod.Name))
-			})
-			It("updates statistics", func() {
-				stats := boost.Stats()
-				Expect(stats.ActiveContainerBoosts).To(Equal(2))
-				Expect(stats.TotalContainerBoosts).To(Equal(2))
-			})
-			It("updates metrics", func() {
-				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
-				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
-			})
-		})
-		When("POD exists", func() {
-			var existingPod *corev1.Pod
-			var createTimestamp metav1.Time
-			BeforeEach(func() {
-				existingPod = podTemplate.DeepCopy()
-				createTimestamp = metav1.NewTime(time.Now())
-				pod.CreationTimestamp = createTimestamp
-			})
-			JustBeforeEach(func() {
-				err = boost.UpsertPod(context.TODO(), existingPod)
-				Expect(err).ShouldNot(HaveOccurred())
-				err = boost.UpsertPod(context.TODO(), pod)
-			})
-			It("doesn't error", func() {
-				Expect(err).ShouldNot(HaveOccurred())
-			})
-			It("stores an updated POD", func() {
-				p, found := boost.Pod(pod.Name)
-				Expect(found).To(BeTrue())
-				Expect(p.Name).To(Equal(pod.Name))
-				Expect(p.CreationTimestamp).To(Equal(createTimestamp))
-			})
-			It("updates statistics", func() {
-				stats := boost.Stats()
-				Expect(stats.ActiveContainerBoosts).To(Equal(2))
-				Expect(stats.TotalContainerBoosts).To(Equal(2))
-			})
-			It("updates metrics", func() {
-				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
-				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
-			})
-			When("boost spec has pod condition policy", func() {
-				BeforeEach(func() {
-					spec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
-						Type:   corev1.PodReady,
-						Status: corev1.ConditionTrue,
-					}
-				})
-				When("POD condition matches spec policy", func() {
-					BeforeEach(func() {
-						pod.Status.Conditions = []corev1.PodCondition{{
-							Type:   corev1.PodReady,
-							Status: corev1.ConditionTrue,
-						}}
-					})
-					When("legacy revert mode is not used", func() {
-						var (
-							mockSubResourceClient *mock.MockSubResourceClient
-						)
-						BeforeEach(func() {
-							mockSubResourceClient = mock.NewMockSubResourceClient(mockCtrl)
-							mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-								gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
-							mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
-							mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-								gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
-						})
-						It("doesn't error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-					})
-					When("legacy revert mode is used", func() {
-						BeforeEach(func() {
-							config.LegacyRevertMode = true
-							mockClient.EXPECT().
-								Update(gomock.Any(), gomock.Eq(pod)).
-								Return(nil)
-						})
-						It("doesn't error", func() {
-							Expect(err).NotTo(HaveOccurred())
-						})
-					})
-				})
-				When("POD condition does not match spec policy", func() {
-					BeforeEach(func() {
-						pod.Status.Conditions = []corev1.PodCondition{{
-							Type:   corev1.PodReady,
-							Status: corev1.ConditionFalse,
-						}}
-					})
-					It("doesn't error", func() {
+	Describe("Handles POD upsert triggering events", func() {
+		Context("when boost spec has no condition policy defined", func() {
+			When("POD does not exist", func() {
+				DescribeTable("adds POD, updates stats and metrics",
+					func(ctx context.Context, eventType bpod.PodEventType) {
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
 						Expect(err).NotTo(HaveOccurred())
-					})
-				})
+
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: eventType,
+							Pod:  pod,
+						})
+
+						Expect(err).NotTo(HaveOccurred())
+						_, found := boost.Pod(pod.Name)
+						Expect(found).To(BeTrue())
+						stats := boost.Stats()
+						Expect(stats.ActiveContainerBoosts).To(Equal(2))
+						Expect(stats.TotalContainerBoosts).To(Equal(2))
+						Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+						Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+					},
+					Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
+					Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+				)
 			})
-			When("boost spec has both pod condition and fixed duration policy", func() {
+			When("POD already exists", func() {
+				DescribeTable("updates POD, stats and metrics",
+					func(ctx context.Context, eventType bpod.PodEventType) {
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+						Expect(err).NotTo(HaveOccurred())
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypePodCreated,
+							Pod:  pod,
+						})
+						Expect(err).NotTo(HaveOccurred())
+						updatedCreationTimestamp := metav1.NewTime(time.Now())
+						updatedPod := pod.DeepCopy()
+						updatedPod.CreationTimestamp = updatedCreationTimestamp
+
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: eventType,
+							Pod:  updatedPod,
+						})
+
+						Expect(err).NotTo(HaveOccurred())
+						storedPod, found := boost.Pod(pod.Name)
+						Expect(found).To(BeTrue())
+						Expect(storedPod.CreationTimestamp).To(Equal(updatedCreationTimestamp))
+						stats := boost.Stats()
+						Expect(stats.ActiveContainerBoosts).To(Equal(2))
+						Expect(stats.TotalContainerBoosts).To(Equal(2))
+						Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+						Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+					},
+					Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
+					Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+				)
+			})
+			Context("when boost spec has condition policy defined", func() {
+				var (
+					spec *autoscaling.StartupCPUBoost
+				)
 				BeforeEach(func() {
+					spec = specTemplate.DeepCopy()
 					spec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
 						Type:   corev1.PodReady,
 						Status: corev1.ConditionTrue,
 					}
-					spec.Spec.DurationPolicy.Fixed = &autoscaling.FixedDurationPolicy{
-						Unit:  autoscaling.FixedDurationPolicyUnitSec,
-						Value: 120,
-					}
 				})
-				When("POD condition matches spec policy", func() {
-					BeforeEach(func() {
-						pod.Status.Conditions = []corev1.PodCondition{{
-							Type:   corev1.PodReady,
-							Status: corev1.ConditionTrue,
-						}}
-					})
-					When("legacy revert mode is not used", func() {
-						var (
-							mockSubResourceClient *mock.MockSubResourceClient
-						)
-						BeforeEach(func() {
-							mockSubResourceClient = mock.NewMockSubResourceClient(mockCtrl)
-							mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-								gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
-							mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
-							mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-								gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
-						})
-						It("doesn't error", func() {
+				When("POD condition doesn't match the policy", func() {
+					DescribeTable("registers POD but skips resource reversion",
+						func(ctx context.Context, eventType bpod.PodEventType) {
+							pod := podTemplate.DeepCopy()
+							pod.Status.Conditions = []corev1.PodCondition{{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionFalse,
+							}}
+							mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+							mockClient := mock.NewMockClient(mockCtrl)
+							mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(),
+								gomock.Any()).Return(nil).Times(0)
+							mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(0)
+							mockClient.EXPECT().Patch(gomock.Any(), gomock.Any(),
+								gomock.Any()).Return(nil).Times(0)
+							config.Client = mockClient
+							boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 							Expect(err).NotTo(HaveOccurred())
-						})
+
+							err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+								Type: eventType,
+								Pod:  pod,
+							})
+
+							Expect(err).NotTo(HaveOccurred())
+							_, found := boost.Pod(pod.Name)
+							Expect(found).To(BeTrue())
+						},
+						Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
+						Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+					)
+				})
+				When("POD condition matches the policy", func() {
+					Context("using normal revert mode", func() {
+						DescribeTable("reverts resources with resize sub-resource",
+							func(ctx context.Context, eventType bpod.PodEventType) {
+								pod := podTemplate.DeepCopy()
+								pod.Status.Conditions = []corev1.PodCondition{{
+									Type:   corev1.PodReady,
+									Status: corev1.ConditionTrue,
+								}}
+								mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+								mockClient := mock.NewMockClient(mockCtrl)
+								mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+									gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
+								mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
+								mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
+									gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+								config.Client = mockClient
+								boost, err = cpuboost.NewStartupCPUBoost(spec, config)
+								Expect(err).NotTo(HaveOccurred())
+
+								err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+									Type: eventType,
+									Pod:  pod,
+								})
+
+								Expect(err).NotTo(HaveOccurred())
+							},
+							Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
+							Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+						)
+					})
+					Context("using legacy revert mode", func() {
+						DescribeTable("reverts resources with pod update",
+							func(ctx context.Context, eventType bpod.PodEventType) {
+								pod := podTemplate.DeepCopy()
+								pod.Status.Conditions = []corev1.PodCondition{{
+									Type:   corev1.PodReady,
+									Status: corev1.ConditionTrue,
+								}}
+								mockClient := mock.NewMockClient(mockCtrl)
+								mockClient.EXPECT().
+									Update(gomock.Any(), gomock.Eq(pod)).
+									Return(nil)
+								config.Client = mockClient
+								config.LegacyRevertMode = true
+								boost, err = cpuboost.NewStartupCPUBoost(spec, config)
+								Expect(err).NotTo(HaveOccurred())
+
+								err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+									Type: eventType,
+									Pod:  pod,
+								})
+
+								Expect(err).NotTo(HaveOccurred())
+							},
+							Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
+							Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+						)
 					})
 				})
 			})
 		})
 	})
-	Describe("Deletes a pod", func() {
-		JustBeforeEach(func() {
-			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-		When("Pod exists", func() {
-			JustBeforeEach(func() {
-				err = boost.UpsertPod(context.TODO(), pod)
-				Expect(err).ShouldNot(HaveOccurred())
-				err = boost.DeletePod(context.TODO(), pod)
-			})
-			It("removes stored pod", func() {
+	Describe("Handles POD deleted event", func() {
+		When("POD exists", func() {
+			It("removes POD, updates stats and metrics", func(ctx context.Context) {
+				boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+				Expect(err).NotTo(HaveOccurred())
+				err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+					Type: bpod.PodEventTypePodCreated,
+					Pod:  pod,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+					Type: bpod.PodEventTypePodDeleted,
+					Pod:  pod,
+				})
+
+				Expect(err).NotTo(HaveOccurred())
 				_, found := boost.Pod(pod.Name)
 				Expect(found).To(BeFalse())
-			})
-			It("updates statistics", func() {
 				stats := boost.Stats()
 				Expect(stats.ActiveContainerBoosts).To(Equal(0))
 				Expect(stats.TotalContainerBoosts).To(Equal(2))
-			})
-			It("updates metrics", func() {
 				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(0)))
 				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
 			})
