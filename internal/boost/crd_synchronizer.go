@@ -39,34 +39,40 @@ type CRDSynchronizer interface {
 }
 
 type crdSynchronizerImpl struct {
-	mu               sync.RWMutex
-	cache            ctrlcache.Cache
-	client           client.Client
-	mgr              Manager
-	legacyRevertMode bool
-	elected          <-chan struct{}
-	informer         ctrlcache.Informer
-	log              logr.Logger
+	mu                       sync.RWMutex
+	cache                    ctrlcache.Cache
+	client                   client.Client
+	mgr                      Manager
+	legacyRevertMode         bool
+	podLevelResourcesEnabled bool
+	removeLimitsEnabled      bool
+	elected                  <-chan struct{}
+	informer                 ctrlcache.Informer
+	log                      logr.Logger
 }
 
 // CRDSynchronizerConfig holds dependencies and configuration for CRDSynchronizer.
 type CRDSynchronizerConfig struct {
-	Client           client.Client
-	Cache            ctrlcache.Cache
-	Manager          Manager
-	LegacyRevertMode bool
-	Elected          <-chan struct{}
+	Client                   client.Client
+	Cache                    ctrlcache.Cache
+	Manager                  Manager
+	LegacyRevertMode         bool
+	PodLevelResourcesEnabled bool
+	RemoveLimitsEnabled      bool
+	Elected                  <-chan struct{}
 }
 
 // NewCRDSynchronizer constructs a new CRDSynchronizer.
 func NewCRDSynchronizer(cfg CRDSynchronizerConfig) CRDSynchronizer {
 	return &crdSynchronizerImpl{
-		client:           cfg.Client,
-		cache:            cfg.Cache,
-		mgr:              cfg.Manager,
-		legacyRevertMode: cfg.LegacyRevertMode,
-		elected:          cfg.Elected,
-		log:              ctrl.Log.WithName("crd-synchronizer"),
+		client:                   cfg.Client,
+		cache:                    cfg.Cache,
+		mgr:                      cfg.Manager,
+		legacyRevertMode:         cfg.LegacyRevertMode,
+		podLevelResourcesEnabled: cfg.PodLevelResourcesEnabled,
+		removeLimitsEnabled:      cfg.RemoveLimitsEnabled,
+		elected:                  cfg.Elected,
+		log:                      ctrl.Log.WithName("crd-synchronizer"),
 	}
 }
 
@@ -129,8 +135,10 @@ func (c *crdSynchronizerImpl) onAdd(obj any) {
 	log := c.log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)
 	log.V(5).Info("handling boost add from informer")
 	boostCfg := &StartupCPUBoostConfig{
-		Client:           c.client,
-		LegacyRevertMode: c.legacyRevertMode,
+		Client:                   c.client,
+		LegacyRevertMode:         c.legacyRevertMode,
+		PodLevelResourcesEnabled: c.podLevelResourcesEnabled,
+		RemoveLimitsEnabled:      c.removeLimitsEnabled,
 	}
 	boost, err := NewStartupCPUBoost(boostObj, boostCfg)
 	if err != nil {

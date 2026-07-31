@@ -41,8 +41,9 @@ type StartupCPUBoost interface {
 	Name() string
 	// Namespace returns startup-cpu-boost namespace
 	Namespace() string
-	// ResourcePolicy returns the resource policy for a given container
-	ResourcePolicy(ctx context.Context, container *corev1.Container) (resource.ContainerPolicy, bool)
+
+	// ApplyResourcePolicy applies resource policy on a given POD
+	ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod) error
 	// DurationPolicies returns configured duration policies
 	DurationPolicies() map[string]duration.Policy
 	// Pod returns a POD if tracked by startup-cpu-boost
@@ -102,16 +103,18 @@ type containerPolicyEntry struct {
 // StartupCPUBoostImpl is an implementation of a StartupCPUBoost CRD
 type StartupCPUBoostImpl struct {
 	sync.RWMutex
-	name             string
-	namespace        string
-	selector         labels.Selector
-	durationPolicies map[string]duration.Policy
-	resourcePolicies []containerPolicyEntry
-	pods             map[string]*corev1.Pod
-	client           client.Client
-	stats            StartupCPUBoostStats
-	legacyRevertMode bool
-	boostOnRestart   bool
+	name                     string
+	namespace                string
+	selector                 labels.Selector
+	durationPolicies         map[string]duration.Policy
+	resourcePolicies         []containerPolicyEntry
+	pods                     map[string]*corev1.Pod
+	client                   client.Client
+	stats                    StartupCPUBoostStats
+	legacyRevertMode         bool
+	boostOnRestart           bool
+	podLevelResourcesEnabled bool
+	removeLimitsEnabled      bool
 }
 
 // StartupCPUBoostConfig holds configuration for a boost
@@ -122,6 +125,10 @@ type StartupCPUBoostConfig struct {
 	LegacyRevertMode bool
 	// BoostOnRestart controls if POD resources should be boosted on container restarts
 	BoostOnRestart bool
+	// PodLevelResourcesEnabled controls if pod level resources should be used
+	PodLevelResourcesEnabled bool
+	// RemoveLimitsEnabled controls if cpu limits should be removed when boosting
+	RemoveLimitsEnabled bool
 }
 
 // Validate validates the configuration
@@ -152,16 +159,18 @@ func NewStartupCPUBoost(boost *autoscaling.StartupCPUBoost, cfg *StartupCPUBoost
 		return nil, err
 	}
 	return &StartupCPUBoostImpl{
-		name:             boost.Name,
-		namespace:        boost.Namespace,
-		selector:         selector,
-		durationPolicies: mapDurationPolicy(boost.Spec.DurationPolicy),
-		resourcePolicies: resourcePolicies,
-		pods:             make(map[string]*corev1.Pod),
-		client:           cfg.Client,
-		stats:            StartupCPUBoostStats{},
-		legacyRevertMode: cfg.LegacyRevertMode,
-		boostOnRestart:   cfg.BoostOnRestart,
+		name:                     boost.Name,
+		namespace:                boost.Namespace,
+		selector:                 selector,
+		durationPolicies:         mapDurationPolicy(boost.Spec.DurationPolicy),
+		resourcePolicies:         resourcePolicies,
+		pods:                     make(map[string]*corev1.Pod),
+		client:                   cfg.Client,
+		stats:                    StartupCPUBoostStats{},
+		legacyRevertMode:         cfg.LegacyRevertMode,
+		boostOnRestart:           cfg.BoostOnRestart,
+		podLevelResourcesEnabled: cfg.PodLevelResourcesEnabled,
+		removeLimitsEnabled:      cfg.RemoveLimitsEnabled,
 	}, nil
 }
 
@@ -175,16 +184,70 @@ func (b *StartupCPUBoostImpl) Namespace() string {
 	return b.namespace
 }
 
-// ResourcePolicy returns the resource policy for a given container
-func (b *StartupCPUBoostImpl) ResourcePolicy(ctx context.Context, container *corev1.Container) (resource.ContainerPolicy, bool) {
-	b.RLock()
-	defer b.RUnlock()
-	for _, entry := range b.resourcePolicies {
-		if entry.matcher != nil && entry.matcher.Matches(ctx, container) {
-			return entry.policy, true
+// ApplyResourcePolicy applies resource policy on a given POD
+func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod) error {
+	log := b.loggerFromContext(ctx)
+	originalQosClass := bpod.ComputePodQOS(pod, b.podLevelResourcesEnabled)
+	annotation := bpod.NewBoostAnnotation()
+	if _, ok := pod.Annotations[bpod.BoostAnnotationKey]; ok {
+		var err error
+		annotation, err = bpod.BoostAnnotationFromPod(pod)
+		if err != nil {
+			return err
 		}
 	}
-	return nil, false
+	// ToDo: add validation based on boost annotation status
+	for i, container := range pod.Spec.Containers {
+		policy, found := b.resourcePolicy(ctx, &container)
+		if !found {
+			continue
+		}
+		log = log.WithValues("container", container.Name,
+			"cpuRequests", container.Resources.Requests.Cpu().String(),
+			"cpuLimits", container.Resources.Limits.Cpu().String(),
+		)
+		if bpod.ResourceResizeRequiresRestart(container, corev1.ResourceCPU) {
+			log.Info("skipping container due to restart policy")
+			continue
+		}
+		if !bpod.HasCPUResourcesToIncrease(container) {
+			log.Info("skipping container due to lack of CPU resources to increase")
+			continue
+		}
+		resources := policy.NewResources(ctx, &container)
+		tmpUpdatedPod := pod.DeepCopy()
+		tmpUpdatedPod.Spec.Containers[i].Resources = *resources
+		tmpNewQosClass := bpod.ComputePodQOS(tmpUpdatedPod, b.podLevelResourcesEnabled)
+		if tmpNewQosClass != originalQosClass {
+			log.Info("skipping container due to QOS class change after boost")
+			continue
+		}
+		if !resources.Requests.Cpu().IsZero() {
+			log = log.WithValues(
+				"newCpuRequests", resources.Requests.Cpu().String(),
+			)
+		}
+		if !resources.Limits.Cpu().IsZero() {
+			if b.canRemoveLimit(originalQosClass, log) {
+				delete(resources.Limits, corev1.ResourceCPU)
+				log = log.WithValues("newCpuLimits", "<removed>")
+			} else {
+				log = log.WithValues("newCpuLimits", resources.Limits.Cpu().String())
+			}
+		}
+		annotation.UpdateInitResources(container.Name, container.Resources)
+		pod.Spec.Containers[i].Resources = *resources
+		log.Info("container resources increased")
+	}
+	// checks if any container CPU resources were boosted
+	if annotation.HasInitCPUResources() {
+		annotation.State = bpod.BoostStateActive
+		annotation.BoostTimestamp = time.Now()
+		annotation.Apply(pod)
+		label := &bpod.BoostPodLabel{BoostName: b.Name()}
+		label.Apply(pod)
+	}
+	return nil
 }
 
 // DurationPolicies returns configured duration policies
@@ -278,6 +341,18 @@ func (b *StartupCPUBoostImpl) UpdateFromSpec(ctx context.Context, boost *autosca
 	b.resourcePolicies = resourcePolicies
 	b.durationPolicies = mapDurationPolicy(boost.Spec.DurationPolicy)
 	return nil
+}
+
+// resourcePolicy returns the resource policy for a given container
+func (b *StartupCPUBoostImpl) resourcePolicy(ctx context.Context, container *corev1.Container) (resource.ContainerPolicy, bool) {
+	b.RLock()
+	defer b.RUnlock()
+	for _, entry := range b.resourcePolicies {
+		if entry.matcher != nil && entry.matcher.Matches(ctx, container) {
+			return entry.policy, true
+		}
+	}
+	return nil, false
 }
 
 // upsertPod inserts new or updates existing POD to startup-cpu-boost tracking
@@ -397,6 +472,17 @@ func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
 		b.stats.TotalContainerBoosts += boostContainersLen
 		metrics.AddBoostContainersTotal(b.namespace, b.name, float64(boostContainersLen))
 	}
+}
+
+func (b *StartupCPUBoostImpl) canRemoveLimit(qosClass corev1.PodQOSClass, log logr.Logger) bool {
+	if !b.removeLimitsEnabled {
+		return false
+	}
+	if qosClass != corev1.PodQOSBurstable && qosClass != corev1.PodQOSBestEffort {
+		log.Info("skipping CPU limits removal as pod is not burstable nor besteffort, ")
+		return false
+	}
+	return true
 }
 
 // boostContainersLen returns the number of containers that were boosted
