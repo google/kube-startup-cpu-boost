@@ -1,4 +1,4 @@
-// Copyright 2026 Google LLC
+// Copyright 2025 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +30,6 @@ import (
 	boost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	duration "github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	pod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
-	resource "github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	gomock "go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 )
@@ -57,6 +56,20 @@ func NewMockStartupCPUBoost(ctrl *gomock.Controller) *MockStartupCPUBoost {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockStartupCPUBoost) EXPECT() *MockStartupCPUBoostMockRecorder {
 	return m.recorder
+}
+
+// ApplyResourcePolicy mocks base method.
+func (m *MockStartupCPUBoost) ApplyResourcePolicy(ctx context.Context, pod *v1.Pod) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyResourcePolicy", ctx, pod)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyResourcePolicy indicates an expected call of ApplyResourcePolicy.
+func (mr *MockStartupCPUBoostMockRecorder) ApplyResourcePolicy(ctx, pod any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResourcePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ApplyResourcePolicy), ctx, pod)
 }
 
 // BoostResources mocks base method.
@@ -156,21 +169,6 @@ func (m *MockStartupCPUBoost) Pod(name string) (*v1.Pod, bool) {
 func (mr *MockStartupCPUBoostMockRecorder) Pod(name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pod", reflect.TypeOf((*MockStartupCPUBoost)(nil).Pod), name)
-}
-
-// ResourcePolicy mocks base method.
-func (m *MockStartupCPUBoost) ResourcePolicy(ctx context.Context, container *v1.Container) (resource.ContainerPolicy, bool) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResourcePolicy", ctx, container)
-	ret0, _ := ret[0].(resource.ContainerPolicy)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// ResourcePolicy indicates an expected call of ResourcePolicy.
-func (mr *MockStartupCPUBoostMockRecorder) ResourcePolicy(ctx, container any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResourcePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ResourcePolicy), ctx, container)
 }
 
 // RevertResources mocks base method.

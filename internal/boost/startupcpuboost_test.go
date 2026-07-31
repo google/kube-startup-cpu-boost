@@ -22,7 +22,6 @@ import (
 	cpuboost "github.com/google/kube-startup-cpu-boost/internal/boost"
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
-	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	. "github.com/onsi/ginkgo/v2"
@@ -97,21 +96,6 @@ var _ = Describe("StartupCPUBoost", func() {
 				It("does not error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
-				It("returns valid resource policy for container one", func() {
-					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerOneName})
-					Expect(ok).To(BeTrue())
-					Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
-					percPolicy, _ := p.(*resource.PercentageContainerPolicy)
-					Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
-				})
-				It("returns valid resource policy for container two", func() {
-					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerTwoName})
-					Expect(ok).To(BeTrue())
-					Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
-					fixedPolicy, _ := p.(*resource.FixedPolicy)
-					Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
-					Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
-				})
 			})
 			Context("with match containers policy", func() {
 				BeforeEach(func() {
@@ -141,21 +125,6 @@ var _ = Describe("StartupCPUBoost", func() {
 				})
 				It("does not error", func() {
 					Expect(err).NotTo(HaveOccurred())
-				})
-				It("returns valid resource policy for container matching exact rule", func() {
-					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerOneName})
-					Expect(ok).To(BeTrue())
-					Expect(p).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
-					percPolicy, _ := p.(*resource.PercentageContainerPolicy)
-					Expect(percPolicy.Percentage()).To(Equal(containerOnePercValue))
-				})
-				It("returns valid resource policy for container matching regex rule", func() {
-					p, ok := boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: containerTwoName})
-					Expect(ok).To(BeTrue())
-					Expect(p).To(BeAssignableToTypeOf(&resource.FixedPolicy{}))
-					fixedPolicy, _ := p.(*resource.FixedPolicy)
-					Expect(fixedPolicy.Requests()).To(Equal(containerTwoFixedReq))
-					Expect(fixedPolicy.Limits()).To(Equal(containerTwoFixedLim))
 				})
 			})
 		})
@@ -505,10 +474,6 @@ var _ = Describe("StartupCPUBoost", func() {
 			})
 		})
 		When("resource policy is changed", func() {
-			var (
-				resourcePolicy      resource.ContainerPolicy
-				resourcePolicyFound bool
-			)
 			BeforeEach(func() {
 				updatedSpec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
 					ContainerPolicies: []autoscaling.ContainerPolicy{
@@ -526,16 +491,288 @@ var _ = Describe("StartupCPUBoost", func() {
 
 			})
 			JustBeforeEach(func() {
-				resourcePolicy, resourcePolicyFound = boost.ResourcePolicy(context.TODO(), &corev1.Container{Name: "test"})
+				err = boost.UpdateFromSpec(context.TODO(), updatedSpec)
 			})
-			It("finds resource policy", func() {
-				Expect(resourcePolicyFound).To(BeTrue())
+			It("applies updated resource policy", func() {
+				Expect(err).NotTo(HaveOccurred())
+
+				pod := podTemplate.DeepCopy()
+				pod.Spec.Containers[0].Name = "test"
+				setContainerResource(pod, 0, corev1.ResourceCPU, "1", "2")
+
+				err = boost.ApplyResourcePolicy(context.Background(), pod)
+				Expect(err).NotTo(HaveOccurred())
+
+				// 1 CPU * 1000% = 11 CPU (10 + 1) -> 11000m
+				Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(11000)))
 			})
-			It("has valid resource policy", func() {
-				Expect(resourcePolicy).To(BeAssignableToTypeOf(&resource.PercentageContainerPolicy{}))
-				percentagePolicy := resourcePolicy.(*resource.PercentageContainerPolicy)
-				Expect(percentagePolicy.Percentage()).To(Equal(int64(1000)))
+		})
+	})
+	Describe("ApplyResourcePolicy", func() {
+		When("POD has no containers that match policy", func() {
+			It("Does not change POD", func() {
+				pod := podTemplate.DeepCopy()
+				delete(pod.Annotations, bpod.BoostAnnotationKey)
+				originalPod := pod.DeepCopy()
+
+				configSpec := specTemplate.DeepCopy()
+				setContainerPercentagePolicy(configSpec, "non-existent-container", 100)
+				boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
+				_, ok := pod.Annotations[bpod.BoostAnnotationKey]
+				Expect(ok).To(BeFalse())
+			})
+		})
+		When("POD has containers that match policy", func() {
+			When("container has require restart resize policy", func() {
+				It("does not increase container CPU resources", func() {
+					pod := podTemplate.DeepCopy()
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
+					pod.Spec.Containers[0].ResizePolicy = []corev1.ContainerResizePolicy{
+						{
+							ResourceName:  corev1.ResourceCPU,
+							RestartPolicy: corev1.RestartContainer,
+						},
+					}
+					originalPod := pod.DeepCopy()
+
+					configSpec := specTemplate.DeepCopy()
+					setContainerPercentagePolicy(configSpec, "container-one", 100)
+					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
+					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
+					Expect(ok).To(BeFalse())
+				})
+			})
+			When("container has no CPU resources", func() {
+				It("does not change container resources", func() {
+					pod := podTemplate.DeepCopy()
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
+					pod.Spec.Containers[0].Resources.Requests = nil
+					pod.Spec.Containers[0].Resources.Limits = nil
+					originalPod := pod.DeepCopy()
+
+					configSpec := specTemplate.DeepCopy()
+					setContainerPercentagePolicy(configSpec, "container-one", 100)
+					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
+					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
+					Expect(ok).To(BeFalse())
+				})
+			})
+			When("container resource increase changes POD's QOS class", func() {
+				It("does not change container resources", func() {
+					pod := podTemplate.DeepCopy()
+					delete(pod.Annotations, bpod.BoostAnnotationKey)
+					setContainerResource(pod, 0, corev1.ResourceCPU, "1", "2")
+					setContainerResource(pod, 0, corev1.ResourceMemory, "1Gi", "1Gi")
+					setContainerResource(pod, 1, corev1.ResourceCPU, "2", "2")
+					setContainerResource(pod, 1, corev1.ResourceMemory, "1Gi", "1Gi")
+					originalPod := pod.DeepCopy()
+
+					configSpec := specTemplate.DeepCopy()
+					setContainerFixedPolicy(configSpec, "container-one", "2", "2")
+					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
+					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
+					Expect(ok).To(BeFalse())
+				})
+			})
+			When("container meets all requirements for resource increase", func() {
+				Context("with CPU limits removal disabled", func() {
+					It("increases CPU requests and limits and applies POD metadata", func() {
+						pod := podTemplate.DeepCopy()
+						delete(pod.Annotations, bpod.BoostAnnotationKey)
+						delete(pod.Labels, bpod.BoostLabelKey)
+						setContainerResource(pod, 0, corev1.ResourceCPU, "1", "2")
+
+						configSpec := specTemplate.DeepCopy()
+						setContainerPercentagePolicy(configSpec, "container-one", 100)
+
+						configVal := *config
+						configVal.RemoveLimitsEnabled = false
+						boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
+						Expect(err).NotTo(HaveOccurred())
+
+						err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+						Expect(err).NotTo(HaveOccurred())
+						Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+						Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(4000)))
+						Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000))) // Unmodified
+						Expect(pod.Spec.Containers[1].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(2000)))   // Unmodified
+						Expect(pod.Labels[bpod.BoostLabelKey]).To(Equal("boost-001"))
+						annot, err := bpod.BoostAnnotationFromPod(pod)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(annot.State).To(Equal(bpod.BoostStateActive))
+						Expect(annot.InitCPURequests["container-one"]).To(Equal("1"))
+						Expect(annot.InitCPULimits["container-one"]).To(Equal("2"))
+					})
+				})
+				Context("with regex container match policy", func() {
+					It("increases CPU requests and limits for matching containers", func() {
+						pod := podTemplate.DeepCopy()
+						delete(pod.Annotations, bpod.BoostAnnotationKey)
+						delete(pod.Labels, bpod.BoostLabelKey)
+						setContainerResource(pod, 0, corev1.ResourceCPU, "1", "2")
+						setContainerResource(pod, 1, corev1.ResourceCPU, "1", "2")
+
+						configSpec := specTemplate.DeepCopy()
+						configSpec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+							ContainerPolicies: []autoscaling.ContainerPolicy{
+								{
+									MatchContainers: &autoscaling.MatchContainers{
+										Type:  autoscaling.MatchContainersTypeRegexName,
+										Value: "^container-.*$",
+									},
+									PercentageIncrease: &autoscaling.PercentageIncrease{Value: 100},
+								},
+							},
+						}
+
+						configVal := *config
+						configVal.RemoveLimitsEnabled = false
+						boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
+						Expect(err).NotTo(HaveOccurred())
+
+						err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+						Expect(err).NotTo(HaveOccurred())
+						Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+						Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+					})
+				})
+				Context("with CPU limits removal enabled", func() {
+					When("limit removal does not change POD QoS class", func() {
+						It("increases CPU requests and removes limit and applies POD metadata", func() {
+							pod := podTemplate.DeepCopy()
+							delete(pod.Annotations, bpod.BoostAnnotationKey)
+							delete(pod.Labels, bpod.BoostLabelKey)
+							setContainerResource(pod, 0, corev1.ResourceCPU, "1", "2")
+							setContainerResource(pod, 1, corev1.ResourceCPU, "1", "")
+
+							configSpec := specTemplate.DeepCopy()
+							setContainerPercentagePolicy(configSpec, "container-one", 100)
+
+							configVal := *config
+							configVal.RemoveLimitsEnabled = true
+							boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
+							Expect(err).NotTo(HaveOccurred())
+
+							err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+							Expect(err).NotTo(HaveOccurred())
+							Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+							Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().IsZero()).To(BeTrue())
+							Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
+							Expect(pod.Spec.Containers[1].Resources.Limits.Cpu().IsZero()).To(BeTrue())
+							Expect(pod.Labels[bpod.BoostLabelKey]).To(Equal("boost-001"))
+							annot, err := bpod.BoostAnnotationFromPod(pod)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(annot.State).To(Equal(bpod.BoostStateActive))
+							Expect(annot.InitCPURequests["container-one"]).To(Equal("1"))
+							Expect(annot.InitCPULimits["container-one"]).To(Equal("2"))
+						})
+					})
+					When("POD is Guaranteed (limits removal is skipped)", func() {
+						It("increases CPU requests and limits but does not remove limit", func() {
+							pod := podTemplate.DeepCopy()
+							delete(pod.Annotations, bpod.BoostAnnotationKey)
+							delete(pod.Labels, bpod.BoostLabelKey)
+							setContainerResource(pod, 0, corev1.ResourceCPU, "1", "1")
+							setContainerResource(pod, 0, corev1.ResourceMemory, "1Gi", "1Gi")
+							setContainerResource(pod, 1, corev1.ResourceCPU, "1", "1")
+							setContainerResource(pod, 1, corev1.ResourceMemory, "1Gi", "1Gi")
+
+							configSpec := specTemplate.DeepCopy()
+							setContainerPercentagePolicy(configSpec, "container-one", 100)
+
+							configVal := *config
+							configVal.RemoveLimitsEnabled = true
+							boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
+							Expect(err).NotTo(HaveOccurred())
+
+							err = boost.ApplyResourcePolicy(context.Background(), pod)
+
+							Expect(err).NotTo(HaveOccurred())
+							Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+							Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(2000)))
+							Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
+							Expect(pod.Spec.Containers[1].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(1000)))
+							Expect(pod.Labels[bpod.BoostLabelKey]).To(Equal("boost-001"))
+							annot, err := bpod.BoostAnnotationFromPod(pod)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(annot.State).To(Equal(bpod.BoostStateActive))
+							Expect(annot.InitCPURequests["container-one"]).To(Equal("1"))
+							Expect(annot.InitCPULimits["container-one"]).To(Equal("1"))
+						})
+					})
+				})
 			})
 		})
 	})
 })
+
+func setContainerResource(pod *corev1.Pod, containerIdx int, res corev1.ResourceName, req, lim string) {
+	if pod.Spec.Containers[containerIdx].Resources.Requests == nil {
+		pod.Spec.Containers[containerIdx].Resources.Requests = make(corev1.ResourceList)
+	}
+	if pod.Spec.Containers[containerIdx].Resources.Limits == nil {
+		pod.Spec.Containers[containerIdx].Resources.Limits = make(corev1.ResourceList)
+	}
+	if req != "" {
+		pod.Spec.Containers[containerIdx].Resources.Requests[res] = apiResource.MustParse(req)
+	} else {
+		delete(pod.Spec.Containers[containerIdx].Resources.Requests, res)
+	}
+	if lim != "" {
+		pod.Spec.Containers[containerIdx].Resources.Limits[res] = apiResource.MustParse(lim)
+	} else {
+		delete(pod.Spec.Containers[containerIdx].Resources.Limits, res)
+	}
+}
+
+func setContainerPercentagePolicy(configSpec *autoscaling.StartupCPUBoost, containerName string, percentage int64) {
+	configSpec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+		ContainerPolicies: []autoscaling.ContainerPolicy{
+			{
+				ContainerName:      containerName,
+				PercentageIncrease: &autoscaling.PercentageIncrease{Value: percentage},
+			},
+		},
+	}
+}
+
+func setContainerFixedPolicy(configSpec *autoscaling.StartupCPUBoost, containerName, req, lim string) {
+	configSpec.Spec.ResourcePolicy = autoscaling.ResourcePolicy{
+		ContainerPolicies: []autoscaling.ContainerPolicy{
+			{
+				ContainerName: containerName,
+				FixedResources: &autoscaling.FixedResources{
+					Requests: apiResource.MustParse(req),
+					Limits:   apiResource.MustParse(lim),
+				},
+			},
+		},
+	}
+}

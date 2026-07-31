@@ -38,6 +38,17 @@ const (
 	EmptyPatchString     = "{}"
 )
 
+type BoostPodLabel struct {
+	BoostName string
+}
+
+func (l *BoostPodLabel) Apply(pod *corev1.Pod) {
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+	pod.Labels[BoostLabelKey] = l.BoostName
+}
+
 type BoostPodAnnotation struct {
 	State           string            `json:"state,omitempty"`
 	BoostTimestamp  time.Time         `json:"timestamp,omitempty"`
@@ -56,12 +67,34 @@ func NewBoostAnnotation() *BoostPodAnnotation {
 	}
 }
 
-func (a BoostPodAnnotation) ToJSON() string {
+func (a *BoostPodAnnotation) ToJSON() string {
 	result, err := json.Marshal(a)
 	if err != nil {
 		panic("failed to marshall to JSON: " + err.Error())
 	}
 	return string(result)
+}
+
+// HasInitCPUResources returns true if the annotation contains any init CPU resources.
+func (a *BoostPodAnnotation) HasInitCPUResources() bool {
+	return len(a.InitCPURequests) > 0 || len(a.InitCPULimits) > 0
+}
+
+func (a *BoostPodAnnotation) UpdateInitResources(
+	containerName string, resources corev1.ResourceRequirements) {
+	if cpuRequests, ok := resources.Requests[corev1.ResourceCPU]; ok {
+		a.InitCPURequests[containerName] = cpuRequests.String()
+	}
+	if cpuLimits, ok := resources.Limits[corev1.ResourceCPU]; ok {
+		a.InitCPULimits[containerName] = cpuLimits.String()
+	}
+}
+
+func (a *BoostPodAnnotation) Apply(pod *corev1.Pod) {
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations[BoostAnnotationKey] = a.ToJSON()
 }
 
 func BoostAnnotationFromPod(pod *corev1.Pod) (*BoostPodAnnotation, error) {
@@ -213,4 +246,21 @@ func (p *revertBoostResourcesPatch) Data(obj client.Object) ([]byte, error) {
 		return []byte(EmptyPatchString), nil
 	}
 	return patchData, nil
+}
+
+// ResourceResizeRequiresRestart determines if a in-place resize of a resource with a given
+// name requires container restart.
+func ResourceResizeRequiresRestart(c corev1.Container, r corev1.ResourceName) bool {
+	for _, p := range c.ResizePolicy {
+		if p.ResourceName != r {
+			continue
+		}
+		return p.RestartPolicy == corev1.RestartContainer
+	}
+	return false
+}
+
+// HasCPUResourcesToIncrease determines if a container has any CPU resources to increase.
+func HasCPUResourcesToIncrease(c corev1.Container) bool {
+	return !c.Resources.Requests.Cpu().IsZero() || !c.Resources.Limits.Cpu().IsZero()
 }

@@ -19,9 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-logr/logr"
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
-	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,20 +30,15 @@ import (
 // +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,sideEffects=None,timeoutSeconds=2,groups="",resources=pods,verbs=create,versions=v1,name=cpuboost.autoscaling.x-k8s.io,admissionReviewVersions=v1
 
 type podCPUBoostHandler struct {
-	decoder                  admission.Decoder
-	manager                  boost.Manager
-	removeLimits             bool
-	podLevelResourcesEnabled bool
+	decoder admission.Decoder
+	manager boost.Manager
 }
 
-func NewPodCPUBoostWebHook(mgr boost.Manager, scheme *runtime.Scheme, removeLimits bool,
-	podLevelResourcesEnabled bool) *webhook.Admission {
+func NewPodCPUBoostWebHook(mgr boost.Manager, scheme *runtime.Scheme) *webhook.Admission {
 	return &webhook.Admission{
 		Handler: &podCPUBoostHandler{
-			manager:                  mgr,
-			decoder:                  admission.NewDecoder(scheme),
-			removeLimits:             removeLimits,
-			podLevelResourcesEnabled: podLevelResourcesEnabled,
+			manager: mgr,
+			decoder: admission.NewDecoder(scheme),
 		},
 	}
 }
@@ -65,108 +58,16 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 		return admission.Allowed("no boost matched")
 	}
 	log = log.WithValues("boost", boostImpl.Name())
-	h.boostContainerResources(ctx, boostImpl, pod, log)
+
+	err = boostImpl.ApplyResourcePolicy(ctx, pod)
+	if err != nil {
+		log.Error(err, "failed to apply resource policy")
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
-}
-
-func (h *podCPUBoostHandler) boostContainerResources(ctx context.Context, b boost.StartupCPUBoost,
-	pod *corev1.Pod, log logr.Logger) {
-	originalQosClass := computePodQOS(pod, h.podLevelResourcesEnabled)
-	annotation := bpod.NewBoostAnnotation()
-	for i, container := range pod.Spec.Containers {
-		policy, found := b.ResourcePolicy(ctx, &container)
-		if !found {
-			continue
-		}
-		log = log.WithValues("container", container.Name,
-			"cpuRequests", container.Resources.Requests.Cpu().String(),
-			"cpuLimits", container.Resources.Limits.Cpu().String(),
-		)
-		if resizeRequiresRestart(container, corev1.ResourceCPU) {
-			log.Info("skipping container due to restart policy")
-			continue
-		}
-		if !hasResourcesToIncrease(container) {
-			log.Info("skipping container due to lack of resources to increase")
-			continue
-		}
-		resources := policy.NewResources(ctx, &container)
-		if h.containerResizeChangesQosClass(originalQosClass, pod, i, resources) {
-			log.Info("skipping container due to QOS class change after boost")
-			continue
-		}
-		if !resources.Requests.Cpu().IsZero() {
-			log = log.WithValues(
-				"newCpuRequests", resources.Requests.Cpu().String(),
-			)
-		}
-		if !resources.Limits.Cpu().IsZero() {
-			if h.canRemoveLimit(originalQosClass, log) {
-				delete(resources.Limits, corev1.ResourceCPU)
-				log = log.WithValues("newCpuLimits", "<removed>")
-			} else {
-				log = log.WithValues("newCpuLimits", resources.Limits.Cpu().String())
-			}
-		}
-		updateBoostAnnotation(annotation, container.Name, container.Resources)
-		pod.Spec.Containers[i].Resources = *resources
-		log.Info("container resources increased")
-	}
-	if len(annotation.InitCPULimits) > 0 || len(annotation.InitCPURequests) > 0 {
-		if pod.Annotations == nil {
-			pod.Annotations = make(map[string]string)
-		}
-		pod.Annotations[bpod.BoostAnnotationKey] = annotation.ToJSON()
-		if pod.Labels == nil {
-			pod.Labels = make(map[string]string)
-		}
-		pod.Labels[bpod.BoostLabelKey] = b.Name()
-	}
-}
-
-func (h *podCPUBoostHandler) canRemoveLimit(qosClass corev1.PodQOSClass, log logr.Logger) bool {
-	if !h.removeLimits {
-		return false
-	}
-	if qosClass != corev1.PodQOSBurstable && qosClass != corev1.PodQOSBestEffort {
-		log.Info("skipping CPU limits removal as pod is not burstable or besteffort, ")
-		return false
-	}
-	return true
-}
-
-func (h *podCPUBoostHandler) containerResizeChangesQosClass(initQosClass corev1.PodQOSClass,
-	initPod *corev1.Pod, containerIdx int, newContainerRes *corev1.ResourceRequirements) bool {
-	podCopy := initPod.DeepCopy()
-	podCopy.Spec.Containers[containerIdx].Resources = *newContainerRes
-	newQos := computePodQOS(podCopy, h.podLevelResourcesEnabled)
-	return newQos != initQosClass
-}
-
-func hasResourcesToIncrease(c corev1.Container) bool {
-	return !c.Resources.Requests.Cpu().IsZero() || !c.Resources.Limits.Cpu().IsZero()
-}
-
-func updateBoostAnnotation(annot *bpod.BoostPodAnnotation, containerName string,
-	resources corev1.ResourceRequirements) {
-	if cpuRequests, ok := resources.Requests[corev1.ResourceCPU]; ok {
-		annot.InitCPURequests[containerName] = cpuRequests.String()
-	}
-	if cpuLimits, ok := resources.Limits[corev1.ResourceCPU]; ok {
-		annot.InitCPULimits[containerName] = cpuLimits.String()
-	}
-}
-
-func resizeRequiresRestart(c corev1.Container, r corev1.ResourceName) bool {
-	for _, p := range c.ResizePolicy {
-		if p.ResourceName != r {
-			continue
-		}
-		return p.RestartPolicy == corev1.RestartContainer
-	}
-	return false
 }

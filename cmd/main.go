@@ -137,11 +137,13 @@ func main() {
 
 	boostMgr := boost.NewManager(mgr.GetClient())
 	crdSync := boost.NewCRDSynchronizer(boost.CRDSynchronizerConfig{
-		Client:           mgr.GetClient(),
-		Cache:            mgr.GetCache(),
-		Manager:          boostMgr,
-		LegacyRevertMode: controller.ShouldUseLegacyRevertMode(versionInfo.GitVersion),
-		Elected:          mgr.Elected(),
+		Client:                   mgr.GetClient(),
+		Cache:                    mgr.GetCache(),
+		Manager:                  boostMgr,
+		LegacyRevertMode:         controller.ShouldUseLegacyRevertMode(versionInfo.GitVersion),
+		PodLevelResourcesEnabled: podLevelResourcesEnabled,
+		RemoveLimitsEnabled:      cfg.RemoveLimits,
+		Elected:                  mgr.Elected(),
 	})
 	if err := mgr.Add(crdSync); err != nil {
 		setupLog.Error(err, "unable to add CRD synchronizer to controller-runtime manager")
@@ -180,14 +182,15 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		setupLog.Error(err, "Unable to create webhook", "webhook", failedWebhook)
 		os.Exit(1)
 	}
-	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme, cfg.RemoveLimits,
-		podLevelResourcesEnabled)
+	cpuBoostWebHook := boostWebhook.NewPodCPUBoostWebHook(boostMgr, scheme)
 	mgr.GetWebhookServer().Register("/mutate-v1-pod", cpuBoostWebHook)
 	boostCtrl := &controller.StartupCPUBoostReconciler{
-		Client:  mgr.GetClient(),
-		Scheme:  mgr.GetScheme(),
-		Log:     ctrl.Log.WithName("boost-reconciler"),
-		Manager: boostMgr,
+		Client:                   mgr.GetClient(),
+		Scheme:                   mgr.GetScheme(),
+		Log:                      ctrl.Log.WithName("boost-reconciler"),
+		Manager:                  boostMgr,
+		PodLevelResourcesEnabled: podLevelResourcesEnabled,
+		RemoveLimitsEnabled:      cfg.RemoveLimits,
 	}
 	boostMgr.SetStartupCPUBoostReconciler(boostCtrl)
 	if err := boostCtrl.SetupWithManager(mgr, serverVersion); err != nil {

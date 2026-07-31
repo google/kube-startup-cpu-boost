@@ -48,10 +48,12 @@ const (
 // StartupCPUBoostReconciler reconciles a StartupCPUBoost object
 type StartupCPUBoostReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	Log              logr.Logger
-	Manager          boost.Manager
-	LegacyRevertMode bool
+	Scheme                   *runtime.Scheme
+	Log                      logr.Logger
+	Manager                  boost.Manager
+	LegacyRevertMode         bool
+	PodLevelResourcesEnabled bool
+	RemoveLimitsEnabled      bool
 }
 
 //+kubebuilder:rbac:groups=autoscaling.x-k8s.io,resources=startupcpuboosts,verbs=get;list;watch;create;update;patch;delete
@@ -132,8 +134,10 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	log.V(5).Info("handling boost create event")
 	ctx := ctrl.LoggerInto(context.Background(), log)
 	bostConfig := &boost.StartupCPUBoostConfig{
-		Client:           r.Client,
-		LegacyRevertMode: r.LegacyRevertMode,
+		Client:                   r.Client,
+		LegacyRevertMode:         r.LegacyRevertMode,
+		PodLevelResourcesEnabled: r.PodLevelResourcesEnabled,
+		RemoveLimitsEnabled:      r.RemoveLimitsEnabled,
 	}
 	cpuBoost, err := boost.NewStartupCPUBoost(boostObj, bostConfig)
 	if err != nil {

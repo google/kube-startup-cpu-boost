@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
-	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/mock"
 	bwebhook "github.com/google/kube-startup-cpu-boost/internal/webhook"
 	. "github.com/onsi/ginkgo/v2"
@@ -39,13 +38,11 @@ import (
 var _ = Describe("Pod CPU Boost Webhook", func() {
 	Describe("Handles admission requests", func() {
 		var (
-			mockCtrl                 *gomock.Controller
-			manager                  *mock.MockManager
-			managerCall              *gomock.Call
-			pod                      *corev1.Pod
-			response                 webhook.AdmissionResponse
-			removeLimits             bool
-			podLevelResourcesEnabled bool
+			mockCtrl    *gomock.Controller
+			manager     *mock.MockManager
+			managerCall *gomock.Call
+			pod         *corev1.Pod
+			response    webhook.AdmissionResponse
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
@@ -60,7 +57,6 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 					return p.Name == pod.Name && p.Namespace == pod.Namespace
 				}),
 			)
-			podLevelResourcesEnabled = false
 		})
 		JustBeforeEach(func() {
 			podJSON, err := json.Marshal(pod)
@@ -72,20 +68,16 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 					},
 				},
 			}
-			hook := bwebhook.NewPodCPUBoostWebHook(manager, scheme.Scheme, removeLimits,
-				podLevelResourcesEnabled)
+			hook := bwebhook.NewPodCPUBoostWebHook(manager, scheme.Scheme)
 			response = hook.Handle(context.TODO(), admissionReq)
 		})
-		Describe("for burstable POD with one container", func() {
+		Describe("Webhook Admission Behavior", func() {
 			BeforeEach(func() {
 				pod = oneContainerBurstablePodTemplate.DeepCopy()
 			})
 			When("there is no matching Startup CPU Boost", func() {
 				BeforeEach(func() {
 					managerCall.Return(nil, false)
-				})
-				It("calls the Startup CPU Boost manager", func() {
-					managerCall.Times(1)
 				})
 				It("allows the admission", func() {
 					Expect(response.Allowed).To(BeTrue())
@@ -96,20 +88,27 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 			})
 			When("there is a matching Startup CPU Boost", func() {
 				var (
-					boostPolicyCall *gomock.Call
+					boost                   *mock.MockStartupCPUBoost
+					applyResourcePolicyCall *gomock.Call
 				)
 				BeforeEach(func() {
-					boost := mock.NewMockStartupCPUBoost(mockCtrl)
+					boost = mock.NewMockStartupCPUBoost(mockCtrl)
 					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
 					managerCall.Return(boost, true)
+					applyResourcePolicyCall = boost.EXPECT().ApplyResourcePolicy(
+						gomock.Any(),
+						gomock.Cond(func(x any) bool {
+							p, ok := x.(*corev1.Pod)
+							if !ok {
+								return false
+							}
+							return p.Name == pod.Name && p.Namespace == pod.Namespace
+						}),
+					)
 				})
-				It("retrieves resource policy for a container", func() {
-					boostPolicyCall.Times(1)
-				})
-				When("there is no policy for a container", func() {
+				When("ApplyResourcePolicy makes no changes", func() {
 					BeforeEach(func() {
-						boostPolicyCall.Return(nil, false)
+						applyResourcePolicyCall.Return(nil)
 					})
 					It("allows the admission", func() {
 						Expect(response.Allowed).To(BeTrue())
@@ -118,467 +117,59 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 						Expect(response.Patches).To(HaveLen(0))
 					})
 				})
-				When("there is a policy for a container", func() {
-					When("policy does not change QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicy := resource.NewPercentageContainerPolicy(120)
-							boostPolicyCall.Return(resPolicy, true)
-						})
-						It("allows the admission", func() {
-							Expect(response.Allowed).To(BeTrue())
-						})
-						It("returns valid patches ", func() {
-							Expect(response.Patches).To(ConsistOf(
-								buildBoostLabelPatch("boost-one"),
-								HaveBoostAnnotationPatch(pod.Spec.Containers),
-								buildContainerResourcePatch(0, "requests", "replace", "1100m"),
-								buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-							))
-						})
-						When("remove limits is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches ", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(pod.Spec.Containers),
-									buildContainerResourcePatch(0, "requests", "replace", "1100m"),
-									buildContainerResourcePatch(0, "limits", "remove", ""),
-								))
-							})
-						})
-					})
-					When("policy changes QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicy := resource.NewFixedPolicy(apiResource.MustParse("2"),
-								apiResource.MustParse("2"))
-							boostPolicyCall.Return(resPolicy, true)
-						})
-						It("allows the admission", func() {
-							Expect(response.Allowed).To(BeTrue())
-						})
-						It("returns zero patches", func() {
-							Expect(response.Patches).To(HaveLen(0))
-						})
-						When("remove limits is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns zero patches", func() {
-								Expect(response.Patches).To(HaveLen(0))
-							})
-						})
-					})
-				})
-			})
-		})
-		Describe("for guaranteed POD with one container", func() {
-			BeforeEach(func() {
-				pod = oneContainerGuaranteedPodTemplate.DeepCopy()
-			})
-			When("there is a matching Startup CPU Boost", func() {
-				var (
-					boostPolicyCall *gomock.Call
-				)
-				BeforeEach(func() {
-					boost := mock.NewMockStartupCPUBoost(mockCtrl)
-					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
-					managerCall.Return(boost, true)
-				})
-				It("retrieves resource policy for a container", func() {
-					boostPolicyCall.Times(1)
-				})
-				When("there is a policy for a container", func() {
-					When("policy does not change QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicy := resource.NewPercentageContainerPolicy(120)
-							boostPolicyCall.Return(resPolicy, true)
-						})
-						When("remove limits is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(pod.Spec.Containers),
-									buildContainerResourcePatch(0, "requests", "replace", "2200m"),
-									buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-								))
-							})
-						})
-					})
-					When("policy changes QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicy := resource.NewFixedPolicy(apiResource.MustParse("1"),
-								apiResource.MustParse("2"))
-							boostPolicyCall.Return(resPolicy, true)
-						})
-						When("remove limits is disabled", func() {
-							BeforeEach(func() {
-								removeLimits = false
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns zero patches", func() {
-								Expect(response.Patches).To(HaveLen(0))
-							})
-						})
-						When("remove limits is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns zero patches", func() {
-								Expect(response.Patches).To(HaveLen(0))
-							})
-						})
-					})
-				})
-			})
-		})
-		Describe("for burstable POD with two containers", func() {
-			BeforeEach(func() {
-				pod = twoContainerBurstablePodTemplate.DeepCopy()
-			})
-			When("there is a matching Startup CPU Boost", func() {
-				var (
-					boostPolicyOneCall *gomock.Call
-					boostPolicyTwoCall *gomock.Call
-				)
-				BeforeEach(func() {
-					boost := mock.NewMockStartupCPUBoost(mockCtrl)
-					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
-					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-two"))
-					managerCall.Return(boost, true)
-				})
-				It("retrieves resource policy for a container", func() {
-					boostPolicyOneCall.Times(1)
-					boostPolicyTwoCall.Times(1)
-				})
-				When("there is no policy for any container", func() {
+				When("ApplyResourcePolicy mutates the pod", func() {
 					BeforeEach(func() {
-						boostPolicyOneCall.Return(nil, false)
-						boostPolicyTwoCall.Return(nil, false)
+						applyResourcePolicyCall.DoAndReturn(func(ctx context.Context, p *corev1.Pod) error {
+							p.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("2")
+							if p.Annotations == nil {
+								p.Annotations = make(map[string]string)
+							}
+							p.Annotations[bpod.BoostAnnotationKey] = `{"state": "Active"}`
+
+							if p.Labels == nil {
+								p.Labels = make(map[string]string)
+							}
+							p.Labels[bpod.BoostLabelKey] = "boost-one"
+							return nil
+						})
 					})
 					It("allows the admission", func() {
 						Expect(response.Allowed).To(BeTrue())
 					})
-					It("returns zero patches", func() {
-						Expect(response.Patches).To(HaveLen(0))
+					It("returns valid JSON patches", func() {
+						Expect(response.Patches).To(ConsistOf(
+							jsonpatch.Operation{
+								Operation: "add",
+								Path:      "/metadata/annotations",
+								Value: map[string]interface{}{
+									bpod.BoostAnnotationKey: `{"state": "Active"}`,
+								},
+							},
+							jsonpatch.Operation{
+								Operation: "add",
+								Path:      "/metadata/labels",
+								Value: map[string]interface{}{
+									bpod.BoostLabelKey: "boost-one",
+								},
+							},
+							jsonpatch.Operation{
+								Operation: "replace",
+								Path:      "/spec/containers/0/resources/requests/cpu",
+								Value:     "2",
+							},
+						))
 					})
 				})
-				When("there is a policy for one container", func() {
+				When("ApplyResourcePolicy returns an error", func() {
 					BeforeEach(func() {
-						resPolicy := resource.NewPercentageContainerPolicy(120)
-						boostPolicyOneCall.Return(resPolicy, true)
-						boostPolicyTwoCall.Return(nil, false)
+						applyResourcePolicyCall.Return(fmt.Errorf("internal policy error"))
 					})
-					When("remove limits is disabled", func() {
-						BeforeEach(func() {
-							removeLimits = false
-						})
-						It("allows the admission", func() {
-							Expect(response.Allowed).To(BeTrue())
-						})
-						It("returns valid patches", func() {
-							Expect(response.Patches).To(ConsistOf(
-								buildBoostLabelPatch("boost-one"),
-								HaveBoostAnnotationPatch([]corev1.Container{pod.Spec.Containers[0]}),
-								buildContainerResourcePatch(0, "requests", "replace", "1100m"),
-								buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-							))
-						})
-					})
-					When("remove limits is enabled", func() {
-						BeforeEach(func() {
-							removeLimits = true
-						})
-						It("allows the admission", func() {
-							Expect(response.Allowed).To(BeTrue())
-						})
-						It("returns valid patches", func() {
-							Expect(response.Patches).To(ConsistOf(
-								buildBoostLabelPatch("boost-one"),
-								HaveBoostAnnotationPatch([]corev1.Container{pod.Spec.Containers[0]}),
-								buildContainerResourcePatch(0, "requests", "replace", "1100m"),
-								buildContainerResourcePatch(0, "limits", "remove", ""),
-							))
-						})
-					})
-				})
-				When("there are policies for two containers", func() {
-					When("policies do not change POD QoS class", func() {
-						BeforeEach(func() {
-							resPolicyOne := resource.NewPercentageContainerPolicy(120)
-							resPolicyTwo := resource.NewPercentageContainerPolicy(120)
-							boostPolicyOneCall.Return(resPolicyOne, true)
-							boostPolicyTwoCall.Return(resPolicyTwo, true)
-						})
-						When("remove limit is not enabled", func() {
-							BeforeEach(func() {
-								removeLimits = false
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(pod.Spec.Containers),
-									buildContainerResourcePatch(0, "requests", "replace", "1100m"),
-									buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-									buildContainerResourcePatch(1, "requests", "replace", "1100m"),
-									buildContainerResourcePatch(1, "limits", "replace", "2200m"),
-								))
-							})
-						})
-						When("remove limit is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(pod.Spec.Containers),
-									buildContainerResourcePatch(0, "requests", "replace", "1100m"),
-									buildContainerResourcePatch(0, "limits", "remove", ""),
-									buildContainerResourcePatch(1, "requests", "replace", "1100m"),
-									buildContainerResourcePatch(1, "limits", "remove", ""),
-								))
-							})
-						})
-					})
-					When("policies change POD QoS class", func() {
-						BeforeEach(func() {
-							resPolicyOne := resource.NewFixedPolicy(apiResource.MustParse("2"),
-								apiResource.MustParse("2"))
-							resPolicyTwo := resource.NewFixedPolicy(apiResource.MustParse("2"),
-								apiResource.MustParse("2"))
-							boostPolicyOneCall.Return(resPolicyOne, true)
-							boostPolicyTwoCall.Return(resPolicyTwo, true)
-						})
-						When("remove limit is not enabled", func() {
-							BeforeEach(func() {
-								removeLimits = false
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(
-										[]corev1.Container{pod.Spec.Containers[0]}),
-									buildContainerResourcePatch(0, "requests", "replace", "2"),
-									buildContainerResourcePatch(0, "limits", "replace", "2"),
-								))
-							})
-						})
-						When("remove limit is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(pod.Spec.Containers),
-									buildContainerResourcePatch(0, "requests", "replace", "2"),
-									buildContainerResourcePatch(0, "limits", "remove", ""),
-									buildContainerResourcePatch(1, "requests", "replace", "2"),
-									buildContainerResourcePatch(1, "limits", "remove", ""),
-								))
-							})
-						})
-					})
-				})
-			})
-		})
-		Describe("for guaranteed POD with two containers", func() {
-			BeforeEach(func() {
-				pod = twoContainerGuaranteedPodTemplate.DeepCopy()
-			})
-			When("there is a matching Startup CPU Boost", func() {
-				var (
-					boostPolicyOneCall *gomock.Call
-					boostPolicyTwoCall *gomock.Call
-				)
-				BeforeEach(func() {
-					boost := mock.NewMockStartupCPUBoost(mockCtrl)
-					boost.EXPECT().Name().AnyTimes().Return("boost-one")
-					boostPolicyOneCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-one"))
-					boostPolicyTwoCall = boost.EXPECT().ResourcePolicy(gomock.Any(), containerNameMatcher("container-two"))
-					managerCall.Return(boost, true)
-				})
-				It("retrieves resource policy for a container", func() {
-					boostPolicyOneCall.Times(1)
-					boostPolicyTwoCall.Times(1)
-				})
-				When("there is a policy for one container", func() {
-					When("policy does not change QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicyOne := resource.NewPercentageContainerPolicy(120)
-							boostPolicyOneCall.Return(resPolicyOne, true)
-							boostPolicyTwoCall.Return(nil, false)
-						})
-						When("remove limit is not enabled", func() {
-							BeforeEach(func() {
-								removeLimits = false
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(
-										[]corev1.Container{pod.Spec.Containers[0]}),
-									buildContainerResourcePatch(0, "requests", "replace", "2200m"),
-									buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-								))
-							})
-						})
-						When("remove limit is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(
-										[]corev1.Container{pod.Spec.Containers[0]}),
-									buildContainerResourcePatch(0, "requests", "replace", "2200m"),
-									buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-								))
-							})
-						})
-					})
-					When("policy changes QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicyOne := resource.NewFixedPolicy(apiResource.MustParse("2"),
-								apiResource.MustParse("4"))
-							boostPolicyOneCall.Return(resPolicyOne, true)
-							boostPolicyTwoCall.Return(nil, false)
-						})
-						It("allows the admission", func() {
-							Expect(response.Allowed).To(BeTrue())
-						})
-						It("returns zero patches", func() {
-							Expect(response.Patches).To(HaveLen(0))
-						})
-					})
-				})
-				When("there is a policy for two containers", func() {
-					When("policies do not change QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicyOne := resource.NewPercentageContainerPolicy(120)
-							resPolicyTwo := resource.NewPercentageContainerPolicy(120)
-							boostPolicyOneCall.Return(resPolicyOne, true)
-							boostPolicyTwoCall.Return(resPolicyTwo, true)
-						})
-						When("remove limit is not enabled", func() {
-							BeforeEach(func() {
-								removeLimits = false
-							})
-						})
-						When("remove limit is enabled", func() {
-							BeforeEach(func() {
-								removeLimits = true
-							})
-							It("allows the admission", func() {
-								Expect(response.Allowed).To(BeTrue())
-							})
-							It("returns valid patches", func() {
-								Expect(response.Patches).To(ConsistOf(
-									buildBoostLabelPatch("boost-one"),
-									HaveBoostAnnotationPatch(pod.Spec.Containers),
-									buildContainerResourcePatch(0, "requests", "replace", "2200m"),
-									buildContainerResourcePatch(0, "limits", "replace", "2200m"),
-									buildContainerResourcePatch(1, "requests", "replace", "2200m"),
-									buildContainerResourcePatch(1, "limits", "replace", "2200m"),
-								))
-							})
-						})
-					})
-					When("policies change QoS class of a POD", func() {
-						BeforeEach(func() {
-							resPolicyOne := resource.NewFixedPolicy(apiResource.MustParse("2"),
-								apiResource.MustParse("4"))
-							resPolicyTwo := resource.NewFixedPolicy(apiResource.MustParse("2"),
-								apiResource.MustParse("4"))
-							boostPolicyOneCall.Return(resPolicyOne, true)
-							boostPolicyTwoCall.Return(resPolicyTwo, true)
-						})
-						It("allows the admission", func() {
-							Expect(response.Allowed).To(BeTrue())
-						})
-						It("returns zero patches", func() {
-							Expect(response.Patches).To(HaveLen(0))
-						})
+					It("denies the admission with the error", func() {
+						Expect(response.Allowed).To(BeFalse())
+						Expect(response.Result.Message).To(ContainSubstring("internal policy error"))
 					})
 				})
 			})
 		})
 	})
 })
-
-func buildBoostLabelPatch(boostName string) jsonpatch.Operation {
-	return jsonpatch.Operation{
-		Operation: "add",
-		Path:      "/metadata/labels",
-		Value: map[string]interface{}{
-			bpod.BoostLabelKey: boostName,
-		},
-	}
-}
-
-func buildContainerResourcePatch(containerIdx int, requirement string, operation string,
-	value string) jsonpatch.Operation {
-	var valueToSet interface{}
-	valueToSet = value
-	if value == "" {
-		valueToSet = nil
-	}
-	return jsonpatch.Operation{
-		Operation: operation,
-		Path:      fmt.Sprintf("/spec/containers/%d/resources/%s/cpu", containerIdx, requirement),
-		Value:     valueToSet,
-	}
-}
-
-type containerNameMatcher string
-
-func (m containerNameMatcher) Matches(x any) bool {
-	if c, ok := x.(*corev1.Container); ok && c != nil {
-		return c.Name == string(m)
-	}
-	return false
-}
-
-func (m containerNameMatcher) String() string {
-	return "container with name " + string(m)
-}
