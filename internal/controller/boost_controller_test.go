@@ -224,4 +224,40 @@ var _ = Describe("BoostController", func() {
 			mgrMockCall.Times(1)
 		})
 	})
+	Describe("receives create event", func() {
+		var (
+			createEvent event.CreateEvent
+			realManager boost.Manager
+		)
+		BeforeEach(func() {
+			realManager = boost.NewManager(mockClient)
+			boostCtrl.Manager = realManager
+		})
+		When("boost selector is invalid", func() {
+			BeforeEach(func() {
+				createEvent = event.CreateEvent{Object: &autoscaling.StartupCPUBoost{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "boost-001",
+						Namespace: "demo",
+					},
+					Selector: metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "app",
+								Operator: "InvalidOperator",
+							},
+						},
+					},
+				}}
+			})
+			It("does not panic", func() {
+				Expect(func() { boostCtrl.Create(createEvent) }).NotTo(Panic())
+			})
+			It("does not register the boost", func() {
+				boostCtrl.Create(createEvent)
+				_, ok := realManager.GetRegularCPUBoost(context.TODO(), "boost-001", "demo")
+				Expect(ok).To(BeFalse())
+			})
+		})
+	})
 })

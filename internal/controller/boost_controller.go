@@ -142,6 +142,7 @@ func (r *StartupCPUBoostReconciler) Create(e event.CreateEvent) bool {
 	cpuBoost, err := boost.NewStartupCPUBoost(boostObj, bostConfig)
 	if err != nil {
 		log.Error(err, "boost creation error")
+		return true
 	}
 	if err := r.Manager.AddRegularCPUBoost(ctx, cpuBoost); err != nil {
 		if !errors.Is(err, boost.ErrStartupCPUBoostAlreadyExists) {
