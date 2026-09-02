@@ -17,6 +17,7 @@ package duration
 import (
 	"time"
 
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -52,6 +53,9 @@ func (p *FixedDurationPolicy) Duration() time.Duration {
 
 func (p *FixedDurationPolicy) Valid(pod *v1.Pod) bool {
 	now := p.timeFunc()
+	if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil && !annot.BoostTimestamp.IsZero() {
+		return annot.BoostTimestamp.Add(p.duration).After(now)
+	}
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == v1.PodScheduled && condition.Status == v1.ConditionTrue {
 			return condition.LastTransitionTime.Add(p.duration).After(now)

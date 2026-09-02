@@ -16,21 +16,22 @@
 package config
 
 const (
-	PodNamespaceDefault           = "kube-startup-cpu-boost-system"
-	MgrCheckIntervalSecDefault    = 5
-	LeaderElectionDefault         = false
-	MetricsProbeBindAddrDefault   = ":8080"
-	HealthProbeBindAddrDefault    = ":8081"
-	SecureMetricsDefault          = false
-	ZapLogLevelDefault            = 0 // zapcore.InfoLevel
-	ZapDevelopmentDefault         = false
-	HTTP2Default                  = false
-	RemoveLimitsDefault           = true
-	ValidateFeatureEnabledDefault = true
-	WebhookServiceNameDefault     = "kube-startup-cpu-boost-webhook-service"
-	WebhookSecretNameDefault      = "kube-startup-cpu-boost-webhook-secret"
-	MutatingWebhookNameDefault    = "kube-startup-cpu-boost-mutating-webhook-configuration"
-	ValidatingWebhookNameDefault  = "kube-startup-cpu-boost-validating-webhook-configuration"
+	PodNamespaceDefault            = "kube-startup-cpu-boost-system"
+	MgrCheckIntervalSecDefault     = 5
+	LeaderElectionDefault          = false
+	MetricsProbeBindAddrDefault    = ":8080"
+	HealthProbeBindAddrDefault     = ":8081"
+	SecureMetricsDefault           = false
+	ZapLogLevelDefault             = 0 // zapcore.InfoLevel
+	ZapDevelopmentDefault          = false
+	HTTP2Default                   = false
+	RemoveLimitsDefault            = true
+	ValidateFeatureEnabledDefault  = true
+	WebhookServiceNameDefault      = "kube-startup-cpu-boost-webhook-service"
+	WebhookSecretNameDefault       = "kube-startup-cpu-boost-webhook-secret"
+	MutatingWebhookNameDefault     = "kube-startup-cpu-boost-mutating-webhook-configuration"
+	ValidatingWebhookNameDefault   = "kube-startup-cpu-boost-validating-webhook-configuration"
+	BoostOnContainerRestartDefault = false
 )
 
 // ConfigProvider provides the Kube Startup CPU Boost configuration
@@ -73,6 +74,8 @@ type Config struct {
 	MutatingWebhookName string
 	// ValidatingWebhookName is the name of the ValidatingWebhookConfiguration
 	ValidatingWebhookName string
+	// BoostOnContainerRestart enables boost on container restart
+	BoostOnContainerRestart bool
 }
 
 // LoadDefaults loads the default configuration values
@@ -92,4 +95,5 @@ func (c *Config) LoadDefaults() {
 	c.WebhookSecretName = WebhookSecretNameDefault
 	c.MutatingWebhookName = MutatingWebhookNameDefault
 	c.ValidatingWebhookName = ValidatingWebhookNameDefault
+	c.BoostOnContainerRestart = BoostOnContainerRestartDefault
 }

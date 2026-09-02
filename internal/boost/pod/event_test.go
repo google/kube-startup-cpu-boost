@@ -37,6 +37,11 @@ var _ = Describe("PodEvent", func() {
 			Entry("nil event", nil, pod.ErrNilPodEvent),
 			Entry("empty type", &pod.PodEvent{Pod: &corev1.Pod{}}, pod.ErrEmptyType),
 			Entry("nil pod", &pod.PodEvent{Type: pod.PodEventTypePodCreated}, pod.ErrNilPod),
+			Entry("container restarting event with empty restarting container names",
+				&pod.PodEvent{
+					Type: pod.PodEventTypeContainerRestarting,
+					Pod:  &corev1.Pod{},
+				}, pod.ErrEmptyRestartingContainerNames),
 			Entry("valid event", &pod.PodEvent{Type: pod.PodEventTypePodCreated, Pod: &corev1.Pod{}}, nil),
 		)
 	})

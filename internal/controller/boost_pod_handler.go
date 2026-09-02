@@ -108,22 +108,40 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent,
 	}
 	log := h.log.WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	log.V(5).Info("handling pod update")
-	if equality.Semantic.DeepEqual(pod.Status.Conditions, oldPod.Status.Conditions) {
-		log.V(5).Info("pod update skipped: conditions did not change")
+
+	restartingContainers := getRestartingContainers(oldPod, pod)
+	conditionsChanged := !equality.Semantic.DeepEqual(pod.Status.Conditions, oldPod.Status.Conditions)
+
+	if len(restartingContainers) == 0 && !conditionsChanged {
+		log.V(5).Info("pod update skipped: conditions did not change and no container is restarting")
 		return
 	}
-	boost, err := h.manager.HandlePodEvent(ctx, &bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: pod})
-	if err != nil {
-		log.Error(err, "failed to handle pod update")
-		return
-	}
-	if boost != nil {
-		wq.Add(reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      boost.Name(),
-				Namespace: boost.Namespace(),
-			},
+
+	handleEvent := func(eventType bpod.PodEventType, restarting []string) {
+		boost, err := h.manager.HandlePodEvent(ctx, &bpod.PodEvent{
+			Type:                     eventType,
+			Pod:                      pod,
+			RestartingContainerNames: restarting,
 		})
+		if err != nil {
+			log.Error(err, "failed to handle pod update", "eventType", eventType)
+			return
+		}
+		if boost != nil {
+			wq.Add(reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      boost.Name(),
+					Namespace: boost.Namespace(),
+				},
+			})
+		}
+	}
+
+	if len(restartingContainers) > 0 {
+		handleEvent(bpod.PodEventTypeContainerRestarting, restartingContainers)
+	}
+	if conditionsChanged {
+		handleEvent(bpod.PodEventTypeConditionChanged, nil)
 	}
 }
 
@@ -147,4 +165,36 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 			},
 		},
 	}
+}
+
+func getRestartingContainers(oldPod, newPod *corev1.Pod) []string {
+	if newPod.GetDeletionTimestamp() != nil {
+		return nil
+	}
+	if newPod.Status.Phase == corev1.PodFailed || newPod.Status.Phase == corev1.PodSucceeded {
+		return nil
+	}
+	if newPod.Spec.RestartPolicy == corev1.RestartPolicyNever {
+		return nil
+	}
+
+	var restarting []string
+	oldStatuses := make(map[string]corev1.ContainerStatus)
+	for _, status := range oldPod.Status.ContainerStatuses {
+		oldStatuses[status.Name] = status
+	}
+	for _, newStatus := range newPod.Status.ContainerStatuses {
+		oldStatus, exists := oldStatuses[newStatus.Name]
+		if !exists {
+			continue
+		}
+		if newStatus.State.Terminated != nil && oldStatus.State.Terminated == nil {
+			if newPod.Spec.RestartPolicy == corev1.RestartPolicyOnFailure && newStatus.State.Terminated.ExitCode == 0 {
+				continue
+			}
+			restarting = append(restarting, newStatus.Name)
+			continue
+		}
+	}
+	return restarting
 }

@@ -104,11 +104,18 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 							}
 							return p.Name == pod.Name && p.Namespace == pod.Namespace
 						}),
+						gomock.Cond(func(x any) bool {
+							set, ok := x.(bpod.ContainerNameSet)
+							if !ok || set == nil {
+								return false
+							}
+							return set.Has(pod.Spec.Containers[0].Name)
+						}),
 					)
 				})
 				When("ApplyResourcePolicy makes no changes", func() {
 					BeforeEach(func() {
-						applyResourcePolicyCall.Return(nil)
+						applyResourcePolicyCall.Return(false, nil)
 					})
 					It("allows the admission", func() {
 						Expect(response.Allowed).To(BeTrue())
@@ -119,7 +126,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				})
 				When("ApplyResourcePolicy mutates the pod", func() {
 					BeforeEach(func() {
-						applyResourcePolicyCall.DoAndReturn(func(ctx context.Context, p *corev1.Pod) error {
+						applyResourcePolicyCall.DoAndReturn(func(ctx context.Context, p *corev1.Pod, _ bpod.ContainerNameSet) (bool, error) {
 							p.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("2")
 							if p.Annotations == nil {
 								p.Annotations = make(map[string]string)
@@ -130,7 +137,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 								p.Labels = make(map[string]string)
 							}
 							p.Labels[bpod.BoostLabelKey] = "boost-one"
-							return nil
+							return true, nil
 						})
 					})
 					It("allows the admission", func() {
@@ -162,7 +169,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				})
 				When("ApplyResourcePolicy returns an error", func() {
 					BeforeEach(func() {
-						applyResourcePolicyCall.Return(fmt.Errorf("internal policy error"))
+						applyResourcePolicyCall.Return(false, fmt.Errorf("internal policy error"))
 					})
 					It("denies the admission with the error", func() {
 						Expect(response.Allowed).To(BeFalse())

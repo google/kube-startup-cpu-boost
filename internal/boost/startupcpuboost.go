@@ -41,9 +41,8 @@ type StartupCPUBoost interface {
 	Name() string
 	// Namespace returns startup-cpu-boost namespace
 	Namespace() string
-
 	// ApplyResourcePolicy applies resource policy on a given POD
-	ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod) error
+	ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod, containerNames bpod.ContainerNameSet) (bool, error)
 	// DurationPolicies returns configured duration policies
 	DurationPolicies() map[string]duration.Policy
 	// Pod returns a POD if tracked by startup-cpu-boost
@@ -52,8 +51,6 @@ type StartupCPUBoost interface {
 	HandlePodEvent(ctx context.Context, event *bpod.PodEvent) error
 	// ValidatePolicy validates policy with a given name on all startup-cpu-boost PODs.
 	ValidatePolicy(ctx context.Context, name string) []*corev1.Pod
-	// BoostResources boosts resources resorces of a running POD (i.e. on container restart)
-	BoostResources(ctx context.Context, pod *corev1.Pod) error
 	// RevertResources updates POD's container resource requests and limits to their original
 	// values using the data from StartupCPUBoost annotation
 	RevertResources(ctx context.Context, pod *corev1.Pod) error
@@ -82,7 +79,7 @@ type StartupCPUBoostStatsEventType int32
 
 type StartupCPUBoostStatsEvent struct {
 	Type   StartupCPUBoostStatsEventType
-	Object interface{}
+	Object any
 }
 
 // StartupCPUBoostStats holds the StartupCPUBoost usage statistics
@@ -112,7 +109,7 @@ type StartupCPUBoostImpl struct {
 	client                   client.Client
 	stats                    StartupCPUBoostStats
 	legacyRevertMode         bool
-	boostOnRestart           bool
+	boostOnRestartEnabled    bool
 	podLevelResourcesEnabled bool
 	removeLimitsEnabled      bool
 }
@@ -168,7 +165,7 @@ func NewStartupCPUBoost(boost *autoscaling.StartupCPUBoost, cfg *StartupCPUBoost
 		client:                   cfg.Client,
 		stats:                    StartupCPUBoostStats{},
 		legacyRevertMode:         cfg.LegacyRevertMode,
-		boostOnRestart:           cfg.BoostOnRestart,
+		boostOnRestartEnabled:    cfg.BoostOnRestart,
 		podLevelResourcesEnabled: cfg.PodLevelResourcesEnabled,
 		removeLimitsEnabled:      cfg.RemoveLimitsEnabled,
 	}, nil
@@ -185,7 +182,7 @@ func (b *StartupCPUBoostImpl) Namespace() string {
 }
 
 // ApplyResourcePolicy applies resource policy on a given POD
-func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod) error {
+func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod, containerNames bpod.ContainerNameSet) (bool, error) {
 	log := b.loggerFromContext(ctx)
 	originalQosClass := bpod.ComputePodQOS(pod, b.podLevelResourcesEnabled)
 	annotation := bpod.NewBoostAnnotation()
@@ -193,11 +190,18 @@ func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *core
 		var err error
 		annotation, err = bpod.BoostAnnotationFromPod(pod)
 		if err != nil {
-			return err
+			return false, err
+		}
+		if annotation.State != bpod.BoostStateReverted {
+			log.WithValues("state", annotation.State).Info("skipping boost as it's not in reverted state")
+			return false, nil
 		}
 	}
-	// ToDo: add validation based on boost annotation status
+	var anyContainerBoosted bool
 	for i, container := range pod.Spec.Containers {
+		if containerNames != nil && !containerNames.Has(container.Name) {
+			continue
+		}
 		policy, found := b.resourcePolicy(ctx, &container)
 		if !found {
 			continue
@@ -228,7 +232,7 @@ func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *core
 			)
 		}
 		if !resources.Limits.Cpu().IsZero() {
-			if b.canRemoveLimit(originalQosClass, log) {
+			if b.canRemoveLimit(pod, originalQosClass, log) {
 				delete(resources.Limits, corev1.ResourceCPU)
 				log = log.WithValues("newCpuLimits", "<removed>")
 			} else {
@@ -237,17 +241,19 @@ func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *core
 		}
 		annotation.UpdateInitResources(container.Name, container.Resources)
 		pod.Spec.Containers[i].Resources = *resources
-		log.Info("container resources increased")
+		anyContainerBoosted = true
+		log.Info("calculated increased container resources")
 	}
 	// checks if any container CPU resources were boosted
-	if annotation.HasInitCPUResources() {
+	if anyContainerBoosted {
 		annotation.State = bpod.BoostStateActive
 		annotation.BoostTimestamp = time.Now()
 		annotation.Apply(pod)
 		label := &bpod.BoostPodLabel{BoostName: b.Name()}
 		label.Apply(pod)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // DurationPolicies returns configured duration policies
@@ -270,11 +276,20 @@ func (b *StartupCPUBoostImpl) HandlePodEvent(ctx context.Context, event *bpod.Po
 	}
 	switch event.Type {
 	case bpod.PodEventTypePodCreated:
-		return b.upsertPod(ctx, event.Pod)
+		if err := b.upsertPod(ctx, event.Pod); err != nil {
+			return err
+		}
+		return b.validateDurationPolicies(ctx, event.Pod)
 	case bpod.PodEventTypePodDeleted:
 		return b.deletePod(ctx, event.Pod)
 	case bpod.PodEventTypeConditionChanged:
-		return b.upsertPod(ctx, event.Pod)
+		b.inspectResizeConditions(ctx, event.Pod)
+		if err := b.upsertPod(ctx, event.Pod); err != nil {
+			return err
+		}
+		return b.validateDurationPolicies(ctx, event.Pod)
+	case bpod.PodEventTypeContainerRestarting:
+		return b.boostOnRestart(ctx, event.Pod, event.RestartingContainerNames)
 	default:
 		log := b.loggerFromContext(ctx).WithValues("event_type", event.Type, "pod", event.Pod.Name)
 		log.Info("unknown event type, skipping")
@@ -298,11 +313,6 @@ func (b *StartupCPUBoostImpl) ValidatePolicy(ctx context.Context, name string) (
 		}
 	}
 	return
-}
-
-// BoostResources boosts resources of a running POD (i.e. on container restart)
-func (b *StartupCPUBoostImpl) BoostResources(ctx context.Context, pod *corev1.Pod) error {
-	panic("unimplemented")
 }
 
 // RevertResources updates POD's container resource requests and limits to their original
@@ -356,7 +366,6 @@ func (b *StartupCPUBoostImpl) resourcePolicy(ctx context.Context, container *cor
 }
 
 // upsertPod inserts new or updates existing POD to startup-cpu-boost tracking
-// The update of existing POD triggers validation logic and may result in POD update
 func (b *StartupCPUBoostImpl) upsertPod(ctx context.Context, pod *corev1.Pod) error {
 	b.Lock()
 	defer b.Unlock()
@@ -370,14 +379,21 @@ func (b *StartupCPUBoostImpl) upsertPod(ctx context.Context, pod *corev1.Pod) er
 	}
 	b.updateStats(statsEvent)
 	log.V(5).Info("pod upserted successfully")
+	return nil
+}
+
+func (b *StartupCPUBoostImpl) validateDurationPolicies(ctx context.Context, pod *corev1.Pod) error {
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
+	b.RLock()
 	condPolicy, ok := b.durationPolicies[duration.PodConditionPolicyName]
+	b.RUnlock()
 	if !ok {
 		log.V(5).Info("pod duration policy not found, skipping resource reversion")
 		return nil
 	}
 	if valid := b.validatePolicyOnPod(ctx, condPolicy, pod); !valid {
 		log.V(5).Info("reverting pod resources")
-		if err := b.revertResources(ctx, pod); err != nil {
+		if err := b.RevertResources(ctx, pod); err != nil {
 			return fmt.Errorf("pod resources reversion failed: %s", err)
 		}
 		log.Info("pod resources reverted successfully")
@@ -396,6 +412,31 @@ func (b *StartupCPUBoostImpl) deletePod(ctx context.Context, pod *corev1.Pod) er
 	return nil
 }
 
+func (b *StartupCPUBoostImpl) boostOnRestart(ctx context.Context, pod *corev1.Pod, containerNames []string) error {
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name, "container_names", containerNames)
+	if !b.boostOnRestartEnabled {
+		log.V(5).Info("boost on restart not enabled, skipping")
+		return nil
+	}
+	log.Info("boosting pod resources on container restart")
+	boostedPod := pod.DeepCopy()
+	boosted, err := b.ApplyResourcePolicy(ctx, boostedPod, bpod.ContainerNameSetFromSlice(containerNames))
+	if err != nil {
+		return err
+	}
+	if !boosted {
+		return nil
+	}
+	if err := b.updatePod(ctx, pod, boostedPod); err != nil {
+		return err
+	}
+	if err := b.upsertPod(ctx, boostedPod); err != nil {
+		log.Error(err, "failed to track pod after restart boost")
+	}
+	log.Info("pod resources boosted on restart successfully")
+	return nil
+}
+
 // loggerFromContext provides Logger from a current context with configured
 // values common for startup-cpu-boost like name or namespace
 func (b *StartupCPUBoostImpl) loggerFromContext(ctx context.Context) logr.Logger {
@@ -411,6 +452,9 @@ func (b *StartupCPUBoostImpl) loggerFromContext(ctx context.Context) logr.Logger
 // The function returns true if policy is valid or false otherwise
 func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p duration.Policy, pod *corev1.Pod) (valid bool) {
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
+	if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil && annot.State != bpod.BoostStateActive {
+		return true
+	}
 	if valid = p.Valid(pod); !valid {
 		log.WithValues("policy", p.Name()).V(5).Info("policy is not valid")
 	}
@@ -420,16 +464,16 @@ func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p duratio
 // revertResources updates POD's container resource requests and limits to their original
 // values using the data from StartupCPUBoost annotation
 func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.Pod) error {
-	var err error
 	log := b.loggerFromContext(ctx)
-	if b.legacyRevertMode {
-		log.V(5).Info("reverting pod resources with legacy update method")
-		err = b.updateBoostPodLegacy(ctx, pod)
+	originalPod := pod.DeepCopy()
+	if b.boostOnRestartEnabled {
+		log.Info("reverting pod resources (boost on restart enabled)")
+		bpod.RevertResourceBoostWithBoostOnRestart(pod)
 	} else {
-		log.V(5).Info("reverting pod resources with new update method")
-		err = b.updateBoostPod(ctx, pod)
+		log.Info("reverting pod resources")
+		bpod.RevertResourceBoost(pod)
 	}
-	if err != nil {
+	if err := b.updatePod(ctx, originalPod, pod); err != nil {
 		return err
 	}
 	delete(b.pods, pod.Name)
@@ -437,23 +481,26 @@ func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.P
 	return nil
 }
 
-// updateBoostPod restores original POD annotations, labels and resource requirements by patching
-func (b *StartupCPUBoostImpl) updateBoostPod(ctx context.Context, pod *corev1.Pod) error {
-	if err := b.client.SubResource(ResizeSubResourceName).Patch(ctx, pod, bpod.NewRevertBootsResourcesPatch()); err != nil {
-		return err
+func (b *StartupCPUBoostImpl) updatePod(ctx context.Context, originalPod, updatedPod *corev1.Pod) error {
+	log := b.loggerFromContext(ctx).WithValues("pod", updatedPod.Name)
+	if b.legacyRevertMode {
+		log.V(5).Info("updating POD using update only (legacy)")
+		if err := b.client.Update(ctx, updatedPod); err != nil {
+			return fmt.Errorf("failed to update pod spec: %s", err)
+		}
+		return nil
 	}
-	if err := b.client.Patch(ctx, pod, bpod.NewRevertBoostLabelsPatch()); err != nil {
-		return err
+	log.V(5).Info("updating POD")
+	resourcePatch := bpod.NewApplyBoostResourcesPatch(originalPod, updatedPod)
+	metadataPatch := bpod.NewApplyBoostMetadataPatch(originalPod, updatedPod)
+
+	if err := b.client.SubResource(ResizeSubResourceName).Patch(ctx, updatedPod, resourcePatch); err != nil {
+		return fmt.Errorf("failed to patch pod resize: %s", err)
+	}
+	if err := b.client.Patch(ctx, updatedPod, metadataPatch); err != nil {
+		return fmt.Errorf("failed to patch pod metadata: %s", err)
 	}
 	return nil
-}
-
-// updateBoostPodLegacy restores original POD annotations, labels and resource requirements by updating
-func (b *StartupCPUBoostImpl) updateBoostPodLegacy(ctx context.Context, pod *corev1.Pod) error {
-	if err := bpod.RevertResourceBoost(pod); err != nil {
-		return fmt.Errorf("failed to update pod spec: %s", err)
-	}
-	return b.client.Update(ctx, pod)
 }
 
 // updateStats updates the StartupCPUBoost usage statistics based on the
@@ -461,7 +508,9 @@ func (b *StartupCPUBoostImpl) updateBoostPodLegacy(ctx context.Context, pod *cor
 func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
 	var activeCnt int
 	for _, pod := range b.pods {
-		activeCnt += boostContainersLen(pod)
+		if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil && annot.State == bpod.BoostStateActive {
+			activeCnt += len(annot.InitCPURequests)
+		}
 	}
 	b.stats.ActiveContainerBoosts = activeCnt
 	metrics.SetBoostContainersActive(b.namespace, b.name, float64(activeCnt))
@@ -474,12 +523,16 @@ func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
 	}
 }
 
-func (b *StartupCPUBoostImpl) canRemoveLimit(qosClass corev1.PodQOSClass, log logr.Logger) bool {
+func (b *StartupCPUBoostImpl) canRemoveLimit(pod *corev1.Pod, qosClass corev1.PodQOSClass, log logr.Logger) bool {
 	if !b.removeLimitsEnabled {
 		return false
 	}
+	if pod.UID != "" {
+		log.V(5).Info("skipping CPU limits removal as pod is already created and in-place resize forbids removing limits")
+		return false
+	}
 	if qosClass != corev1.PodQOSBurstable && qosClass != corev1.PodQOSBestEffort {
-		log.Info("skipping CPU limits removal as pod is not burstable nor besteffort, ")
+		log.Info("skipping CPU limits removal as pod is not burstable nor besteffort")
 		return false
 	}
 	return true
@@ -589,5 +642,68 @@ func fixedPolicyToDuration(policy autoscaling.FixedDurationPolicy) time.Duration
 		return time.Duration(policy.Value) * time.Minute
 	default:
 		return time.Duration(policy.Value) * time.Second
+	}
+}
+
+const (
+	PodConditionPodResizePending    corev1.PodConditionType = "PodResizePending"
+	PodConditionPodResizeInProgress corev1.PodConditionType = "PodResizeInProgress"
+)
+
+func findPodCondition(pod *corev1.Pod, condType corev1.PodConditionType) *corev1.PodCondition {
+	if pod == nil {
+		return nil
+	}
+	for i := range pod.Status.Conditions {
+		if pod.Status.Conditions[i].Type == condType {
+			return &pod.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+func isConditionTrue(cond *corev1.PodCondition) bool {
+	return cond != nil && cond.Status == corev1.ConditionTrue
+}
+
+func conditionChanged(oldCond, newCond *corev1.PodCondition) bool {
+	if !isConditionTrue(newCond) {
+		return false
+	}
+	if !isConditionTrue(oldCond) {
+		return true
+	}
+	return oldCond.Reason != newCond.Reason || oldCond.Message != newCond.Message
+}
+
+func (b *StartupCPUBoostImpl) inspectResizeConditions(ctx context.Context, pod *corev1.Pod) {
+	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
+
+	b.RLock()
+	oldPod := b.pods[pod.Name]
+	b.RUnlock()
+
+	b.logResizePending(log, oldPod, pod)
+	b.logResizeInProgress(log, oldPod, pod)
+}
+
+func (b *StartupCPUBoostImpl) logResizePending(log logr.Logger, oldPod, newPod *corev1.Pod) {
+	newCond := findPodCondition(newPod, PodConditionPodResizePending)
+	oldCond := findPodCondition(oldPod, PodConditionPodResizePending)
+
+	if conditionChanged(oldCond, newCond) {
+		log.Info("pod resize is pending",
+			"reason", newCond.Reason,
+			"message", newCond.Message,
+		)
+	}
+}
+
+func (b *StartupCPUBoostImpl) logResizeInProgress(log logr.Logger, oldPod, newPod *corev1.Pod) {
+	newCond := findPodCondition(newPod, PodConditionPodResizeInProgress)
+	oldCond := findPodCondition(oldPod, PodConditionPodResizeInProgress)
+
+	if isConditionTrue(newCond) && !isConditionTrue(oldCond) {
+		log.V(5).Info("pod resize in progress", "message", newCond.Message)
 	}
 }
