@@ -25,7 +25,7 @@ const (
 	ZapLogLevelDefault             = 0 // zapcore.InfoLevel
 	ZapDevelopmentDefault          = false
 	HTTP2Default                   = false
-	RemoveLimitsDefault            = true
+	RemoveLimitsDefault            = false
 	ValidateFeatureEnabledDefault  = true
 	WebhookServiceNameDefault      = "kube-startup-cpu-boost-webhook-service"
 	WebhookSecretNameDefault       = "kube-startup-cpu-boost-webhook-secret"

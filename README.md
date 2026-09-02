@@ -39,9 +39,10 @@ Kube Startup CPU Boost leverages the [In-place Resource Resize for Kubernetes Po
 feature introduced in Kubernetes 1.27. It allows reverting a workload's CPU resource requests and
 limits back to their original values without the need to recreate the Pods.
 
-The increase in resources is achieved via a Mutating Admission Webhook. By default, the webhook also
-removes CPU resource limits if present. The original resource values are restored by the operator
-after a given period of time or when a Pod condition is met.
+The increase in resources is achieved via a Mutating Admission Webhook.
+When [configured](#configuration), the webhook also removes CPU resource limits if present.
+The original resource values are restored by the operator after a given period of time
+or when a Pod condition is met.
 
 > [!WARNING]
 > While kube-startup-cpu-boost significantly reduces container cold-start times, dynamically
@@ -284,7 +285,7 @@ The Kube Startup CPU Boost operator can be configured with environment variables
 | `ZAP_LOG_LEVEL` | `int` | `0` | Log level for ZAP logger |
 | `ZAP_DEVELOPMENT` | `bool` | `false` | Enables development mode for ZAP logger |
 | `HTTP2` | `bool` | `false` | Determines if the HTTP/2 protocol is used for webhook and metrics servers |
-| `REMOVE_LIMITS` | `bool` | `true` | Enables the operator to remove container CPU limits during the boost period |
+| `REMOVE_LIMITS` | `bool` | `false` | Enables the operator to remove container CPU limits during the boost period |
 | `VALIDATE_FEATURE_ENABLED` | `bool` | `true` | Enables validation of the required feature gate on operator startup |
 
 ## Metrics
