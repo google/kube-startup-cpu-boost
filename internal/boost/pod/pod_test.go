@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Pod", func() {
@@ -113,96 +114,58 @@ var _ = Describe("Pod", func() {
 			})
 		})
 	})
-	Describe("Creates revert boost labels patch", func() {
-		Context("boost on restart feature is disabled", func() {
-			var (
-				patchData []byte
-				err       error
-			)
-			JustBeforeEach(func() {
-				patch := bpod.NewRevertBoostLabelsPatch()
-				patchData, err = patch.Data(pod)
-			})
-			When("Pod is missing boost labels and annotations", func() {
-				BeforeEach(func() {
-					delete(pod.Annotations, bpod.BoostAnnotationKey)
-					delete(pod.Labels, bpod.BoostLabelKey)
-				})
-				It("returns valid patch", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(string(patchData)).To(Equal("{}"))
-				})
-			})
-			When("Pod has boost labels and annotations", func() {
-				It("returns valid patch", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(string(patchData)).To(Equal("{\"metadata\":{\"annotations\":null,\"labels\":null}}"))
-				})
-			})
+	Describe("Creates apply boost metadata patch", func() {
+		var (
+			patchData   []byte
+			err         error
+			originalPod *corev1.Pod
+			mutatedPod  *corev1.Pod
+		)
+		BeforeEach(func() {
+			originalPod = pod.DeepCopy()
+			delete(originalPod.Annotations, bpod.BoostAnnotationKey)
+			mutatedPod = originalPod.DeepCopy()
+			mutatedPod.Labels = map[string]string{
+				bpod.BoostLabelKey: "true",
+			}
+			mutatedPod.Annotations = map[string]string{
+				bpod.BoostAnnotationKey: annot.ToJSON(),
+			}
 		})
-		Context("boost on restart feature is enabled", func() {
-			var (
-				patchData []byte
-				err       error
-			)
-			JustBeforeEach(func() {
-				patch := bpod.NewRevertBoostLabelsWithBoostOnRestartPatch()
-				patchData, err = patch.Data(pod)
-			})
-			When("Pod is missing boost labels and annotations", func() {
-				BeforeEach(func() {
-					delete(pod.Annotations, bpod.BoostAnnotationKey)
-					delete(pod.Labels, bpod.BoostLabelKey)
-				})
-				It("returns an error", func() {
-					Expect(err).To(HaveOccurred())
-				})
-			})
-			When("Pod has boost labels and annotations", func() {
-				It("returns valid patch", func() {
-					Expect(err).NotTo(HaveOccurred())
-					expectedAnnot := bpod.BoostPodAnnotation{
-						State:           bpod.BoostStateReverted,
-						BoostTimestamp:  annot.BoostTimestamp,
-						InitCPURequests: annot.InitCPURequests,
-						InitCPULimits:   annot.InitCPULimits,
-					}
-					expectedPatch := fmt.Sprintf(
-						"{\"metadata\":{\"annotations\":{\"%s\":%q}}}",
-						bpod.BoostAnnotationKey, expectedAnnot.ToJSON())
-					Expect(string(patchData)).To(Equal(expectedPatch))
-				})
+		JustBeforeEach(func() {
+			patch := bpod.NewApplyBoostMetadataPatch(originalPod, mutatedPod)
+			patchData, err = patch.Data(mutatedPod)
+		})
+		When("Patch is generated", func() {
+			It("returns valid patch with only metadata", func() {
+				Expect(err).NotTo(HaveOccurred())
+				expectedPatch := fmt.Sprintf(
+					"{\"metadata\":{\"annotations\":{\"%s\":%q},\"labels\":{\"%s\":\"true\"}}}",
+					bpod.BoostAnnotationKey, annot.ToJSON(), bpod.BoostLabelKey)
+				Expect(string(patchData)).To(Equal(expectedPatch))
 			})
 		})
 	})
-	Describe("Creates revert boost resources patch", func() {
+	Describe("Creates apply boost resources patch", func() {
 		var (
-			patchData []byte
-			err       error
+			patchData   []byte
+			err         error
+			originalPod *corev1.Pod
+			mutatedPod  *corev1.Pod
 		)
+		BeforeEach(func() {
+			originalPod = pod.DeepCopy()
+			mutatedPod = pod.DeepCopy()
+			mutatedPod.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU] = resource.MustParse("3")
+		})
 		JustBeforeEach(func() {
-			patch := bpod.NewRevertBootsResourcesPatch()
-			patchData, err = patch.Data(pod)
+			patch := bpod.NewApplyBoostResourcesPatch(originalPod, mutatedPod)
+			patchData, err = patch.Data(mutatedPod)
 		})
-		When("Pod is missing boost labels and annotations", func() {
-			BeforeEach(func() {
-				delete(pod.Annotations, bpod.BoostAnnotationKey)
-				delete(pod.Labels, bpod.BoostLabelKey)
-			})
-			It("returns valid patch", func() {
+		When("Patch is generated", func() {
+			It("returns valid patch with only resources", func() {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(string(patchData)).To(Equal("{}"))
-			})
-		})
-		When("Pod has boost labels and annotations", func() {
-			It("returns valid patch", func() {
-				Expect(err).NotTo(HaveOccurred())
-				expectedPatch := fmt.Sprintf(
-					"{\"spec\":{\"containers\":[{\"name\":\"container-one\",\"resources\":{\"limits\":{\"cpu\":\"%s\"},"+
-						"\"requests\":{\"cpu\":\"%s\"}}},{\"name\":\"container-two\",\"resources\":{\"limits\":{\"cpu\":\"%s\"},"+
-						"\"requests\":{\"cpu\":\"%s\"}}}]}}",
-					annot.InitCPULimits[containerOneName], annot.InitCPURequests[containerOneName],
-					annot.InitCPULimits[containerTwoName], annot.InitCPURequests[containerTwoName])
+				expectedPatch := `{"spec":{"containers":[{"name":"container-one","resources":{"limits":{"cpu":"3"},"requests":{"cpu":"1"}}},{"name":"container-two","resources":{"limits":{"cpu":"2"},"requests":{"cpu":"1"}}}]}}`
 				Expect(string(patchData)).To(Equal(expectedPatch))
 			})
 		})

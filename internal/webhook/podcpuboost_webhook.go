@@ -20,6 +20,7 @@ import (
 	"net/http"
 
 	"github.com/google/kube-startup-cpu-boost/internal/boost"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -59,7 +60,7 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	}
 	log = log.WithValues("boost", boostImpl.Name())
 
-	err = boostImpl.ApplyResourcePolicy(ctx, pod)
+	_, err = boostImpl.ApplyResourcePolicy(ctx, pod, bpod.ContainerNameSetFromPod(pod))
 	if err != nil {
 		log.Error(err, "failed to apply resource policy")
 		return admission.Errored(http.StatusInternalServerError, err)

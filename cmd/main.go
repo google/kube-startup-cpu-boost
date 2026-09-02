@@ -143,6 +143,7 @@ func main() {
 		LegacyRevertMode:         controller.ShouldUseLegacyRevertMode(versionInfo.GitVersion),
 		PodLevelResourcesEnabled: podLevelResourcesEnabled,
 		RemoveLimitsEnabled:      cfg.RemoveLimits,
+		BoostOnRestartEnabled:    cfg.BoostOnContainerRestart,
 		Elected:                  mgr.Elected(),
 	})
 	if err := mgr.Add(crdSync); err != nil {
@@ -191,6 +192,7 @@ func setupControllers(mgr ctrl.Manager, boostMgr boost.Manager, cfg *config.Conf
 		Manager:                  boostMgr,
 		PodLevelResourcesEnabled: podLevelResourcesEnabled,
 		RemoveLimitsEnabled:      cfg.RemoveLimits,
+		BoostOnRestartEnabled:    cfg.BoostOnContainerRestart,
 	}
 	boostMgr.SetStartupCPUBoostReconciler(boostCtrl)
 	if err := boostCtrl.SetupWithManager(mgr, serverVersion); err != nil {

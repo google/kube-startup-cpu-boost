@@ -21,21 +21,22 @@ import (
 )
 
 const (
-	PodNamespaceEnvVar           = "POD_NAMESPACE"
-	MgrCheckIntervalSecEnvVar    = "MGR_CHECK_INTERVAL"
-	LeaderElectionEnvVar         = "LEADER_ELECTION"
-	MetricsProbeBindAddrEnvVar   = "METRICS_PROBE_BIND_ADDR"
-	HealthProbeBindAddrEnvVar    = "HEALTH_PROBE_BIND_ADDR"
-	SecureMetricsEnvVar          = "SECURE_METRICS"
-	ZapLogLevelEnvVar            = "ZAP_LOG_LEVEL"
-	ZapDevelopmentEnvVar         = "ZAP_DEVELOPMENT"
-	HTTP2EnvVar                  = "HTTP2"
-	RemoveLimitsEnvVar           = "REMOVE_LIMITS"
-	ValidateFeatureEnabledEnvVar = "VALIDATE_FEATURE_ENABLED"
-	WebhookServiceNameEnvVar     = "WEBHOOK_SERVICE_NAME"
-	WebhookSecretNameEnvVar      = "WEBHOOK_SECRET_NAME"
-	MutatingWebhookNameEnvVar    = "MUTATING_WEBHOOK_NAME"
-	ValidatingWebhookNameEnvVar  = "VALIDATING_WEBHOOK_NAME"
+	PodNamespaceEnvVar            = "POD_NAMESPACE"
+	MgrCheckIntervalSecEnvVar     = "MGR_CHECK_INTERVAL"
+	LeaderElectionEnvVar          = "LEADER_ELECTION"
+	MetricsProbeBindAddrEnvVar    = "METRICS_PROBE_BIND_ADDR"
+	HealthProbeBindAddrEnvVar     = "HEALTH_PROBE_BIND_ADDR"
+	SecureMetricsEnvVar           = "SECURE_METRICS"
+	ZapLogLevelEnvVar             = "ZAP_LOG_LEVEL"
+	ZapDevelopmentEnvVar          = "ZAP_DEVELOPMENT"
+	HTTP2EnvVar                   = "HTTP2"
+	RemoveLimitsEnvVar            = "REMOVE_LIMITS"
+	ValidateFeatureEnabledEnvVar  = "VALIDATE_FEATURE_ENABLED"
+	WebhookServiceNameEnvVar      = "WEBHOOK_SERVICE_NAME"
+	WebhookSecretNameEnvVar       = "WEBHOOK_SECRET_NAME"
+	MutatingWebhookNameEnvVar     = "MUTATING_WEBHOOK_NAME"
+	ValidatingWebhookNameEnvVar   = "VALIDATING_WEBHOOK_NAME"
+	BoostOnContainerRestartEnvVar = "BOOST_ON_RESTART"
 )
 
 type LookupEnvFunc func(key string) (string, bool)
@@ -65,6 +66,7 @@ func (p *EnvConfigProvider) LoadConfig() (*Config, error) {
 	errs = p.loadHTTP2(&config, errs)
 	errs = p.loadRemoveLimits(&config, errs)
 	errs = p.loadValidateFeatureEnabled(&config, errs)
+	errs = p.loadBoostOnContainerRestart(&config, errs)
 	p.loadWebhookServiceName(&config)
 	p.loadWebhookSecretName(&config)
 	p.loadMutatingWebhookName(&config)
@@ -204,4 +206,15 @@ func (p *EnvConfigProvider) loadValidatingWebhookName(config *Config) {
 	if v, ok := p.lookupFunc(ValidatingWebhookNameEnvVar); ok {
 		config.ValidatingWebhookName = v
 	}
+}
+
+func (p *EnvConfigProvider) loadBoostOnContainerRestart(config *Config, curErrs []error) (errs []error) {
+	if v, ok := p.lookupFunc(BoostOnContainerRestartEnvVar); ok {
+		boolVal, err := strconv.ParseBool(v)
+		config.BoostOnContainerRestart = boolVal
+		if err != nil {
+			errs = append(curErrs, fmt.Errorf("%s value is not a bool: %s", BoostOnContainerRestartEnvVar, err))
+		}
+	}
+	return
 }

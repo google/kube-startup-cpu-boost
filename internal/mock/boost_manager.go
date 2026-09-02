@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,17 +59,17 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // AddRegularCPUBoost mocks base method.
-func (m *MockManager) AddRegularCPUBoost(ctx context.Context, arg1 boost.StartupCPUBoost) error {
+func (m *MockManager) AddRegularCPUBoost(ctx context.Context, boost boost.StartupCPUBoost) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddRegularCPUBoost", ctx, arg1)
+	ret := m.ctrl.Call(m, "AddRegularCPUBoost", ctx, boost)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddRegularCPUBoost indicates an expected call of AddRegularCPUBoost.
-func (mr *MockManagerMockRecorder) AddRegularCPUBoost(ctx, arg1 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) AddRegularCPUBoost(ctx, boost any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRegularCPUBoost", reflect.TypeOf((*MockManager)(nil).AddRegularCPUBoost), ctx, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRegularCPUBoost", reflect.TypeOf((*MockManager)(nil).AddRegularCPUBoost), ctx, boost)
 }
 
 // DeleteRegularCPUBoost mocks base method.
@@ -85,18 +85,18 @@ func (mr *MockManagerMockRecorder) DeleteRegularCPUBoost(ctx, name, namespace an
 }
 
 // GetCPUBoostForPod mocks base method.
-func (m *MockManager) GetCPUBoostForPod(ctx context.Context, arg1 *v1.Pod) (boost.StartupCPUBoost, bool) {
+func (m *MockManager) GetCPUBoostForPod(ctx context.Context, pod *v1.Pod) (boost.StartupCPUBoost, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCPUBoostForPod", ctx, arg1)
+	ret := m.ctrl.Call(m, "GetCPUBoostForPod", ctx, pod)
 	ret0, _ := ret[0].(boost.StartupCPUBoost)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // GetCPUBoostForPod indicates an expected call of GetCPUBoostForPod.
-func (mr *MockManagerMockRecorder) GetCPUBoostForPod(ctx, arg1 any) *gomock.Call {
+func (mr *MockManagerMockRecorder) GetCPUBoostForPod(ctx, pod any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCPUBoostForPod", reflect.TypeOf((*MockManager)(nil).GetCPUBoostForPod), ctx, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCPUBoostForPod", reflect.TypeOf((*MockManager)(nil).GetCPUBoostForPod), ctx, pod)
 }
 
 // GetRegularCPUBoost mocks base method.
@@ -144,7 +144,7 @@ func (mr *MockManagerMockRecorder) IsRunning(ctx any) *gomock.Call {
 }
 
 // SetStartupCPUBoostReconciler mocks base method.
-func (m *MockManager) SetStartupCPUBoostReconciler(reconciler reconcile.Reconciler) {
+func (m *MockManager) SetStartupCPUBoostReconciler(reconciler reconcile.TypedReconciler[reconcile.Request]) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetStartupCPUBoostReconciler", reconciler)
 }

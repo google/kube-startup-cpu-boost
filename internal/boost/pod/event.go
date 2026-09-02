@@ -24,21 +24,24 @@ import (
 type PodEventType string
 
 const (
-	PodEventTypePodCreated       PodEventType = "PodCreated"
-	PodEventTypePodDeleted       PodEventType = "PodDeleted"
-	PodEventTypeConditionChanged PodEventType = "ConditionChanged"
+	PodEventTypePodCreated          PodEventType = "PodCreated"
+	PodEventTypePodDeleted          PodEventType = "PodDeleted"
+	PodEventTypeConditionChanged    PodEventType = "ConditionChanged"
+	PodEventTypeContainerRestarting PodEventType = "ContainerRestarting"
 )
 
 var (
-	ErrNilPodEvent = errors.New("pod event cannot be nil")
-	ErrEmptyType   = errors.New("pod event type cannot be empty")
-	ErrNilPod      = errors.New("pod cannot be nil")
+	ErrNilPodEvent                   = errors.New("pod event cannot be nil")
+	ErrEmptyType                     = errors.New("pod event type cannot be empty")
+	ErrNilPod                        = errors.New("pod cannot be nil")
+	ErrEmptyRestartingContainerNames = errors.New("restarting container names cannot be empty on container restarting event")
 )
 
 // PodEvent encapsulates pod event.
 type PodEvent struct {
-	Type PodEventType
-	Pod  *corev1.Pod
+	Type                     PodEventType
+	Pod                      *corev1.Pod
+	RestartingContainerNames []string
 }
 
 // Validate validates pod event
@@ -51,6 +54,9 @@ func (e *PodEvent) Validate() error {
 	}
 	if e.Pod == nil {
 		return ErrNilPod
+	}
+	if e.Type == PodEventTypeContainerRestarting && len(e.RestartingContainerNames) == 0 {
+		return ErrEmptyRestartingContainerNames
 	}
 	return nil
 }

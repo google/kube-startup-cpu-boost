@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/kube-startup-cpu-boost/internal/boost/duration"
+	bpod "github.com/google/kube-startup-cpu-boost/internal/boost/pod"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -37,16 +38,41 @@ var _ = Describe("FixedDurationPolicy", func() {
 			return now
 		}
 		policy = duration.NewFixedDurationPolicyWithTimeFunc(timeFunc, timeDuration)
+		pod.Annotations = nil
+		pod.Status.Conditions = []v1.PodCondition{}
 	})
 
 	Describe("Validates POD", func() {
-		When("the POD has no status conditions", func() {
+		When("the POD has no status conditions and no annotation", func() {
 			It("returns policy is valid", func() {
-				pod.Status.Conditions = []v1.PodCondition{}
 				Expect(policy.Valid(pod)).To(BeTrue())
 			})
 		})
-		When("the life time of a POD exceeds the policy duration", func() {
+		When("the POD has boost annotation with expired timestamp", func() {
+			It("returns policy is not valid", func() {
+				boostTime := now.Add(-1 * timeDuration).Add(-1 * time.Minute)
+				pod.Annotations = map[string]string{
+					bpod.BoostAnnotationKey: (&bpod.BoostPodAnnotation{
+						State:          bpod.BoostStateActive,
+						BoostTimestamp: boostTime,
+					}).ToJSON(),
+				}
+				Expect(policy.Valid(pod)).To(BeFalse())
+			})
+		})
+		When("the POD has boost annotation with valid timestamp", func() {
+			It("returns policy is valid", func() {
+				boostTime := now.Add(-1 * timeDuration).Add(1 * time.Minute)
+				pod.Annotations = map[string]string{
+					bpod.BoostAnnotationKey: (&bpod.BoostPodAnnotation{
+						State:          bpod.BoostStateActive,
+						BoostTimestamp: boostTime,
+					}).ToJSON(),
+				}
+				Expect(policy.Valid(pod)).To(BeTrue())
+			})
+		})
+		When("the life time of a POD exceeds the policy duration (fallback without annotation)", func() {
 			It("returns policy is not valid", func() {
 				scheduleTime := now.Add(-1 * timeDuration).Add(-1 * time.Minute)
 				pod.Status.Conditions = []v1.PodCondition{
@@ -58,7 +84,7 @@ var _ = Describe("FixedDurationPolicy", func() {
 				Expect(policy.Valid(pod)).To(BeFalse())
 			})
 		})
-		When("the life time of a POD is within policy duration", func() {
+		When("the life time of a POD is within policy duration (fallback without annotation)", func() {
 			It("returns policy is valid", func() {
 				scheduleTime := now.Add(-1 * timeDuration).Add(1 * time.Minute)
 				pod.Status.Conditions = []v1.PodCondition{

@@ -46,12 +46,14 @@ type crdSynchronizerImpl struct {
 	legacyRevertMode         bool
 	podLevelResourcesEnabled bool
 	removeLimitsEnabled      bool
+	boostOnRestartEnabled    bool
 	elected                  <-chan struct{}
 	informer                 ctrlcache.Informer
 	log                      logr.Logger
 }
 
 // CRDSynchronizerConfig holds dependencies and configuration for CRDSynchronizer.
+// ToDo: unify CRD synchronizer configuration with core manager configuration.
 type CRDSynchronizerConfig struct {
 	Client                   client.Client
 	Cache                    ctrlcache.Cache
@@ -59,6 +61,7 @@ type CRDSynchronizerConfig struct {
 	LegacyRevertMode         bool
 	PodLevelResourcesEnabled bool
 	RemoveLimitsEnabled      bool
+	BoostOnRestartEnabled    bool
 	Elected                  <-chan struct{}
 }
 
@@ -71,6 +74,7 @@ func NewCRDSynchronizer(cfg CRDSynchronizerConfig) CRDSynchronizer {
 		legacyRevertMode:         cfg.LegacyRevertMode,
 		podLevelResourcesEnabled: cfg.PodLevelResourcesEnabled,
 		removeLimitsEnabled:      cfg.RemoveLimitsEnabled,
+		boostOnRestartEnabled:    cfg.BoostOnRestartEnabled,
 		elected:                  cfg.Elected,
 		log:                      ctrl.Log.WithName("crd-synchronizer"),
 	}
@@ -139,6 +143,7 @@ func (c *crdSynchronizerImpl) onAdd(obj any) {
 		LegacyRevertMode:         c.legacyRevertMode,
 		PodLevelResourcesEnabled: c.podLevelResourcesEnabled,
 		RemoveLimitsEnabled:      c.removeLimitsEnabled,
+		BoostOnRestart:           c.boostOnRestartEnabled,
 	}
 	boost, err := NewStartupCPUBoost(boostObj, boostCfg)
 	if err != nil {

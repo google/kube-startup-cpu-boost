@@ -56,8 +56,6 @@ type BoostPodAnnotation struct {
 	InitCPULimits   map[string]string `json:"initCPULimits,omitempty"`
 }
 
-type mutatePodFunc func(pod *corev1.Pod) error
-
 func NewBoostAnnotation() *BoostPodAnnotation {
 	return &BoostPodAnnotation{
 		State:           BoostStateActive,
@@ -172,95 +170,43 @@ func revertBoostResources(pod *corev1.Pod) error {
 	return nil
 }
 
-func buildPodPatch(pod *corev1.Pod, mutatePodFunc mutatePodFunc) ([]byte, error) {
-	podJSON, err := json.Marshal(pod)
-	if err != nil {
-		return nil, err
-	}
-	if err := mutatePodFunc(pod); err != nil {
-		return nil, err
-	}
-	updatedPodJSON, err := json.Marshal(pod)
-	if err != nil {
-		return nil, err
-	}
-	return jsonpatch.CreateMergePatch(podJSON, updatedPodJSON)
+type staticPatch struct {
+	original client.Object
+	updated  client.Object
 }
 
-func NewRevertBoostLabelsPatch() client.Patch {
-	return &revertBoostLabelsPatch{}
-}
-
-type revertBoostLabelsPatch struct {
-}
-
-func (p *revertBoostLabelsPatch) Type() types.PatchType {
+func (p *staticPatch) Type() types.PatchType {
 	return types.MergePatchType
 }
 
-func (p *revertBoostLabelsPatch) Data(obj client.Object) ([]byte, error) {
-	pod, ok := obj.(*corev1.Pod)
-	if !ok {
-		return nil, errors.New("revertBoostLabelsPatch applies only on *corev1.Pod objects")
-	}
-	return buildPodPatch(pod, revertBoostLabels)
-}
-
-func NewRevertBoostLabelsWithBoostOnRestartPatch() client.Patch {
-	return &revertBoostLabelsWithBoostOnRestartPatch{}
-}
-
-type revertBoostLabelsWithBoostOnRestartPatch struct {
-}
-
-func (p *revertBoostLabelsWithBoostOnRestartPatch) Type() types.PatchType {
-	return types.MergePatchType
-}
-
-func (p *revertBoostLabelsWithBoostOnRestartPatch) Data(obj client.Object) ([]byte, error) {
-	pod, ok := obj.(*corev1.Pod)
-	if !ok {
-		return nil, errors.New("revertBoostLabelsPatch applies only on *corev1.Pod objects")
-	}
-	return buildPodPatch(pod, revertBoostLabelsWithBoostOnRestart)
-}
-
-func NewRevertBootsResourcesPatch() client.Patch {
-	return &revertBoostResourcesPatch{}
-}
-
-type revertBoostResourcesPatch struct {
-}
-
-func (p *revertBoostResourcesPatch) Type() types.PatchType {
-	return types.MergePatchType
-}
-
-func (p *revertBoostResourcesPatch) Data(obj client.Object) ([]byte, error) {
-	pod, ok := obj.(*corev1.Pod)
-	if !ok {
-		return nil, errors.New("revertBoostResourcesPatch applies only on *corev1.Pod objects")
-	}
-	patchData, err := buildPodPatch(pod, revertBoostResources)
+func (p *staticPatch) Data(obj client.Object) ([]byte, error) {
+	originalJSON, err := json.Marshal(p.original)
 	if err != nil {
-		return []byte(EmptyPatchString), nil
+		return nil, err
 	}
-	return patchData, nil
+	updatedJSON, err := json.Marshal(p.updated)
+	if err != nil {
+		return nil, err
+	}
+	return jsonpatch.CreateMergePatch(originalJSON, updatedJSON)
 }
 
-// ResourceResizeRequiresRestart determines if a in-place resize of a resource with a given
-// name requires container restart.
-func ResourceResizeRequiresRestart(c corev1.Container, r corev1.ResourceName) bool {
-	for _, p := range c.ResizePolicy {
-		if p.ResourceName != r {
-			continue
-		}
-		return p.RestartPolicy == corev1.RestartContainer
+// NewApplyBoostMetadataPatch creates new patch for applying boost metadata modifications
+func NewApplyBoostMetadataPatch(originalPod, updatedPod *corev1.Pod) client.Patch {
+	updatedPodStripped := updatedPod.DeepCopy()
+	updatedPodStripped.Spec = originalPod.Spec
+	return &staticPatch{
+		original: originalPod,
+		updated:  updatedPodStripped,
 	}
-	return false
 }
 
-// HasCPUResourcesToIncrease determines if a container has any CPU resources to increase.
-func HasCPUResourcesToIncrease(c corev1.Container) bool {
-	return !c.Resources.Requests.Cpu().IsZero() || !c.Resources.Limits.Cpu().IsZero()
+// NewApplyBoostResourcesPatch creates new patch for applying boost resource modifications
+func NewApplyBoostResourcesPatch(originalPod, updatedPod *corev1.Pod) client.Patch {
+	updatedPodStripped := updatedPod.DeepCopy()
+	updatedPodStripped.ObjectMeta = originalPod.ObjectMeta
+	return &staticPatch{
+		original: originalPod,
+		updated:  updatedPodStripped,
+	}
 }

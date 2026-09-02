@@ -16,6 +16,7 @@ package boost_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	autoscaling "github.com/google/kube-startup-cpu-boost/api/v1alpha1"
@@ -30,6 +31,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("StartupCPUBoost", func() {
@@ -261,6 +264,50 @@ var _ = Describe("StartupCPUBoost", func() {
 					Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
 					Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
 				)
+				When("Pod conditions contain resize conditions", func() {
+					It("inspects and handles PodResizePending and PodResizeInProgress", func(ctx context.Context) {
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+						Expect(err).NotTo(HaveOccurred())
+
+						// First register pod
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypePodCreated,
+							Pod:  pod,
+						})
+						Expect(err).NotTo(HaveOccurred())
+
+						// Update pod with PodResizePending Deferred
+						pendingPod := pod.DeepCopy()
+						pendingPod.Status.Conditions = []corev1.PodCondition{
+							{
+								Type:    cpuboost.PodConditionPodResizePending,
+								Status:  corev1.ConditionTrue,
+								Reason:  "Deferred",
+								Message: "Node didn't have enough resource: cpu",
+							},
+						}
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypeConditionChanged,
+							Pod:  pendingPod,
+						})
+						Expect(err).NotTo(HaveOccurred())
+
+						// Update pod with PodResizeInProgress
+						inProgressPod := pendingPod.DeepCopy()
+						inProgressPod.Status.Conditions = []corev1.PodCondition{
+							{
+								Type:    cpuboost.PodConditionPodResizeInProgress,
+								Status:  corev1.ConditionTrue,
+								Message: "Actuating container resize",
+							},
+						}
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypeConditionChanged,
+							Pod:  inProgressPod,
+						})
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
 			})
 			Context("when boost spec has condition policy defined", func() {
 				var (
@@ -283,10 +330,10 @@ var _ = Describe("StartupCPUBoost", func() {
 							}}
 							mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
 							mockClient := mock.NewMockClient(mockCtrl)
-							mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(),
+							mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
 								gomock.Any()).Return(nil).Times(0)
 							mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(0)
-							mockClient.EXPECT().Patch(gomock.Any(), gomock.Any(),
+							mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
 								gomock.Any()).Return(nil).Times(0)
 							config.Client = mockClient
 							boost, err = cpuboost.NewStartupCPUBoost(spec, config)
@@ -308,19 +355,23 @@ var _ = Describe("StartupCPUBoost", func() {
 				When("POD condition matches the policy", func() {
 					Context("using normal revert mode", func() {
 						DescribeTable("reverts resources with resize sub-resource",
-							func(ctx context.Context, eventType bpod.PodEventType) {
+							func(ctx context.Context, eventType bpod.PodEventType, boostOnRestart bool) {
 								pod := podTemplate.DeepCopy()
 								pod.Status.Conditions = []corev1.PodCondition{{
 									Type:   corev1.PodReady,
 									Status: corev1.ConditionTrue,
 								}}
+								config.BoostOnRestart = boostOnRestart
+
 								mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
 								mockClient := mock.NewMockClient(mockCtrl)
 								mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-									gomock.Eq(bpod.NewRevertBootsResourcesPatch())).Return(nil).Times(1)
+									gomock.Any()).Return(nil).Times(1)
 								mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
+
 								mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-									gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+									gomock.Any()).Return(nil).Times(1)
+
 								config.Client = mockClient
 								boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 								Expect(err).NotTo(HaveOccurred())
@@ -332,24 +383,27 @@ var _ = Describe("StartupCPUBoost", func() {
 
 								Expect(err).NotTo(HaveOccurred())
 							},
-							Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
-							Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+							Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated, false),
+							Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged, false),
+							Entry("via PodCreatedEvent with boostOnRestart", bpod.PodEventTypePodCreated, true),
+							Entry("via ConditionChanged event with boostOnRestart", bpod.PodEventTypeConditionChanged, true),
 						)
 					})
 					Context("using legacy revert mode", func() {
 						DescribeTable("reverts resources with pod update",
-							func(ctx context.Context, eventType bpod.PodEventType) {
+							func(ctx context.Context, eventType bpod.PodEventType, boostOnRestart bool) {
 								pod := podTemplate.DeepCopy()
 								pod.Status.Conditions = []corev1.PodCondition{{
 									Type:   corev1.PodReady,
 									Status: corev1.ConditionTrue,
 								}}
-								mockClient := mock.NewMockClient(mockCtrl)
-								mockClient.EXPECT().
-									Update(gomock.Any(), gomock.Eq(pod)).
-									Return(nil)
-								config.Client = mockClient
+								config.BoostOnRestart = boostOnRestart
 								config.LegacyRevertMode = true
+
+								mockClient := mock.NewMockClient(mockCtrl)
+								mockClient.EXPECT().Update(gomock.Any(), gomock.Eq(pod)).Return(nil).Times(1)
+								config.Client = mockClient
+
 								boost, err = cpuboost.NewStartupCPUBoost(spec, config)
 								Expect(err).NotTo(HaveOccurred())
 
@@ -360,8 +414,10 @@ var _ = Describe("StartupCPUBoost", func() {
 
 								Expect(err).NotTo(HaveOccurred())
 							},
-							Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
-							Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
+							Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated, false),
+							Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged, false),
+							Entry("via PodCreatedEvent with boostOnRestart", bpod.PodEventTypePodCreated, true),
+							Entry("via ConditionChanged event with boostOnRestart", bpod.PodEventTypeConditionChanged, true),
 						)
 					})
 				})
@@ -392,6 +448,196 @@ var _ = Describe("StartupCPUBoost", func() {
 				Expect(stats.TotalContainerBoosts).To(Equal(2))
 				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(0)))
 				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+			})
+		})
+	})
+	Describe("Handles POD container restarting event", func() {
+		When("boost on restart is disabled", func() {
+			BeforeEach(func() {
+				config.BoostOnRestart = false
+			})
+			It("does not modify the pod", func(ctx context.Context) {
+				boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+				Expect(err).NotTo(HaveOccurred())
+
+				annot, _ := bpod.BoostAnnotationFromPod(pod)
+				annot.State = bpod.BoostStateReverted
+				annot.Apply(pod)
+				err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+					Type:                     bpod.PodEventTypeContainerRestarting,
+					Pod:                      pod,
+					RestartingContainerNames: []string{"container-one"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("1"))
+			})
+		})
+		When("boost on restart is enabled", func() {
+			BeforeEach(func() {
+				config.BoostOnRestart = true
+				setContainerPercentagePolicy(spec, "container-one", 100)
+			})
+			Context("with legacy resize", func() {
+				BeforeEach(func() {
+					config.LegacyRevertMode = true
+				})
+				It("applies the boost and updates the pod", func(ctx context.Context) {
+					mockClient.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+							p := obj.(*corev1.Pod)
+							Expect(p.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("2"))
+							Expect(p.Labels).To(HaveKey(bpod.BoostLabelKey))
+							Expect(p.Annotations).To(HaveKey(bpod.BoostAnnotationKey))
+							return nil
+						},
+					)
+					config.Client = mockClient
+
+					boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					annot, _ := bpod.BoostAnnotationFromPod(pod)
+					annot.State = bpod.BoostStateReverted
+					annot.Apply(pod)
+					err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+						Type:                     bpod.PodEventTypeContainerRestarting,
+						Pod:                      pod,
+						RestartingContainerNames: []string{"container-one"},
+					})
+					Expect(err).NotTo(HaveOccurred())
+					trackedPod, ok := boost.Pod(pod.Name)
+					Expect(ok).To(BeTrue())
+					Expect(trackedPod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("2"))
+				})
+			})
+			Context("with sub-resource resize", func() {
+				BeforeEach(func() {
+					config.LegacyRevertMode = false
+				})
+				It("applies the boost and patches the pod", func(ctx context.Context) {
+					mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+					mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+							Expect(patch.Type()).To(Equal(types.MergePatchType))
+							data, err := patch.Data(obj)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(string(data)).To(ContainSubstring(`"cpu":"2"`))
+							return nil
+						},
+					)
+					mockClient.EXPECT().SubResource(gomock.Eq("resize")).Return(mockSubResourceClient)
+					mockClient.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+							Expect(patch.Type()).To(Equal(types.MergePatchType))
+							data, err := patch.Data(obj)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(string(data)).To(ContainSubstring(bpod.BoostLabelKey))
+							Expect(string(data)).To(ContainSubstring(bpod.BoostAnnotationKey))
+							return nil
+						},
+					)
+					config.Client = mockClient
+
+					boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					annot, _ := bpod.BoostAnnotationFromPod(pod)
+					annot.State = bpod.BoostStateReverted
+					annot.Apply(pod)
+					err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+						Type:                     bpod.PodEventTypeContainerRestarting,
+						Pod:                      pod,
+						RestartingContainerNames: []string{"container-one"},
+					})
+					Expect(err).NotTo(HaveOccurred())
+					trackedPod, ok := boost.Pod(pod.Name)
+					Expect(ok).To(BeTrue())
+					Expect(trackedPod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("2"))
+				})
+				When("patching pod resize fails", func() {
+					It("returns error and does not update tracked pod to active", func(ctx context.Context) {
+						mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+						mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("node didn't have enough allocatable resources"))
+						mockClient.EXPECT().SubResource(gomock.Eq("resize")).Return(mockSubResourceClient)
+						config.Client = mockClient
+
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+						Expect(err).NotTo(HaveOccurred())
+
+						annot, _ := bpod.BoostAnnotationFromPod(pod)
+						annot.State = bpod.BoostStateReverted
+						annot.Apply(pod)
+						// Initially register pod in boost
+						_ = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypePodCreated,
+							Pod:  pod,
+						})
+
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type:                     bpod.PodEventTypeContainerRestarting,
+							Pod:                      pod,
+							RestartingContainerNames: []string{"container-one"},
+						})
+						Expect(err).To(HaveOccurred())
+						trackedPod, ok := boost.Pod(pod.Name)
+						Expect(ok).To(BeTrue())
+						trackedAnnot, err := bpod.BoostAnnotationFromPod(trackedPod)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(trackedAnnot.State).To(Equal(bpod.BoostStateReverted))
+					})
+				})
+				When("all containers are skipped (e.g. QoS change) on restart", func() {
+					It("does not patch pod or transition state to active", func(ctx context.Context) {
+						// Set policy that would change QoS from Guaranteed to Burstable (e.g. only setting requests)
+						spec.Spec.ResourcePolicy.ContainerPolicies = []autoscaling.ContainerPolicy{
+							{
+								ContainerName: "container-one",
+								FixedResources: &autoscaling.FixedResources{
+									Requests: apiResource.MustParse("2"),
+								},
+							},
+						}
+						// pod has Guaranteed QoS (limits == requests for both cpu and memory)
+						pod.Spec.Containers[0].Resources.Limits = corev1.ResourceList{
+							corev1.ResourceCPU:    apiResource.MustParse("1"),
+							corev1.ResourceMemory: apiResource.MustParse("1Gi"),
+						}
+						pod.Spec.Containers[0].Resources.Requests = corev1.ResourceList{
+							corev1.ResourceCPU:    apiResource.MustParse("1"),
+							corev1.ResourceMemory: apiResource.MustParse("1Gi"),
+						}
+						pod.Spec.Containers = []corev1.Container{pod.Spec.Containers[0]}
+
+						mockClient.EXPECT().SubResource(gomock.Any()).Times(0)
+						mockClient.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+						config.Client = mockClient
+
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+						Expect(err).NotTo(HaveOccurred())
+
+						annot := bpod.NewBoostAnnotation()
+						annot.State = bpod.BoostStateReverted
+						annot.UpdateInitResources("container-one", pod.Spec.Containers[0].Resources)
+						annot.Apply(pod)
+
+						_ = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypePodCreated,
+							Pod:  pod,
+						})
+
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type:                     bpod.PodEventTypeContainerRestarting,
+							Pod:                      pod,
+							RestartingContainerNames: []string{"container-one"},
+						})
+						Expect(err).NotTo(HaveOccurred())
+						trackedPod, ok := boost.Pod(pod.Name)
+						Expect(ok).To(BeTrue())
+						trackedAnnot, err := bpod.BoostAnnotationFromPod(trackedPod)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(trackedAnnot.State).To(Equal(bpod.BoostStateReverted))
+					})
+				})
 			})
 		})
 	})
@@ -497,10 +743,11 @@ var _ = Describe("StartupCPUBoost", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				pod := podTemplate.DeepCopy()
+				delete(pod.Annotations, bpod.BoostAnnotationKey)
 				pod.Spec.Containers[0].Name = "test"
 				setContainerResource(pod, 0, corev1.ResourceCPU, "1", "2")
 
-				err = boost.ApplyResourcePolicy(context.Background(), pod)
+				_, err = boost.ApplyResourcePolicy(context.Background(), pod, nil)
 				Expect(err).NotTo(HaveOccurred())
 
 				// 1 CPU * 1000% = 11 CPU (10 + 1) -> 11000m
@@ -509,6 +756,32 @@ var _ = Describe("StartupCPUBoost", func() {
 		})
 	})
 	Describe("ApplyResourcePolicy", func() {
+		When("POD boost status forbids boosting", func() {
+			DescribeTable("Does not change POD",
+				func(status string) {
+					pod := podTemplate.DeepCopy()
+					if pod.Annotations == nil {
+						pod.Annotations = make(map[string]string)
+					}
+					annotation := &bpod.BoostPodAnnotation{State: status}
+					pod.Annotations[bpod.BoostAnnotationKey] = annotation.ToJSON()
+					originalPod := pod.DeepCopy()
+
+					configSpec := specTemplate.DeepCopy()
+					setContainerPercentagePolicy(configSpec, "container-one", 100)
+					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(boosted).To(BeFalse())
+					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
+				},
+				Entry("when status is active", bpod.BoostStateActive),
+				Entry("when status is infeasible", bpod.BoostStateInfeasible),
+			)
+		})
 		When("POD has no containers that match policy", func() {
 			It("Does not change POD", func() {
 				pod := podTemplate.DeepCopy()
@@ -520,9 +793,10 @@ var _ = Describe("StartupCPUBoost", func() {
 				boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
 				Expect(err).NotTo(HaveOccurred())
 
-				err = boost.ApplyResourcePolicy(context.Background(), pod)
+				boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 				Expect(err).NotTo(HaveOccurred())
+				Expect(boosted).To(BeFalse())
 				Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 				_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 				Expect(ok).To(BeFalse())
@@ -546,9 +820,10 @@ var _ = Describe("StartupCPUBoost", func() {
 					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
 					Expect(err).NotTo(HaveOccurred())
 
-					err = boost.ApplyResourcePolicy(context.Background(), pod)
+					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
+					Expect(boosted).To(BeFalse())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 					Expect(ok).To(BeFalse())
@@ -567,9 +842,10 @@ var _ = Describe("StartupCPUBoost", func() {
 					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
 					Expect(err).NotTo(HaveOccurred())
 
-					err = boost.ApplyResourcePolicy(context.Background(), pod)
+					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
+					Expect(boosted).To(BeFalse())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 					Expect(ok).To(BeFalse())
@@ -590,9 +866,10 @@ var _ = Describe("StartupCPUBoost", func() {
 					boost, err := cpuboost.NewStartupCPUBoost(configSpec, config)
 					Expect(err).NotTo(HaveOccurred())
 
-					err = boost.ApplyResourcePolicy(context.Background(), pod)
+					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
+					Expect(boosted).To(BeFalse())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 					Expect(ok).To(BeFalse())
@@ -614,9 +891,10 @@ var _ = Describe("StartupCPUBoost", func() {
 						boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
 						Expect(err).NotTo(HaveOccurred())
 
-						err = boost.ApplyResourcePolicy(context.Background(), pod)
+						boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 						Expect(err).NotTo(HaveOccurred())
+						Expect(boosted).To(BeTrue())
 						Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 						Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(4000)))
 						Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000))) // Unmodified
@@ -655,9 +933,10 @@ var _ = Describe("StartupCPUBoost", func() {
 						boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
 						Expect(err).NotTo(HaveOccurred())
 
-						err = boost.ApplyResourcePolicy(context.Background(), pod)
+						boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 						Expect(err).NotTo(HaveOccurred())
+						Expect(boosted).To(BeTrue())
 						Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 						Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 					})
@@ -679,9 +958,10 @@ var _ = Describe("StartupCPUBoost", func() {
 							boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
 							Expect(err).NotTo(HaveOccurred())
 
-							err = boost.ApplyResourcePolicy(context.Background(), pod)
+							boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 							Expect(err).NotTo(HaveOccurred())
+							Expect(boosted).To(BeTrue())
 							Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 							Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().IsZero()).To(BeTrue())
 							Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
@@ -712,9 +992,10 @@ var _ = Describe("StartupCPUBoost", func() {
 							boost, err := cpuboost.NewStartupCPUBoost(configSpec, &configVal)
 							Expect(err).NotTo(HaveOccurred())
 
-							err = boost.ApplyResourcePolicy(context.Background(), pod)
+							boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 							Expect(err).NotTo(HaveOccurred())
+							Expect(boosted).To(BeTrue())
 							Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 							Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(2000)))
 							Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))

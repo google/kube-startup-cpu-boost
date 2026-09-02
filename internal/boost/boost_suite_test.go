@@ -55,6 +55,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	annotTemplate = &bpod.BoostPodAnnotation{
+		State:          bpod.BoostStateActive,
 		BoostTimestamp: time.Now(),
 		InitCPURequests: map[string]string{
 			"container-one": "500m",

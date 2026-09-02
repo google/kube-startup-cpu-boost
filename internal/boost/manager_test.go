@@ -360,6 +360,10 @@ var _ = Describe("Manager", func() {
 						Type:               corev1.PodScheduled,
 						Status:             corev1.ConditionTrue,
 					}}
+				annot, err := bpod.BoostAnnotationFromPod(pod)
+				Expect(err).NotTo(HaveOccurred())
+				annot.BoostTimestamp = scheduledTimestamp
+				pod.Annotations[bpod.BoostAnnotationKey] = annot.ToJSON()
 
 				reconcileReq := reconcile.Request{
 					NamespacedName: types.NamespacedName{
@@ -378,7 +382,7 @@ var _ = Describe("Manager", func() {
 					runWithTickAndRevert(ctx, func(patchCalled chan struct{}) {
 						mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
 						mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-							gomock.Eq(bpod.NewRevertBootsResourcesPatch())).
+							gomock.Any()).
 							DoAndReturn(func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 								select {
 								case patchCalled <- struct{}{}:
@@ -389,7 +393,7 @@ var _ = Describe("Manager", func() {
 
 						mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
 						mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-							gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+							gomock.Any()).Return(nil).Times(1)
 					})
 				})
 			})
@@ -430,7 +434,7 @@ var _ = Describe("Manager", func() {
 					patchCalled := make(chan struct{}, 1)
 					mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
 					mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-						gomock.Eq(bpod.NewRevertBootsResourcesPatch())).
+						gomock.Any()).
 						DoAndReturn(func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 							select {
 							case patchCalled <- struct{}{}:
@@ -441,7 +445,7 @@ var _ = Describe("Manager", func() {
 
 					mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
 					mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-						gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+						gomock.Any()).Return(nil).Times(1)
 
 					manager = cpuboost.NewManagerWithTicker(nil, mockTicker)
 					manager.SetStartupCPUBoostReconciler(mockReconciler)
@@ -486,7 +490,7 @@ var _ = Describe("Manager", func() {
 					runWithTickAndRevert(ctx, func(patchCalled chan struct{}) {
 						mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
 						mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-							gomock.Eq(bpod.NewRevertBootsResourcesPatch())).
+							gomock.Any()).
 							DoAndReturn(func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 								select {
 								case patchCalled <- struct{}{}:
@@ -497,7 +501,7 @@ var _ = Describe("Manager", func() {
 
 						mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
 						mockClient.EXPECT().Patch(gomock.Any(), gomock.Eq(pod),
-							gomock.Eq(bpod.NewRevertBoostLabelsPatch())).Return(nil).Times(1)
+							gomock.Any()).Return(nil).Times(1)
 					})
 				})
 			})

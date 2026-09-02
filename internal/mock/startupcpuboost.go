@@ -59,31 +59,18 @@ func (m *MockStartupCPUBoost) EXPECT() *MockStartupCPUBoostMockRecorder {
 }
 
 // ApplyResourcePolicy mocks base method.
-func (m *MockStartupCPUBoost) ApplyResourcePolicy(ctx context.Context, pod *v1.Pod) error {
+func (m *MockStartupCPUBoost) ApplyResourcePolicy(ctx context.Context, pod *v1.Pod, containerNames pod.ContainerNameSet) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyResourcePolicy", ctx, pod)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ApplyResourcePolicy", ctx, pod, containerNames)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ApplyResourcePolicy indicates an expected call of ApplyResourcePolicy.
-func (mr *MockStartupCPUBoostMockRecorder) ApplyResourcePolicy(ctx, pod any) *gomock.Call {
+func (mr *MockStartupCPUBoostMockRecorder) ApplyResourcePolicy(ctx, pod, containerNames any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResourcePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ApplyResourcePolicy), ctx, pod)
-}
-
-// BoostResources mocks base method.
-func (m *MockStartupCPUBoost) BoostResources(ctx context.Context, pod *v1.Pod) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BoostResources", ctx, pod)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// BoostResources indicates an expected call of BoostResources.
-func (mr *MockStartupCPUBoostMockRecorder) BoostResources(ctx, pod any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BoostResources", reflect.TypeOf((*MockStartupCPUBoost)(nil).BoostResources), ctx, pod)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResourcePolicy", reflect.TypeOf((*MockStartupCPUBoost)(nil).ApplyResourcePolicy), ctx, pod, containerNames)
 }
 
 // DurationPolicies mocks base method.
