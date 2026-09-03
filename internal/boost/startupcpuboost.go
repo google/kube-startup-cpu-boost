@@ -41,8 +41,8 @@ type StartupCPUBoost interface {
 	Name() string
 	// Namespace returns startup-cpu-boost namespace
 	Namespace() string
-	// ApplyResourcePolicy applies resource policy on a given POD
-	ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod, containerNames bpod.ContainerNameSet) (bool, error)
+	// ApplyResourcePolicy applies resource policy on a given POD and returns the boosted container names
+	ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod, containerNames bpod.ContainerNameSet) ([]string, error)
 	// DurationPolicies returns configured duration policies
 	DurationPolicies() map[string]duration.Policy
 	// Pod returns a POD if tracked by startup-cpu-boost
@@ -63,10 +63,11 @@ type StartupCPUBoost interface {
 }
 
 const (
-	StartupCPUBoostStatsPodCreateEvent = 1
-	StartupCPUBoostStatsPodUpdateEvent = 2
-	StartupCPUBoostStatsPodDeleteEvent = 3
-	ResizeSubResourceName              = "resize"
+	StartupCPUBoostStatsPodCreateEvent             = 1
+	StartupCPUBoostStatsPodUpdateEvent             = 2
+	StartupCPUBoostStatsPodDeleteEvent             = 3
+	StartupCPUBoostStatsContainerRestartBoostEvent = 4
+	ResizeSubResourceName                          = "resize"
 )
 
 var (
@@ -78,8 +79,9 @@ var (
 type StartupCPUBoostStatsEventType int32
 
 type StartupCPUBoostStatsEvent struct {
-	Type   StartupCPUBoostStatsEventType
-	Object any
+	Type                   StartupCPUBoostStatsEventType
+	Object                 any
+	BoostedContainersCount int
 }
 
 // StartupCPUBoostStats holds the StartupCPUBoost usage statistics
@@ -182,7 +184,7 @@ func (b *StartupCPUBoostImpl) Namespace() string {
 }
 
 // ApplyResourcePolicy applies resource policy on a given POD
-func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod, containerNames bpod.ContainerNameSet) (bool, error) {
+func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *corev1.Pod, containerNames bpod.ContainerNameSet) ([]string, error) {
 	log := b.loggerFromContext(ctx)
 	originalQosClass := bpod.ComputePodQOS(pod, b.podLevelResourcesEnabled)
 	annotation := bpod.NewBoostAnnotation()
@@ -190,14 +192,14 @@ func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *core
 		var err error
 		annotation, err = bpod.BoostAnnotationFromPod(pod)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		if annotation.State != bpod.BoostStateReverted {
 			log.WithValues("state", annotation.State).Info("skipping boost as it's not in reverted state")
-			return false, nil
+			return nil, nil
 		}
 	}
-	var anyContainerBoosted bool
+	var boostedContainers []string
 	for i, container := range pod.Spec.Containers {
 		if containerNames != nil && !containerNames.Has(container.Name) {
 			continue
@@ -241,19 +243,19 @@ func (b *StartupCPUBoostImpl) ApplyResourcePolicy(ctx context.Context, pod *core
 		}
 		annotation.UpdateInitResources(container.Name, container.Resources)
 		pod.Spec.Containers[i].Resources = *resources
-		anyContainerBoosted = true
+		boostedContainers = append(boostedContainers, container.Name)
 		log.Info("calculated increased container resources")
 	}
 	// checks if any container CPU resources were boosted
-	if anyContainerBoosted {
+	if len(boostedContainers) > 0 {
 		annotation.State = bpod.BoostStateActive
 		annotation.BoostTimestamp = time.Now()
 		annotation.Apply(pod)
 		label := &bpod.BoostPodLabel{BoostName: b.Name()}
 		label.Apply(pod)
-		return true, nil
+		return boostedContainers, nil
 	}
-	return false, nil
+	return nil, nil
 }
 
 // DurationPolicies returns configured duration policies
@@ -276,17 +278,19 @@ func (b *StartupCPUBoostImpl) HandlePodEvent(ctx context.Context, event *bpod.Po
 	}
 	switch event.Type {
 	case bpod.PodEventTypePodCreated:
-		if err := b.upsertPod(ctx, event.Pod); err != nil {
-			return err
+		existing := b.upsertPod(ctx, event.Pod)
+		statsType := StartupCPUBoostStatsEventType(StartupCPUBoostStatsPodCreateEvent)
+		if existing {
+			statsType = StartupCPUBoostStatsPodUpdateEvent
 		}
+		b.updateStats(StartupCPUBoostStatsEvent{Type: statsType, Object: event.Pod})
 		return b.validateDurationPolicies(ctx, event.Pod)
 	case bpod.PodEventTypePodDeleted:
 		return b.deletePod(ctx, event.Pod)
 	case bpod.PodEventTypeConditionChanged:
 		b.inspectResizeConditions(ctx, event.Pod)
-		if err := b.upsertPod(ctx, event.Pod); err != nil {
-			return err
-		}
+		b.upsertPod(ctx, event.Pod)
+		b.updateStats(StartupCPUBoostStatsEvent{Type: StartupCPUBoostStatsPodUpdateEvent, Object: event.Pod})
 		return b.validateDurationPolicies(ctx, event.Pod)
 	case bpod.PodEventTypeContainerRestarting:
 		return b.boostOnRestart(ctx, event.Pod, event.RestartingContainerNames)
@@ -318,8 +322,6 @@ func (b *StartupCPUBoostImpl) ValidatePolicy(ctx context.Context, name string) (
 // RevertResources updates POD's container resource requests and limits to their original
 // values using the data from StartupCPUBoost annotation
 func (b *StartupCPUBoostImpl) RevertResources(ctx context.Context, pod *corev1.Pod) error {
-	b.Lock()
-	defer b.Unlock()
 	return b.revertResources(ctx, pod)
 }
 
@@ -330,6 +332,8 @@ func (b *StartupCPUBoostImpl) Matches(pod *corev1.Pod) bool {
 
 // Stats returns the StartupCPUBoost usage statistics
 func (b *StartupCPUBoostImpl) Stats() StartupCPUBoostStats {
+	b.RLock()
+	defer b.RUnlock()
 	return b.stats
 }
 
@@ -365,21 +369,17 @@ func (b *StartupCPUBoostImpl) resourcePolicy(ctx context.Context, container *cor
 	return nil, false
 }
 
-// upsertPod inserts new or updates existing POD to startup-cpu-boost tracking
-func (b *StartupCPUBoostImpl) upsertPod(ctx context.Context, pod *corev1.Pod) error {
+// upsertPod inserts new or updates existing POD in startup-cpu-boost tracking.
+// It returns true if the pod already existed in tracking, or false if it was newly inserted.
+func (b *StartupCPUBoostImpl) upsertPod(ctx context.Context, pod *corev1.Pod) (existing bool) {
 	b.Lock()
 	defer b.Unlock()
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("handling pod upsert")
-	_, existing := b.pods[pod.Name]
+	_, existing = b.pods[pod.Name]
 	b.pods[pod.Name] = pod
-	statsEvent := StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodCreateEvent, pod}
-	if existing {
-		statsEvent.Type = StartupCPUBoostStatsPodUpdateEvent
-	}
-	b.updateStats(statsEvent)
 	log.V(5).Info("pod upserted successfully")
-	return nil
+	return existing
 }
 
 func (b *StartupCPUBoostImpl) validateDurationPolicies(ctx context.Context, pod *corev1.Pod) error {
@@ -404,11 +404,11 @@ func (b *StartupCPUBoostImpl) validateDurationPolicies(ctx context.Context, pod 
 // deletePod removes the POD from the startup-cpu-boost tracking
 func (b *StartupCPUBoostImpl) deletePod(ctx context.Context, pod *corev1.Pod) error {
 	b.Lock()
-	defer b.Unlock()
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("handling pod delete")
 	delete(b.pods, pod.Name)
-	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
+	b.Unlock()
+	b.updateStats(StartupCPUBoostStatsEvent{Type: StartupCPUBoostStatsPodDeleteEvent, Object: pod})
 	return nil
 }
 
@@ -420,19 +420,22 @@ func (b *StartupCPUBoostImpl) boostOnRestart(ctx context.Context, pod *corev1.Po
 	}
 	log.Info("boosting pod resources on container restart")
 	boostedPod := pod.DeepCopy()
-	boosted, err := b.ApplyResourcePolicy(ctx, boostedPod, bpod.ContainerNameSetFromSlice(containerNames))
+	boostedContainers, err := b.ApplyResourcePolicy(ctx, boostedPod, bpod.ContainerNameSetFromSlice(containerNames))
 	if err != nil {
 		return err
 	}
-	if !boosted {
+	if len(boostedContainers) == 0 {
 		return nil
 	}
 	if err := b.updatePod(ctx, pod, boostedPod); err != nil {
 		return err
 	}
-	if err := b.upsertPod(ctx, boostedPod); err != nil {
-		log.Error(err, "failed to track pod after restart boost")
-	}
+	b.upsertPod(ctx, boostedPod)
+	b.updateStats(StartupCPUBoostStatsEvent{
+		Type:                   StartupCPUBoostStatsContainerRestartBoostEvent,
+		Object:                 boostedPod,
+		BoostedContainersCount: len(boostedContainers),
+	})
 	log.Info("pod resources boosted on restart successfully")
 	return nil
 }
@@ -452,7 +455,8 @@ func (b *StartupCPUBoostImpl) loggerFromContext(ctx context.Context) logr.Logger
 // The function returns true if policy is valid or false otherwise
 func (b *StartupCPUBoostImpl) validatePolicyOnPod(ctx context.Context, p duration.Policy, pod *corev1.Pod) (valid bool) {
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
-	if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil && annot.State != bpod.BoostStateActive {
+	annot, err := bpod.BoostAnnotationFromPod(pod)
+	if err != nil || annot.State != bpod.BoostStateActive {
 		return true
 	}
 	if valid = p.Valid(pod); !valid {
@@ -476,9 +480,12 @@ func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.P
 	if err := b.updatePod(ctx, originalPod, pod); err != nil {
 		return err
 	}
-	delete(b.pods, pod.Name)
-	b.updateStats(StartupCPUBoostStatsEvent{StartupCPUBoostStatsPodDeleteEvent, pod})
-	return nil
+	if b.boostOnRestartEnabled {
+		b.upsertPod(ctx, pod)
+		b.updateStats(StartupCPUBoostStatsEvent{Type: StartupCPUBoostStatsPodUpdateEvent, Object: pod})
+		return nil
+	}
+	return b.deletePod(ctx, pod)
 }
 
 func (b *StartupCPUBoostImpl) updatePod(ctx context.Context, originalPod, updatedPod *corev1.Pod) error {
@@ -506,11 +513,11 @@ func (b *StartupCPUBoostImpl) updatePod(ctx context.Context, originalPod, update
 // updateStats updates the StartupCPUBoost usage statistics based on the
 // received update event
 func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
+	b.Lock()
+	defer b.Unlock()
 	var activeCnt int
 	for _, pod := range b.pods {
-		if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil && annot.State == bpod.BoostStateActive {
-			activeCnt += len(annot.InitCPURequests)
-		}
+		activeCnt += boostContainersLen(pod)
 	}
 	b.stats.ActiveContainerBoosts = activeCnt
 	metrics.SetBoostContainersActive(b.namespace, b.name, float64(activeCnt))
@@ -520,6 +527,9 @@ func (b *StartupCPUBoostImpl) updateStats(e StartupCPUBoostStatsEvent) {
 		boostContainersLen := boostContainersLen(pod)
 		b.stats.TotalContainerBoosts += boostContainersLen
 		metrics.AddBoostContainersTotal(b.namespace, b.name, float64(boostContainersLen))
+	case StartupCPUBoostStatsContainerRestartBoostEvent:
+		b.stats.TotalContainerBoosts += e.BoostedContainersCount
+		metrics.AddBoostContainersTotal(b.namespace, b.name, float64(e.BoostedContainersCount))
 	}
 }
 
@@ -541,7 +551,7 @@ func (b *StartupCPUBoostImpl) canRemoveLimit(pod *corev1.Pod, qosClass corev1.Po
 // boostContainersLen returns the number of containers that were boosted
 // by StartupCPUBoost in a given Pod
 func boostContainersLen(pod *corev1.Pod) (cnt int) {
-	if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil {
+	if annot, err := bpod.BoostAnnotationFromPod(pod); err == nil && annot.State == bpod.BoostStateActive {
 		return len(annot.InitCPURequests)
 	}
 	return

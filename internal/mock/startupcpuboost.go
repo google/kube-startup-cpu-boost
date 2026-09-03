@@ -59,10 +59,10 @@ func (m *MockStartupCPUBoost) EXPECT() *MockStartupCPUBoostMockRecorder {
 }
 
 // ApplyResourcePolicy mocks base method.
-func (m *MockStartupCPUBoost) ApplyResourcePolicy(ctx context.Context, pod *v1.Pod, containerNames pod.ContainerNameSet) (bool, error) {
+func (m *MockStartupCPUBoost) ApplyResourcePolicy(ctx context.Context, pod *v1.Pod, containerNames pod.ContainerNameSet) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyResourcePolicy", ctx, pod, containerNames)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

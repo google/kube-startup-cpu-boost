@@ -209,28 +209,42 @@ var _ = Describe("StartupCPUBoost", func() {
 	Describe("Handles POD upsert triggering events", func() {
 		Context("when boost spec has no condition policy defined", func() {
 			When("POD does not exist", func() {
-				DescribeTable("adds POD, updates stats and metrics",
-					func(ctx context.Context, eventType bpod.PodEventType) {
-						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
-						Expect(err).NotTo(HaveOccurred())
+				It("via PodCreatedEvent adds POD, updates stats and metrics", func(ctx context.Context) {
+					boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+					Expect(err).NotTo(HaveOccurred())
 
-						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
-							Type: eventType,
-							Pod:  pod,
-						})
+					err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+						Type: bpod.PodEventTypePodCreated,
+						Pod:  pod,
+					})
 
-						Expect(err).NotTo(HaveOccurred())
-						_, found := boost.Pod(pod.Name)
-						Expect(found).To(BeTrue())
-						stats := boost.Stats()
-						Expect(stats.ActiveContainerBoosts).To(Equal(2))
-						Expect(stats.TotalContainerBoosts).To(Equal(2))
-						Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
-						Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
-					},
-					Entry("via PodCreatedEvent", bpod.PodEventTypePodCreated),
-					Entry("via ConditionChanged event", bpod.PodEventTypeConditionChanged),
-				)
+					Expect(err).NotTo(HaveOccurred())
+					_, found := boost.Pod(pod.Name)
+					Expect(found).To(BeTrue())
+					stats := boost.Stats()
+					Expect(stats.ActiveContainerBoosts).To(Equal(2))
+					Expect(stats.TotalContainerBoosts).To(Equal(2))
+					Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+					Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+				})
+				It("via ConditionChanged event adds POD without incrementing total container boosts", func(ctx context.Context) {
+					boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+					Expect(err).NotTo(HaveOccurred())
+
+					err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+						Type: bpod.PodEventTypeConditionChanged,
+						Pod:  pod,
+					})
+
+					Expect(err).NotTo(HaveOccurred())
+					_, found := boost.Pod(pod.Name)
+					Expect(found).To(BeTrue())
+					stats := boost.Stats()
+					Expect(stats.ActiveContainerBoosts).To(Equal(2))
+					Expect(stats.TotalContainerBoosts).To(Equal(0))
+					Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+					Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(0)))
+				})
 			})
 			When("POD already exists", func() {
 				DescribeTable("updates POD, stats and metrics",
@@ -553,6 +567,10 @@ var _ = Describe("StartupCPUBoost", func() {
 					trackedPod, ok := boost.Pod(pod.Name)
 					Expect(ok).To(BeTrue())
 					Expect(trackedPod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("2"))
+					Expect(boost.Stats().ActiveContainerBoosts).To(Equal(2))
+					Expect(boost.Stats().TotalContainerBoosts).To(Equal(1))
+					Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+					Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(1)))
 				})
 				When("patching pod resize fails", func() {
 					It("returns error and does not update tracked pod to active", func(ctx context.Context) {
@@ -775,7 +793,7 @@ var _ = Describe("StartupCPUBoost", func() {
 					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
-					Expect(boosted).To(BeFalse())
+					Expect(boosted).To(BeEmpty())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 				},
 				Entry("when status is active", bpod.BoostStateActive),
@@ -796,7 +814,7 @@ var _ = Describe("StartupCPUBoost", func() {
 				boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(boosted).To(BeFalse())
+				Expect(boosted).To(BeEmpty())
 				Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 				_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 				Expect(ok).To(BeFalse())
@@ -823,7 +841,7 @@ var _ = Describe("StartupCPUBoost", func() {
 					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
-					Expect(boosted).To(BeFalse())
+					Expect(boosted).To(BeEmpty())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 					Expect(ok).To(BeFalse())
@@ -845,7 +863,7 @@ var _ = Describe("StartupCPUBoost", func() {
 					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
-					Expect(boosted).To(BeFalse())
+					Expect(boosted).To(BeEmpty())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 					Expect(ok).To(BeFalse())
@@ -869,7 +887,7 @@ var _ = Describe("StartupCPUBoost", func() {
 					boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 					Expect(err).NotTo(HaveOccurred())
-					Expect(boosted).To(BeFalse())
+					Expect(boosted).To(BeEmpty())
 					Expect(pod.Spec.Containers).To(Equal(originalPod.Spec.Containers))
 					_, ok := pod.Annotations[bpod.BoostAnnotationKey]
 					Expect(ok).To(BeFalse())
@@ -894,7 +912,7 @@ var _ = Describe("StartupCPUBoost", func() {
 						boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 						Expect(err).NotTo(HaveOccurred())
-						Expect(boosted).To(BeTrue())
+						Expect(boosted).To(ConsistOf("container-one"))
 						Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 						Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(4000)))
 						Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000))) // Unmodified
@@ -936,7 +954,7 @@ var _ = Describe("StartupCPUBoost", func() {
 						boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 						Expect(err).NotTo(HaveOccurred())
-						Expect(boosted).To(BeTrue())
+						Expect(boosted).To(ConsistOf("container-one", "container-two"))
 						Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 						Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 					})
@@ -961,7 +979,7 @@ var _ = Describe("StartupCPUBoost", func() {
 							boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 							Expect(err).NotTo(HaveOccurred())
-							Expect(boosted).To(BeTrue())
+							Expect(boosted).To(ConsistOf("container-one"))
 							Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 							Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().IsZero()).To(BeTrue())
 							Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
@@ -995,7 +1013,7 @@ var _ = Describe("StartupCPUBoost", func() {
 							boosted, err := boost.ApplyResourcePolicy(context.Background(), pod, nil)
 
 							Expect(err).NotTo(HaveOccurred())
-							Expect(boosted).To(BeTrue())
+							Expect(boosted).To(ConsistOf("container-one"))
 							Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
 							Expect(pod.Spec.Containers[0].Resources.Limits.Cpu().MilliValue()).To(Equal(int64(2000)))
 							Expect(pod.Spec.Containers[1].Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
