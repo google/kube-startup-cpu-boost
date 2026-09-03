@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.0...v0.21.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **helm:** boost on restart env variable ([#179](https://github.com/google/kube-startup-cpu-boost/issues/179)) ([aa9ba7e](https://github.com/google/kube-startup-cpu-boost/commit/aa9ba7e716d5a3223129618a9583ec93e1754b24))
+
 ## [0.21.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.20.0...v0.21.0) (2026-09-03)
 
 
