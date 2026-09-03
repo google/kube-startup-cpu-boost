@@ -1,6 +1,20 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.20.0...v0.21.0) (2026-09-03)
+
+
+### Features
+
+* **config:** limits removal is disabled by default ([#175](https://github.com/google/kube-startup-cpu-boost/issues/175)) ([534c840](https://github.com/google/kube-startup-cpu-boost/commit/534c840f17085294fa72d75c503bd47a264ef9f6))
+* **core:** boost on container restart ([#174](https://github.com/google/kube-startup-cpu-boost/issues/174)) ([00e2c24](https://github.com/google/kube-startup-cpu-boost/commit/00e2c247581819909bfe0a00fe9397d92e695217))
+
+
+### Bug Fixes
+
+* **controller:** avoid nil dereference on invalid boost selector ([#172](https://github.com/google/kube-startup-cpu-boost/issues/172)) ([237dd73](https://github.com/google/kube-startup-cpu-boost/commit/237dd73c1229ac448fd41d7d727b2164915cc9ea))
+* **core:** align stats with boost on restart ([#176](https://github.com/google/kube-startup-cpu-boost/issues/176)) ([afdc46b](https://github.com/google/kube-startup-cpu-boost/commit/afdc46b1e18f8c79af511ecddae1166801f9a0d1))
+
 ## [0.20.0](https://github.com/google/kube-startup-cpu-boost/compare/v0.19.0...v0.20.0) (2026-07-29)
 
 
