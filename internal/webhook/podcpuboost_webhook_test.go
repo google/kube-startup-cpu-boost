@@ -115,7 +115,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				})
 				When("ApplyResourcePolicy makes no changes", func() {
 					BeforeEach(func() {
-						applyResourcePolicyCall.Return(false, nil)
+						applyResourcePolicyCall.Return(nil, nil)
 					})
 					It("allows the admission", func() {
 						Expect(response.Allowed).To(BeTrue())
@@ -126,7 +126,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				})
 				When("ApplyResourcePolicy mutates the pod", func() {
 					BeforeEach(func() {
-						applyResourcePolicyCall.DoAndReturn(func(ctx context.Context, p *corev1.Pod, _ bpod.ContainerNameSet) (bool, error) {
+						applyResourcePolicyCall.DoAndReturn(func(ctx context.Context, p *corev1.Pod, _ bpod.ContainerNameSet) ([]string, error) {
 							p.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("2")
 							if p.Annotations == nil {
 								p.Annotations = make(map[string]string)
@@ -137,7 +137,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 								p.Labels = make(map[string]string)
 							}
 							p.Labels[bpod.BoostLabelKey] = "boost-one"
-							return true, nil
+							return []string{"container-one"}, nil
 						})
 					})
 					It("allows the admission", func() {
@@ -169,7 +169,7 @@ var _ = Describe("Pod CPU Boost Webhook", func() {
 				})
 				When("ApplyResourcePolicy returns an error", func() {
 					BeforeEach(func() {
-						applyResourcePolicyCall.Return(false, fmt.Errorf("internal policy error"))
+						applyResourcePolicyCall.Return(nil, fmt.Errorf("internal policy error"))
 					})
 					It("denies the admission with the error", func() {
 						Expect(response.Allowed).To(BeFalse())

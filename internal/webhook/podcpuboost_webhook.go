@@ -60,10 +60,14 @@ func (h *podCPUBoostHandler) Handle(ctx context.Context, req admission.Request) 
 	}
 	log = log.WithValues("boost", boostImpl.Name())
 
-	_, err = boostImpl.ApplyResourcePolicy(ctx, pod, bpod.ContainerNameSetFromPod(pod))
+	boostedContainers, err := boostImpl.ApplyResourcePolicy(ctx, pod, bpod.ContainerNameSetFromPod(pod))
 	if err != nil {
 		log.Error(err, "failed to apply resource policy")
 		return admission.Errored(http.StatusInternalServerError, err)
+	}
+	if len(boostedContainers) == 0 {
+		log.V(5).Info("no container resources boosted")
+		return admission.Allowed("no container resources boosted")
 	}
 
 	marshaledPod, err := json.Marshal(pod)
