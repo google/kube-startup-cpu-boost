@@ -32,3 +32,5 @@ spec:
               fieldPath: metadata.namespace
         - name: "LEADER_ELECTION"
           value: "true"
+        - name: "BOOST_ON_RESTART"
+          value: "false"
