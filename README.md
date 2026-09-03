@@ -61,7 +61,7 @@ or when a Pod condition is met.
 
  <!-- x-release-please-start-version -->
 ```sh
-kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.21.0/manifests.yaml
+kubectl apply -f https://github.com/google/kube-startup-cpu-boost/releases/download/v0.21.1/manifests.yaml
 ```
  <!-- x-release-please-end -->
 
@@ -78,7 +78,7 @@ cat <<EOF > kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/google/kube-startup-cpu-boost?ref=v0.21.0
+- https://github.com/google/kube-startup-cpu-boost?ref=v0.21.1
 EOF
 kubectl kustomize | kubectl apply -f -
 ```

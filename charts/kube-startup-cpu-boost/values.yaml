@@ -13,7 +13,7 @@ controllerManager:
       boostOnRestart: "false"
     image:
       repository: ghcr.io/google/kube-startup-cpu-boost
-      tag: v0.21.0 #x-release-please-version
+      tag: v0.21.1 #x-release-please-version
     resources:
       limits:
         cpu: 500m
