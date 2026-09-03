@@ -19,6 +19,7 @@ Note: This is not an officially supported Google product.
 * [Installation](#installation)
 * [Usage](#usage)
 * [Features](#features)
+  * [[Boost behavior] container restarts](#boost-behavior-container-restarts)
   * [[Boost target] Pod label selector](#boost-target-pod-label-selector)
   * [[Boost resources] container matcher](#boost-resources-container-matcher)
   * [[Boost resources] percentage increase](#boost-resources-percentage-increase)
@@ -169,6 +170,19 @@ add `PodDisruptionBudget`.
 
 ## Features
 
+### [Boost behavior] container restarts
+
+Since [v0.21.0](https://github.com/google/kube-startup-cpu-boost/releases/tag/v0.21.0),
+the operator can re-apply CPU boosts to existing Pods when their containers restart.
+This ensures that the boost is applied throughout the entire lifecycle of the workload.
+
+The operator continues watching Pods even after CPU resources have been restored to their
+original values. Container restarts are detected by observing container status changes and reacting
+to the `terminated` state.
+
+> [!NOTE]
+> This feature requires the `BOOST_ON_RESTART` environment variable to be set to `true`.
+
 ### [Boost target] Pod label selector
 
 Define the Pods that will be subject to a resource boost with a label selector.
@@ -287,6 +301,7 @@ The Kube Startup CPU Boost operator can be configured with environment variables
 | `HTTP2` | `bool` | `false` | Determines if the HTTP/2 protocol is used for webhook and metrics servers |
 | `REMOVE_LIMITS` | `bool` | `false` | Enables the operator to remove container CPU limits during the boost period |
 | `VALIDATE_FEATURE_ENABLED` | `bool` | `true` | Enables validation of the required feature gate on operator startup |
+| `BOOST_ON_RESTART` | `bool` | `false` | Enables the [boost on container restart](#boost-behavior-container-restarts) feature |
 
 ## Metrics
 
