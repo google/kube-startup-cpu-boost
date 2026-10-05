@@ -32,6 +32,9 @@
 	<description>Demo Spring Boot app with REST controller and JPA</description>
 	<properties>
 		<java.version>17</java.version>
+		<jackson-bom.version>2.21.7</jackson-bom.version>
+		<log4j2.version>2.25.5</log4j2.version>
+		<tomcat.version>10.1.60</tomcat.version>
 	</properties>
 	<dependencies>
 		<dependency>
