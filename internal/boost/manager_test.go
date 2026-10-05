@@ -38,7 +38,7 @@ var _ = Describe("Manager", func() {
 	var (
 		mockCtrl       *gomock.Controller
 		mockClient     *mock.MockClient
-		mockReconciler *mock.MockReconciler
+		mockReconciler *mock.MockReconciler[reconcile.Request]
 		spec           *autoscaling.StartupCPUBoost
 		config         *cpuboost.StartupCPUBoostConfig
 	)
@@ -47,7 +47,7 @@ var _ = Describe("Manager", func() {
 		metrics.ClearSystemMetrics()
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = mock.NewMockClient(mockCtrl)
-		mockReconciler = mock.NewMockReconciler(mockCtrl)
+		mockReconciler = mock.NewMockReconciler[reconcile.Request](mockCtrl)
 		spec = specTemplate.DeepCopy()
 		config = &cpuboost.StartupCPUBoostConfig{
 			Client: mockClient,

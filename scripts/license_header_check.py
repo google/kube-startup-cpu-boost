@@ -30,8 +30,8 @@ _EXCLUDE_DIRS = ('.git', '.terraform', 'config', 'charts')
 _EXCLUDE_RE = re.compile(r'// skip boilerplate check')
 _EXCLUDE_FILES = {}
 _MATCH_FILES = ('Dockerfile', '.py', '.sh', '.tf', '.yaml', '.yml', '.go', '.rego')
-_MATCH_STRING = (r'^\s*([#\*]|[/]{2})\sCopyright [0-9]{4} Google LLC$\s+([#\*]|[/]{2})\s+'
-                 r'([#\*]|[/]{2})\sLicensed under the Apache License, Version 2.0 '
+_MATCH_STRING = (r'^\s*([#\*]|[/]{2}(?:\s*[/]{2})?)\sCopyright [0-9]{4} Google LLC$\s+([#\*]|[/]{2}(?:\s*[/]{2})?)\s+'
+                 r'([#\*]|[/]{2}(?:\s*[/]{2})?)\sLicensed under the Apache License, Version 2.0 '
                  r'\(the "License"\);\s+')
 _MATCH_RE = re.compile(_MATCH_STRING, re.M)
 

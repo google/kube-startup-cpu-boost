@@ -56,8 +56,9 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations and mocks.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	PATH="$(LOCALBIN):$$PATH" go generate ./...
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -157,11 +158,13 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+MOCKGEN ?= $(LOCALBIN)/mockgen
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.3.0
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
 GOLANGCI_LINT_VERSION ?= v2.12.2
+MOCKGEN_VERSION ?= v0.6.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -189,6 +192,12 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary. 
 $(GOLANGCI_LINT): $(LOCALBIN)
 	test -s $(LOCALBIN)/golangci-lint && $(LOCALBIN)/golangci-lint --version | grep -q $(patsubst v%,%,$(GOLANGCI_LINT_VERSION)) || \
 	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+.PHONY: mockgen
+mockgen: $(MOCKGEN) ## Download mockgen locally if necessary. If wrong version is installed, it will be overwritten.
+$(MOCKGEN): $(LOCALBIN)
+	test -s $(LOCALBIN)/mockgen && $(LOCALBIN)/mockgen -version | grep -q $(MOCKGEN_VERSION) || \
+	GOBIN=$(LOCALBIN) go install go.uber.org/mock/mockgen@$(MOCKGEN_VERSION)
 
 HELM_CHART_ROOT ?= charts/kube-startup-cpu-boost
 HELMIFY ?= $(LOCALBIN)/helmify -original-name ${HELM_CHART_ROOT}
