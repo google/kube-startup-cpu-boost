@@ -13,4 +13,14 @@
 // limitations under the License.
 
 // Package mock is a generated GoMock package.
+//
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination boost_manager.go github.com/google/kube-startup-cpu-boost/internal/boost Manager
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination ctrl_manager.go -mock_names Manager=MockCtrlManager sigs.k8s.io/controller-runtime Manager
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination featuregatevalidator.go github.com/google/kube-startup-cpu-boost/internal/util FeatureGateValidator
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination k8s_client.go sigs.k8s.io/controller-runtime/pkg/client Client
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination k8s_client_rest_interface.go k8s.io/client-go/rest Interface
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination k8s_subresourceclient.go sigs.k8s.io/controller-runtime/pkg/client SubResourceClient
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination reconciler.go sigs.k8s.io/controller-runtime/pkg/reconcile Reconciler
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination startupcpuboost.go github.com/google/kube-startup-cpu-boost/internal/boost StartupCPUBoost
+//go:generate mockgen -package mock --copyright_file ../../hack/boilerplate.go.txt --destination timeticker.go github.com/google/kube-startup-cpu-boost/internal/boost TimeTicker
 package mock
