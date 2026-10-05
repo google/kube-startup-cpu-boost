@@ -18,6 +18,9 @@ on:
     tags:
       - "demo-app/v*"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build
