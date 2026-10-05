@@ -63,7 +63,7 @@ func (w *StartupCPUBoostWebhook) ValidateDelete(ctx context.Context, obj *v1alph
 func validateWarnings(boost *v1alpha1.StartupCPUBoost) admission.Warnings {
 	var warnings admission.Warnings
 	for i, policy := range boost.Spec.ResourcePolicy.ContainerPolicies {
-		//lint:ignore SA1019 backwards-compatible support for deprecated ContainerName
+		//nolint:staticcheck // SA1019: backwards-compatible support for deprecated ContainerName
 		if policy.ContainerName != "" {
 			warnings = append(warnings, fmt.Sprintf(
 				"spec.resourcePolicy.containerPolicies[%d].containerName is deprecated; use matchContainers with type=ExactName instead", i,
@@ -145,7 +145,7 @@ func validateContainerPolicyTypes(policy v1alpha1.ContainerPolicy, fldPath *fiel
 func validateContainerPolicyMatchers(policy v1alpha1.ContainerPolicy, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	var cnt int
-	//lint:ignore SA1019 backwards-compatible support for deprecated ContainerName
+	//nolint:staticcheck // SA1019: backwards-compatible support for deprecated ContainerName
 	if policy.ContainerName != "" {
 		cnt++
 	}

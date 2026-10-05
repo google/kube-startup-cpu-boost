@@ -472,10 +472,14 @@ func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.P
 	originalPod := pod.DeepCopy()
 	if b.boostOnRestartEnabled {
 		log.Info("reverting pod resources (boost on restart enabled)")
-		bpod.RevertResourceBoostWithBoostOnRestart(pod)
+		if err := bpod.RevertResourceBoostWithBoostOnRestart(pod); err != nil {
+			return err
+		}
 	} else {
 		log.Info("reverting pod resources")
-		bpod.RevertResourceBoost(pod)
+		if err := bpod.RevertResourceBoost(pod); err != nil {
+			return err
+		}
 	}
 	if err := b.updatePod(ctx, originalPod, pod); err != nil {
 		return err
@@ -572,7 +576,7 @@ func mapDurationPolicy(policiesSpec autoscaling.DurationPolicy) map[string]durat
 }
 
 func containerPolicyMatcher(policySpec autoscaling.ContainerPolicy) resource.ContainerMatcher {
-	//lint:ignore SA1019 backwards-compatible support for deprecated ContainerName
+	//nolint:staticcheck // SA1019: backwards-compatible support for deprecated ContainerName
 	if name := policySpec.ContainerName; name != "" {
 		return resource.FixedNameContainerMatcher{
 			Name: name,
@@ -622,7 +626,7 @@ func mapResourcePolicies(spec autoscaling.ResourcePolicy) ([]containerPolicyEntr
 			cnt++
 		}
 		if cnt != 1 {
-			//lint:ignore SA1019 backwards-compatible support for deprecated ContainerName
+			//nolint:staticcheck // SA1019: backwards-compatible support for deprecated ContainerName
 			name := policySpec.ContainerName
 			if name == "" && policySpec.MatchContainers != nil {
 				name = policySpec.MatchContainers.Value

@@ -172,10 +172,10 @@ func (m *managerImpl) UpdateRegularCPUBoost(ctx context.Context,
 	spec *autoscaling.StartupCPUBoost) error {
 	m.Lock()
 	defer m.Unlock()
-	log := m.log.WithValues("boost", spec.ObjectMeta.Name, "namespace", spec.ObjectMeta.Namespace)
+	log := m.log.WithValues("boost", spec.Name, "namespace", spec.Namespace)
 	log.V(5).Info("handling boost update")
 	defer log.Info("boost updated successfully")
-	boost, ok := m.regularBoosts.Get(spec.ObjectMeta.Name, spec.ObjectMeta.Namespace)
+	boost, ok := m.regularBoosts.Get(spec.Name, spec.Namespace)
 	if !ok {
 		log.V(5).Info("boost not found")
 		return nil
@@ -377,7 +377,9 @@ func (m *managerImpl) validateTimePolicyBoosts(ctx context.Context) {
 	reconcileRequests := dedupeReconcileRequests(reconcileTasks)
 	if m.reconciler != nil {
 		for _, req := range reconcileRequests {
-			m.reconciler.Reconcile(ctx, req)
+			if _, err := m.reconciler.Reconcile(ctx, req); err != nil {
+				m.log.Error(err, "boost reconciliation failed")
+			}
 		}
 	}
 }
