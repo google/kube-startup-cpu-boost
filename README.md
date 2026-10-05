@@ -290,7 +290,7 @@ The Kube Startup CPU Boost operator can be configured with environment variables
 
 | Variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `POD_NAMESPACE` | `string` | `kube-startup-cpu-boost-system` |  Kube Startup CPU Boost operator namespace |
+| `POD_NAMESPACE` | `string` | `kube-startup-cpu-boost-system` | Kube Startup CPU Boost operator namespace |
 | `MGR_CHECK_INTERVAL` | `int` | `5` | Duration in seconds between boost manager checks for time-based boost duration policies |
 | `LEADER_ELECTION` | `bool` | `false` | Enables leader election for controller manager |
 | `METRICS_PROBE_BIND_ADDR` | `string` | `:8080` | Address the metrics endpoint binds to |
@@ -311,8 +311,8 @@ the system and the status of Startup CPU Boosts.
 | Metric name | Type | Description | Labels |
 | --- | --- | --- | --- |
 | `boost_configurations` | Gauge | Number of registered Kube Startup CPU Boost configurations | `namespace`: the namespace of the Kube Startup CPU Boost |
-| `boost_containers_total` | Counter | Number of containers whose CPU resources were increased | `namespace`: the namespace of the container's Pod, `boost`: the name of the Kube Startup CPU Boost that increased the container's resources  |
-| `boost_containers_active` | Gauge | Number of containers whose CPU resources have not yet been reverted to their original values | `namespace`: the namespace of the container's Pod, `boost`: the name of the Kube Startup CPU Boost that increased the container's resources  |
+| `boost_containers_total` | Counter | Number of containers whose CPU resources were increased | `namespace`: the namespace of the container's Pod, `boost`: the name of the Kube Startup CPU Boost that increased the container's resources |
+| `boost_containers_active` | Gauge | Number of containers whose CPU resources have not yet been reverted to their original values | `namespace`: the namespace of the container's Pod, `boost`: the name of the Kube Startup CPU Boost that increased the container's resources |
 
 ### Scraping: Google Cloud Managed Service for Prometheus
 

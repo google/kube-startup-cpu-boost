@@ -1,16 +1,7 @@
 {
   "ignorePatterns": [
     {
-      "pattern": "^http://example.net"
-    },
-    {
-      "pattern": "^https://docs.github.com"
-    },
-    {
-      "pattern": "^https://github.com/google/kube-startup-cpu-boost/compare/.*"
+      "pattern": "^https?://"
     }
-  ],
-  "retryOn429": true,
-  "retryCount": 3,
-  "fallbackRetryDelay": 30
+  ]
 }
