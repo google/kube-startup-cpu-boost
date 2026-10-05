@@ -68,8 +68,12 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: lint
-lint: staticcheck ## Run staticcheck against code.
-	$(STATICCHECK) ./...
+lint: golangci-lint ## Run golangci-lint against code.
+	$(GOLANGCI_LINT) run
+
+.PHONY: lint-fix
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes.
+	$(GOLANGCI_LINT) run --fix
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
@@ -152,12 +156,12 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
-STATICCHECK ?= $(LOCALBIN)/staticcheck
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.3.0
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
-STATICCHECK_VERSION ?= 2026.1
+GOLANGCI_LINT_VERSION ?= v2.12.2
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -180,11 +184,11 @@ envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
-.PHONY: staticcheck
-staticcheck: $(STATICCHECK) ## Download staticcheck locally if necessary. If wrong version is installed, it will be overwritten.
-$(STATICCHECK): $(LOCALBIN)
-	test -s $(LOCALBIN)/staticcheck && $(LOCALBIN)/staticcheck -version | grep -q $(STATICCHECK_VERSION) || \
-	GOBIN=$(LOCALBIN) go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary. If wrong version is installed, it will be overwritten.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	test -s $(LOCALBIN)/golangci-lint && $(LOCALBIN)/golangci-lint --version | grep -q $(patsubst v%,%,$(GOLANGCI_LINT_VERSION)) || \
+	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 HELM_CHART_ROOT ?= charts/kube-startup-cpu-boost
 HELMIFY ?= $(LOCALBIN)/helmify -original-name ${HELM_CHART_ROOT}

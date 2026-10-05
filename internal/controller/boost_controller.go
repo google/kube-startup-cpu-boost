@@ -69,7 +69,7 @@ func (r *StartupCPUBoostReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	error) {
 	var boostObj autoscaling.StartupCPUBoost
 	var err error
-	if err = r.Client.Get(ctx, req.NamespacedName, &boostObj); err != nil {
+	if err = r.Get(ctx, req.NamespacedName, &boostObj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	log := r.Log.WithValues("name", boostObj.Name, "namespace", boostObj.Namespace)

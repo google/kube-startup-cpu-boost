@@ -180,7 +180,9 @@ func collect(col prometheus.Collector, do func(*dto.Metric)) {
 	}()
 	for x := range ch {
 		m := &dto.Metric{}
-		x.Write(m)
+		if err := x.Write(m); err != nil {
+			continue
+		}
 		do(m)
 	}
 }
