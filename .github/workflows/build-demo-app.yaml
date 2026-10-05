@@ -25,6 +25,9 @@ on:
     paths:
       - 'demo-app/**'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build

@@ -25,6 +25,9 @@ on:
     paths-ignore:
       - 'demo-app/**'
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint

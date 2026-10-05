@@ -21,6 +21,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   linting:
     name: Documentation linting
