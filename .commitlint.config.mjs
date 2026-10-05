@@ -18,6 +18,8 @@ export default {
         'test',
         'internal'
       ]
-    ]
+    ],
+    'header-max-length': [0, 'always'],
+    'body-max-line-length': [0, 'always']
   }
 };
