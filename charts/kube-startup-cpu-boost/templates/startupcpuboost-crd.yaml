@@ -3,7 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   name: startupcpuboosts.autoscaling.x-k8s.io
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.3
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
   {{- include "kube-startup-cpu-boost.labels" . | nindent 4 }}
 spec:
@@ -52,7 +52,8 @@ spec:
                     relates the key and values.
                   properties:
                     key:
-                      description: key is the label key that the selector applies to.
+                      description: key is the label key that the selector applies
+                        to.
                       type: string
                     operator:
                       description: |-
@@ -89,7 +90,8 @@ spec:
             description: StartupCPUBoostSpec defines the desired state of StartupCPUBoost
             properties:
               durationPolicy:
-                description: DurationPolicy specifies policies for resource boost duration
+                description: DurationPolicy specifies policies for resource boost
+                  duration
                 properties:
                   fixedDuration:
                     description: fixed time duration policy
@@ -125,16 +127,19 @@ spec:
                   increase
                 properties:
                   containerPolicies:
-                    description: ContainerPolicies specifies resource policies for the
-                      containers
+                    description: ContainerPolicies specifies resource policies for
+                      the containers
                     items:
                       description: |-
                         ContainerPolicy defines the policy used to determine the target
                         resources for a container
                       properties:
                         containerName:
-                          description: ContainerName specifies the name of container
-                            for a given policy
+                          description: |-
+                            ContainerName specifies the name of container for a given policy.
+
+                            Deprecated: ContainerName is deprecated in v1alpha1 and will be removed in a future API version.
+                            Please use MatchContainers with Type=ExactName instead.
                           type: string
                         fixedResources:
                           description: |-
@@ -158,6 +163,23 @@ spec:
                           required:
                           - requests
                           type: object
+                        matchContainers:
+                          description: MatchContainers specifies container matching
+                            rules for a given policy
+                          properties:
+                            type:
+                              description: Type of the match containers rule
+                              enum:
+                              - ExactName
+                              - RegexName
+                              type: string
+                            value:
+                              description: Value of the match containers rule
+                              type: string
+                          required:
+                          - type
+                          - value
+                          type: object
                         percentageIncrease:
                           description: |-
                             PercentageIncrease specifies the CPU resource policy that increases
@@ -171,8 +193,6 @@ spec:
                           required:
                           - value
                           type: object
-                      required:
-                      - containerName
                       type: object
                     minItems: 1
                     type: array
