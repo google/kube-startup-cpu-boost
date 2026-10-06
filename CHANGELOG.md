@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.1...v0.21.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** bump the go-dependencies group across 1 directory with 9 updates ([#187](https://github.com/google/kube-startup-cpu-boost/issues/187)) ([4760428](https://github.com/google/kube-startup-cpu-boost/commit/4760428eced537e438f80c375474c4e7a506ef6f))
+* **helm:** add container matchers to CRD ([#182](https://github.com/google/kube-startup-cpu-boost/issues/182)) ([0c330d2](https://github.com/google/kube-startup-cpu-boost/commit/0c330d296eed25274fc15872969362c4683aa171)), closes [#181](https://github.com/google/kube-startup-cpu-boost/issues/181)
+
 ## [0.21.1](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.0...v0.21.1) (2026-09-03)
 
 
