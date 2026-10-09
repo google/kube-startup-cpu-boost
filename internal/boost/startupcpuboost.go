@@ -28,6 +28,7 @@ import (
 	"github.com/google/kube-startup-cpu-boost/internal/boost/resource"
 	"github.com/google/kube-startup-cpu-boost/internal/metrics"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -482,6 +483,10 @@ func (b *StartupCPUBoostImpl) revertResources(ctx context.Context, pod *corev1.P
 		}
 	}
 	if err := b.updatePod(ctx, originalPod, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.WithValues("pod", pod.Name).Info("pod no longer exists, removing it from tracking")
+			return b.deletePod(ctx, pod)
+		}
 		return err
 	}
 	if b.boostOnRestartEnabled {
@@ -497,7 +502,7 @@ func (b *StartupCPUBoostImpl) updatePod(ctx context.Context, originalPod, update
 	if b.legacyRevertMode {
 		log.V(5).Info("updating POD using update only (legacy)")
 		if err := b.client.Update(ctx, updatedPod); err != nil {
-			return fmt.Errorf("failed to update pod spec: %s", err)
+			return fmt.Errorf("failed to update pod spec: %w", err)
 		}
 		return nil
 	}
@@ -506,10 +511,10 @@ func (b *StartupCPUBoostImpl) updatePod(ctx context.Context, originalPod, update
 	metadataPatch := bpod.NewApplyBoostMetadataPatch(originalPod, updatedPod)
 
 	if err := b.client.SubResource(ResizeSubResourceName).Patch(ctx, updatedPod, resourcePatch); err != nil {
-		return fmt.Errorf("failed to patch pod resize: %s", err)
+		return fmt.Errorf("failed to patch pod resize: %w", err)
 	}
 	if err := b.client.Patch(ctx, updatedPod, metadataPatch); err != nil {
-		return fmt.Errorf("failed to patch pod metadata: %s", err)
+		return fmt.Errorf("failed to patch pod metadata: %w", err)
 	}
 	return nil
 }
