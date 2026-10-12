@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.3](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.2...v0.21.3) (2026-10-12)
+
+
+### Bug Fixes
+
+* **core:** drop deleted pods from tracking on revert ([#195](https://github.com/google/kube-startup-cpu-boost/issues/195)) ([77f9a7f](https://github.com/google/kube-startup-cpu-boost/commit/77f9a7f777eca3a73d74242bf14eefa91647dec9))
+* **deps:** bump the go-dependencies group across 1 directory with 2 updates ([#194](https://github.com/google/kube-startup-cpu-boost/issues/194)) ([92e55d6](https://github.com/google/kube-startup-cpu-boost/commit/92e55d66870e0d22b6005022e8bc86839fe622a0))
+
 ## [0.21.2](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.1...v0.21.2) (2026-10-05)
 
 
