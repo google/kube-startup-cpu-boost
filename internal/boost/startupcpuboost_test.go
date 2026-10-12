@@ -29,6 +29,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apiResource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -462,6 +463,67 @@ var _ = Describe("StartupCPUBoost", func() {
 				Expect(stats.TotalContainerBoosts).To(Equal(2))
 				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(0)))
 				Expect(metrics.BoostContainersTotal(boost.Namespace(), boost.Name())).To(Equal(float64(2)))
+			})
+		})
+	})
+	Describe("Reverts POD resources", func() {
+		var notFoundErr error
+		BeforeEach(func() {
+			notFoundErr = apierrors.NewNotFound(corev1.Resource("pods"), pod.Name)
+		})
+		trackPod := func(ctx context.Context) {
+			boost, err = cpuboost.NewStartupCPUBoost(spec, config)
+			Expect(err).NotTo(HaveOccurred())
+			err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+				Type: bpod.PodEventTypePodCreated,
+				Pod:  pod,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			_, found := boost.Pod(pod.Name)
+			Expect(found).To(BeTrue())
+		}
+		When("POD no longer exists", func() {
+			It("removes POD from tracking, updates stats and metrics", func(ctx context.Context) {
+				mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+				mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(),
+					gomock.Any()).Return(notFoundErr).Times(1)
+				mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
+				trackPod(ctx)
+
+				err = boost.RevertResources(ctx, pod)
+
+				Expect(err).NotTo(HaveOccurred())
+				_, found := boost.Pod(pod.Name)
+				Expect(found).To(BeFalse())
+				stats := boost.Stats()
+				Expect(stats.ActiveContainerBoosts).To(Equal(0))
+				Expect(metrics.BoostContainersActive(boost.Namespace(), boost.Name())).To(Equal(float64(0)))
+			})
+			It("removes POD from tracking when using legacy revert mode", func(ctx context.Context) {
+				config.LegacyRevertMode = true
+				mockClient.EXPECT().Update(gomock.Any(), gomock.Any()).Return(notFoundErr).Times(1)
+				trackPod(ctx)
+
+				err = boost.RevertResources(ctx, pod)
+
+				Expect(err).NotTo(HaveOccurred())
+				_, found := boost.Pod(pod.Name)
+				Expect(found).To(BeFalse())
+			})
+		})
+		When("POD update fails with other error", func() {
+			It("returns error and keeps POD in tracking", func(ctx context.Context) {
+				mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+				mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(),
+					gomock.Any()).Return(errors.New("connection refused")).Times(1)
+				mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient).Times(1)
+				trackPod(ctx)
+
+				err = boost.RevertResources(ctx, pod)
+
+				Expect(err).To(HaveOccurred())
+				_, found := boost.Pod(pod.Name)
+				Expect(found).To(BeTrue())
 			})
 		})
 	})
