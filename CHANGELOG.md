@@ -1,6 +1,13 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.4](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.3...v0.21.4) (2026-10-19)
+
+
+### Bug Fixes
+
+* **deps:** bump github.com/prometheus/client_golang ([#197](https://github.com/google/kube-startup-cpu-boost/issues/197)) ([a03aaee](https://github.com/google/kube-startup-cpu-boost/commit/a03aaeed845134ed2770a012861e87eed8ecbf3c))
+
 ## [0.21.3](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.2...v0.21.3) (2026-10-12)
 
 
