@@ -1,6 +1,16 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.4](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.3...v0.21.4) (2026-11-03)
+
+
+### Bug Fixes
+
+* **deps:** addressing CVE-2026-78661 CVE-2026-97045 ([#206](https://github.com/google/kube-startup-cpu-boost/issues/206)) ([54e158a](https://github.com/google/kube-startup-cpu-boost/commit/54e158a433cf204788f7c2e94aedb6e77e3c5ac5))
+* **deps:** bump distroless/static from `e2e927e` to `d620678` ([#201](https://github.com/google/kube-startup-cpu-boost/issues/201)) ([f8c93f4](https://github.com/google/kube-startup-cpu-boost/commit/f8c93f4795cd0bd2e108eef3d8b39920ed6b8d1d))
+* **deps:** bump github.com/prometheus/client_golang ([#197](https://github.com/google/kube-startup-cpu-boost/issues/197)) ([a03aaee](https://github.com/google/kube-startup-cpu-boost/commit/a03aaeed845134ed2770a012861e87eed8ecbf3c))
+* **deps:** bump the go-dependencies group with 2 updates ([#200](https://github.com/google/kube-startup-cpu-boost/issues/200)) ([53f3c7a](https://github.com/google/kube-startup-cpu-boost/commit/53f3c7a7fd87e7287071a42826781e20437f8787))
+
 ## [0.21.3](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.2...v0.21.3) (2026-10-12)
 
 
