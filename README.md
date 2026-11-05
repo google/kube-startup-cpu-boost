@@ -7,6 +7,7 @@ the resources are set back to their original values.
 [![Build](https://github.com/google/kube-startup-cpu-boost/actions/workflows/build.yaml/badge.svg)](https://github.com/google/kube-startup-cpu-boost/actions/workflows/build.yaml)
 [![Version](https://img.shields.io/github/v/release/google/kube-startup-cpu-boost?label=version)](https://github.com/google/kube-startup-cpu-boost/releases/latest)
 [![License](https://img.shields.io/github/license/google/kube-startup-cpu-boost)](LICENSE)
+[![OpenSSF-Scorecard](https://api.scorecard.dev/projects/github.com/google/kube-startup-cpu-boost/badge)](https://scorecard.dev/viewer/?uri=github.com/google/kube-startup-cpu-boost)
 
 Note: This is not an officially supported Google product.
 
