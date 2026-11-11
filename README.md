@@ -316,7 +316,7 @@ the system and the status of Startup CPU Boosts.
 
 ### Scraping: Google Cloud Managed Service for Prometheus
 
-The following [PodMonitoring](https://github.com/GoogleCloudPlatform/prometheus-engine/blob/main/doc/api.md#monitoring.googleapis.com/v1.PodMonitoring)
+The following [PodMonitoring](https://github.com/GoogleCloudPlatform/prometheus-engine/blob/main/doc/api.md#podmonitoring)
 example can be used to scrape Kube Startup CPU Boost metrics with
 [Google Cloud Managed Service for Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus).
 
