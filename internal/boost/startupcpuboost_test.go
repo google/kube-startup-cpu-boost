@@ -718,6 +718,103 @@ var _ = Describe("StartupCPUBoost", func() {
 						Expect(trackedAnnot.State).To(Equal(bpod.BoostStateReverted))
 					})
 				})
+				When("ConditionChanged reverts pod right before ContainerRestarting", func() {
+					It("uses the updated reverted pod for boostOnRestart and keeps Active state", func(ctx context.Context) {
+						spec.Spec.DurationPolicy.PodCondition = &autoscaling.PodConditionDurationPolicy{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionTrue,
+						}
+						// Start with an active boosted pod (CPU=2) at RV 100 whose Ready condition became True
+						pod.ResourceVersion = "100"
+						setContainerResource(pod, 0, corev1.ResourceCPU, "2", "4")
+						annot := bpod.NewBoostAnnotation()
+						annot.State = bpod.BoostStateActive
+						annot.InitCPURequests["container-one"] = "1"
+						annot.InitCPULimits["container-one"] = "2"
+						annot.Apply(pod)
+						pod.Status.Conditions = []corev1.PodCondition{
+							{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+						}
+
+						mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+						revertCalls := expectResizeAndMetadataPatchWithRV(mockClient, mockSubResourceClient, "101", "102")
+						boostCalls := expectResizeAndMetadataPatchWithRV(mockClient, mockSubResourceClient, "103", "104")
+						gomock.InOrder(append(revertCalls, boostCalls...)...)
+						config.Client = mockClient
+
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+						Expect(err).NotTo(HaveOccurred())
+
+						staleSnapshot := pod.DeepCopy()
+
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypeConditionChanged,
+							Pod:  pod,
+						})
+						Expect(err).NotTo(HaveOccurred())
+
+						// Even if passed the pre-revert snapshot (RV 100), boostOnRestart uses the updated tracked pod (RV 102)
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type:                     bpod.PodEventTypeContainerRestarting,
+							Pod:                      staleSnapshot,
+							RestartingContainerNames: []string{"container-one"},
+						})
+						Expect(err).NotTo(HaveOccurred())
+
+						trackedPod, ok := boost.Pod(pod.Name)
+						Expect(ok).To(BeTrue())
+						Expect(trackedPod.ResourceVersion).To(Equal("104"))
+						Expect(trackedPod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("2"))
+						trackedAnnot, err := bpod.BoostAnnotationFromPod(trackedPod)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(trackedAnnot.State).To(Equal(bpod.BoostStateActive))
+						Expect(boost.Stats().ActiveContainerBoosts).To(Equal(1))
+					})
+				})
+				When("a stale ConditionChanged event arrives after boostOnRestart", func() {
+					It("does not overwrite the boosted pod in tracking or zero active stats", func(ctx context.Context) {
+						pod.ResourceVersion = "100"
+						annot, _ := bpod.BoostAnnotationFromPod(pod)
+						annot.State = bpod.BoostStateReverted
+						annot.Apply(pod)
+
+						staleEventPod := pod.DeepCopy()
+						staleEventPod.ResourceVersion = "102"
+						staleEventPod.Status.Conditions = []corev1.PodCondition{
+							{Type: cpuboost.PodConditionPodResizeInProgress, Status: corev1.ConditionTrue},
+						}
+
+						mockSubResourceClient := mock.NewMockSubResourceClient(mockCtrl)
+						gomock.InOrder(expectResizeAndMetadataPatchWithRV(mockClient, mockSubResourceClient, "101", "103")...)
+						config.Client = mockClient
+
+						boost, err := cpuboost.NewStartupCPUBoost(spec, config)
+						Expect(err).NotTo(HaveOccurred())
+
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type:                     bpod.PodEventTypeContainerRestarting,
+							Pod:                      pod,
+							RestartingContainerNames: []string{"container-one"},
+						})
+						Expect(err).NotTo(HaveOccurred())
+						Expect(boost.Stats().ActiveContainerBoosts).To(Equal(2))
+
+						// Deliver stale RV 102 ConditionChanged event that still had Reverted annotation
+						err = boost.HandlePodEvent(ctx, &bpod.PodEvent{
+							Type: bpod.PodEventTypeConditionChanged,
+							Pod:  staleEventPod,
+						})
+						Expect(err).NotTo(HaveOccurred())
+
+						trackedPod, ok := boost.Pod(pod.Name)
+						Expect(ok).To(BeTrue())
+						Expect(trackedPod.ResourceVersion).To(Equal("103"))
+						trackedAnnot, err := bpod.BoostAnnotationFromPod(trackedPod)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(trackedAnnot.State).To(Equal(bpod.BoostStateActive))
+						Expect(boost.Stats().ActiveContainerBoosts).To(Equal(2))
+					})
+				})
 			})
 		})
 	})
@@ -1135,5 +1232,27 @@ func setContainerFixedPolicy(configSpec *autoscaling.StartupCPUBoost, containerN
 				},
 			},
 		},
+	}
+}
+
+func expectResizeAndMetadataPatchWithRV(
+	mockClient *mock.MockClient,
+	mockSubResourceClient *mock.MockSubResourceClient,
+	resizeRV, metadataRV string,
+) []any {
+	return []any{
+		mockClient.EXPECT().SubResource("resize").Return(mockSubResourceClient),
+		mockSubResourceClient.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+				obj.SetResourceVersion(resizeRV)
+				return nil
+			},
+		),
+		mockClient.EXPECT().Patch(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				obj.SetResourceVersion(metadataRV)
+				return nil
+			},
+		),
 	}
 }

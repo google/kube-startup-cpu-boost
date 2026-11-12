@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -285,16 +286,16 @@ func (b *StartupCPUBoostImpl) HandlePodEvent(ctx context.Context, event *bpod.Po
 			statsType = StartupCPUBoostStatsPodUpdateEvent
 		}
 		b.updateStats(StartupCPUBoostStatsEvent{Type: statsType, Object: event.Pod})
-		return b.validateDurationPolicies(ctx, event.Pod)
+		return b.validateDurationPolicies(ctx, b.currentOrEventPod(event.Pod))
 	case bpod.PodEventTypePodDeleted:
 		return b.deletePod(ctx, event.Pod)
 	case bpod.PodEventTypeConditionChanged:
 		b.inspectResizeConditions(ctx, event.Pod)
 		b.upsertPod(ctx, event.Pod)
 		b.updateStats(StartupCPUBoostStatsEvent{Type: StartupCPUBoostStatsPodUpdateEvent, Object: event.Pod})
-		return b.validateDurationPolicies(ctx, event.Pod)
+		return b.validateDurationPolicies(ctx, b.currentOrEventPod(event.Pod))
 	case bpod.PodEventTypeContainerRestarting:
-		return b.boostOnRestart(ctx, event.Pod, event.RestartingContainerNames)
+		return b.boostOnRestart(ctx, b.currentOrEventPod(event.Pod), event.RestartingContainerNames)
 	default:
 		log := b.loggerFromContext(ctx).WithValues("event_type", event.Type, "pod", event.Pod.Name)
 		log.Info("unknown event type, skipping")
@@ -377,10 +378,38 @@ func (b *StartupCPUBoostImpl) upsertPod(ctx context.Context, pod *corev1.Pod) (e
 	defer b.Unlock()
 	log := b.loggerFromContext(ctx).WithValues("pod", pod.Name)
 	log.V(5).Info("handling pod upsert")
-	_, existing = b.pods[pod.Name]
+	var curPod *corev1.Pod
+	curPod, existing = b.pods[pod.Name]
+	if existing && isOlderResourceVersion(pod.ResourceVersion, curPod.ResourceVersion) {
+		log.V(5).Info("skipping pod upsert due to older resource version",
+			"podRV", pod.ResourceVersion, "trackedRV", curPod.ResourceVersion)
+		return existing
+	}
 	b.pods[pod.Name] = pod
 	log.V(5).Info("pod upserted successfully")
 	return existing
+}
+
+func (b *StartupCPUBoostImpl) currentOrEventPod(pod *corev1.Pod) *corev1.Pod {
+	if trackedPod, ok := b.Pod(pod.Name); ok && isOlderResourceVersion(pod.ResourceVersion, trackedPod.ResourceVersion) {
+		return trackedPod
+	}
+	return pod
+}
+
+func isOlderResourceVersion(candidateRV, currentRV string) bool {
+	if candidateRV == "" || currentRV == "" {
+		return false
+	}
+	cand, err := strconv.ParseUint(candidateRV, 10, 64)
+	if err != nil {
+		return false
+	}
+	curr, err := strconv.ParseUint(currentRV, 10, 64)
+	if err != nil {
+		return false
+	}
+	return cand < curr
 }
 
 func (b *StartupCPUBoostImpl) validateDurationPolicies(ctx context.Context, pod *corev1.Pod) error {

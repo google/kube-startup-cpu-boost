@@ -146,191 +146,249 @@ var _ = Describe("BoostPodHandler", func() {
 				ObjectOld: oldPod,
 			}
 		})
-		JustBeforeEach(func() {
-			podHandler.Update(context.TODO(), updateEvent, wq)
-		})
-		When("Pod status conditions has not change", func() {
-			BeforeEach(func() {
-				mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
-					gomock.Any(),
-					gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: newPod}),
-				).Times(0)
+		Context("Event routing and reconciliation", func() {
+			JustBeforeEach(func() {
+				podHandler.Update(context.TODO(), updateEvent, wq)
 			})
-			It("does not send reconciliation request", func() {
-				Expect(wq.Len()).To(Equal(0))
-			})
-		})
-		When("Pod status conditions has changed", func() {
-			BeforeEach(func() {
-				oldPod.Status.Conditions = []corev1.PodCondition{
-					{
-						Type:   corev1.PodReady,
-						Status: corev1.ConditionFalse,
-					},
-				}
-				newPod.Status.Conditions = []corev1.PodCondition{
-					{
-						Type:   corev1.PodReady,
-						Status: corev1.ConditionTrue,
-					},
-				}
-				mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
-					gomock.Any(),
-					gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: newPod}),
-				)
-			})
-			When("There is no boost matching the POD", func() {
+			When("Pod status conditions has not change", func() {
 				BeforeEach(func() {
-					mgrMockCall.Return(nil, nil)
+					mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
+						gomock.Any(),
+						gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: newPod}),
+					).Times(0)
 				})
-				It("sends a valid call to the boost manager", func() {
-					mgrMockCall.Times(1)
+				It("does not send reconciliation request", func() {
+					Expect(wq.Len()).To(Equal(0))
 				})
 			})
-			When("There is a boost matching the POD", func() {
+			When("Pod status conditions has changed", func() {
 				BeforeEach(func() {
-					boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
-					boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
-					boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
-					mgrMockCall.Return(boostMock, nil)
+					oldPod.Status.Conditions = []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionFalse,
+						},
+					}
+					newPod.Status.Conditions = []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionTrue,
+						},
+					}
+					mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
+						gomock.Any(),
+						gomock.Eq(&bpod.PodEvent{Type: bpod.PodEventTypeConditionChanged, Pod: newPod}),
+					)
 				})
-				It("sends a valid call to the boost manager and a boost", func() {
-					mgrMockCall.Times(1)
+				When("There is no boost matching the POD", func() {
+					BeforeEach(func() {
+						mgrMockCall.Return(nil, nil)
+					})
+					It("sends a valid call to the boost manager", func() {
+						mgrMockCall.Times(1)
+					})
 				})
-				It("sends reconciliation request", func() {
-					Expect(wq.Len()).To(Equal(1))
-					req, _ := wq.Get()
-					Expect(req.Name).To(Equal(specTemplate.Name))
-					Expect(req.Namespace).To(Equal(specTemplate.Namespace))
+				When("There is a boost matching the POD", func() {
+					BeforeEach(func() {
+						boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
+						boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
+						boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
+						mgrMockCall.Return(boostMock, nil)
+					})
+					It("sends a valid call to the boost manager and a boost", func() {
+						mgrMockCall.Times(1)
+					})
+					It("sends reconciliation request", func() {
+						Expect(wq.Len()).To(Equal(1))
+						req, _ := wq.Get()
+						Expect(req.Name).To(Equal(specTemplate.Name))
+						Expect(req.Namespace).To(Equal(specTemplate.Namespace))
+					})
 				})
 			})
-		})
-		When("Container is restarting", func() {
-			BeforeEach(func() {
-				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
-				}
-				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}},
-				}
-				mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
-					gomock.Any(),
-					gomock.Eq(&bpod.PodEvent{
-						Type:                     bpod.PodEventTypeContainerRestarting,
-						Pod:                      newPod,
-						RestartingContainerNames: []string{"container-one"},
-					}),
-				)
-			})
-			When("There is no boost matching the POD", func() {
+			When("Container is restarting", func() {
 				BeforeEach(func() {
-					mgrMockCall.Return(nil, nil)
+					oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
+						newContainerStatus("container-one", withRunningState()),
+					}
+					newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
+						newContainerStatus("container-one", withTerminatedState(1)),
+					}
+					mgrMockCall = mgrMock.EXPECT().HandlePodEvent(
+						gomock.Any(),
+						gomock.Eq(&bpod.PodEvent{
+							Type:                     bpod.PodEventTypeContainerRestarting,
+							Pod:                      newPod,
+							RestartingContainerNames: []string{"container-one"},
+						}),
+					)
 				})
-				It("sends a valid call to the boost manager", func() {
-					mgrMockCall.Times(1)
+				When("There is no boost matching the POD", func() {
+					BeforeEach(func() {
+						mgrMockCall.Return(nil, nil)
+					})
+					It("sends a valid call to the boost manager", func() {
+						mgrMockCall.Times(1)
+					})
+				})
+				When("There is a boost matching the POD", func() {
+					BeforeEach(func() {
+						boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
+						boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
+						boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
+						mgrMockCall.Return(boostMock, nil)
+					})
+					It("sends a valid call to the boost manager and a boost", func() {
+						mgrMockCall.Times(1)
+					})
+					It("sends reconciliation request", func() {
+						Expect(wq.Len()).To(Equal(1))
+						req, _ := wq.Get()
+						Expect(req.Name).To(Equal(specTemplate.Name))
+						Expect(req.Namespace).To(Equal(specTemplate.Namespace))
+					})
 				})
 			})
-			When("There is a boost matching the POD", func() {
+			When("Pod conditions change and container restarts in the same update", func() {
 				BeforeEach(func() {
-					boostMock := mock.NewMockStartupCPUBoost(mockCtrl)
-					boostMock.EXPECT().Name().Return(specTemplate.Name).MinTimes(1)
-					boostMock.EXPECT().Namespace().Return(specTemplate.Namespace).MinTimes(1)
-					mgrMockCall.Return(boostMock, nil)
+					oldPod.Status.Conditions = []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					}
+					newPod.Status.Conditions = []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+					}
+					oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
+						newContainerStatus("container-one", withRestartCount(1), withRunningState()),
+					}
+					newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
+						newContainerStatus("container-one",
+							withRestartCount(1),
+							withWaitingState("CrashLoopBackOff"),
+							withLastTerminatedState(143),
+						),
+					}
+					gomock.InOrder(
+						mgrMock.EXPECT().HandlePodEvent(
+							gomock.Any(),
+							gomock.Eq(&bpod.PodEvent{
+								Type: bpod.PodEventTypeConditionChanged,
+								Pod:  newPod,
+							}),
+						).Return(nil, nil),
+						mgrMock.EXPECT().HandlePodEvent(
+							gomock.Any(),
+							gomock.Eq(&bpod.PodEvent{
+								Type:                     bpod.PodEventTypeContainerRestarting,
+								Pod:                      newPod,
+								RestartingContainerNames: []string{"container-one"},
+							}),
+						).Return(nil, nil),
+					)
 				})
-				It("sends a valid call to the boost manager and a boost", func() {
-					mgrMockCall.Times(1)
-				})
-				It("sends reconciliation request", func() {
-					Expect(wq.Len()).To(Equal(1))
-					req, _ := wq.Get()
-					Expect(req.Name).To(Equal(specTemplate.Name))
-					Expect(req.Namespace).To(Equal(specTemplate.Namespace))
+				It("handles ConditionChanged before ContainerRestarting", func() {
+					Expect(wq.Len()).To(Equal(0))
 				})
 			})
 		})
-		When("Container is terminating but pod is being deleted", func() {
-			BeforeEach(func() {
-				now := metav1.Now()
-				newPod.DeletionTimestamp = &now
-				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+		DescribeTable("Container restart detection scenarios",
+			func(oldStatus, newStatus corev1.ContainerStatus, expectRestart bool, podOpts ...podOpt) {
+				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{oldStatus}
+				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{newStatus}
+				for _, opt := range podOpts {
+					opt(newPod)
 				}
-				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 143}}},
+				if expectRestart {
+					mgrMock.EXPECT().HandlePodEvent(
+						gomock.Any(),
+						gomock.Eq(&bpod.PodEvent{
+							Type:                     bpod.PodEventTypeContainerRestarting,
+							Pod:                      newPod,
+							RestartingContainerNames: []string{newStatus.Name},
+						}),
+					).Return(nil, nil)
+				} else {
+					mgrMock.EXPECT().HandlePodEvent(gomock.Any(), gomock.Any()).Times(0)
 				}
-				mgrMock.EXPECT().HandlePodEvent(gomock.Any(), gomock.Any()).Times(0)
-			})
-			It("does not trigger restart event or reconciliation", func() {
+
+				podHandler.Update(context.TODO(), updateEvent, wq)
 				Expect(wq.Len()).To(Equal(0))
-			})
-		})
-		When("Container is terminating but pod is in terminal phase", func() {
-			BeforeEach(func() {
-				newPod.Status.Phase = corev1.PodFailed
-				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
-				}
-				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}},
-				}
-				mgrMock.EXPECT().HandlePodEvent(gomock.Any(), gomock.Any()).Times(0)
-			})
-			It("does not trigger restart event or reconciliation", func() {
-				Expect(wq.Len()).To(Equal(0))
-			})
-		})
-		When("Container terminates on RestartPolicyNever pod", func() {
-			BeforeEach(func() {
-				newPod.Spec.RestartPolicy = corev1.RestartPolicyNever
-				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
-				}
-				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}},
-				}
-				mgrMock.EXPECT().HandlePodEvent(gomock.Any(), gomock.Any()).Times(0)
-			})
-			It("does not trigger restart event or reconciliation", func() {
-				Expect(wq.Len()).To(Equal(0))
-			})
-		})
-		When("Container terminates cleanly with 0 on RestartPolicyOnFailure pod", func() {
-			BeforeEach(func() {
-				newPod.Spec.RestartPolicy = corev1.RestartPolicyOnFailure
-				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
-				}
-				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}},
-				}
-				mgrMock.EXPECT().HandlePodEvent(gomock.Any(), gomock.Any()).Times(0)
-			})
-			It("does not trigger restart event or reconciliation", func() {
-				Expect(wq.Len()).To(Equal(0))
-			})
-		})
-		When("Container terminates with error on RestartPolicyOnFailure pod", func() {
-			BeforeEach(func() {
-				newPod.Spec.RestartPolicy = corev1.RestartPolicyOnFailure
-				oldPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
-				}
-				newPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-					{Name: "container-one", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}},
-				}
-				mgrMock.EXPECT().HandlePodEvent(
-					gomock.Any(),
-					gomock.Eq(&bpod.PodEvent{
-						Type:                     bpod.PodEventTypeContainerRestarting,
-						Pod:                      newPod,
-						RestartingContainerNames: []string{"container-one"},
-					}),
-				).Return(nil, nil)
-			})
-			It("triggers restart event", func() {
-				Expect(wq.Len()).To(Equal(0))
-			})
-		})
+			},
+			Entry("terminates while pod is being deleted",
+				newContainerStatus("container-one", withRunningState()),
+				newContainerStatus("container-one", withTerminatedState(143)),
+				false,
+				withDeletionTimestamp(),
+			),
+			Entry("terminates while pod is in Failed phase",
+				newContainerStatus("container-one", withRunningState()),
+				newContainerStatus("container-one", withTerminatedState(1)),
+				false,
+				withPodPhase(corev1.PodFailed),
+			),
+			Entry("terminates on RestartPolicyNever pod",
+				newContainerStatus("container-one", withRunningState()),
+				newContainerStatus("container-one", withTerminatedState(1)),
+				false,
+				withRestartPolicy(corev1.RestartPolicyNever),
+			),
+			Entry("terminates cleanly with exit code 0 on RestartPolicyOnFailure pod",
+				newContainerStatus("container-one", withRunningState()),
+				newContainerStatus("container-one", withTerminatedState(0)),
+				false,
+				withRestartPolicy(corev1.RestartPolicyOnFailure),
+			),
+			Entry("terminates with error on RestartPolicyOnFailure pod",
+				newContainerStatus("container-one", withRunningState()),
+				newContainerStatus("container-one", withTerminatedState(1)),
+				true,
+				withRestartPolicy(corev1.RestartPolicyOnFailure),
+			),
+			Entry("crashes directly into Waiting (CrashLoopBackOff)",
+				newContainerStatus("container-one", withRestartCount(13), withRunningState()),
+				newContainerStatus("container-one", withRestartCount(13), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(143)),
+				true,
+			),
+			Entry("in CrashLoopBackOff starts and immediately crashes into new CrashLoopBackOff",
+				newContainerStatus("container-one", withRestartCount(13), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(143)),
+				newContainerStatus("container-one", withRestartCount(14), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(143)),
+				true,
+			),
+			Entry("initial container in Waiting starts and crashes into CrashLoopBackOff",
+				newContainerStatus("container-one", withRestartCount(0), withWaitingState("ContainerCreating")),
+				newContainerStatus("container-one", withRestartCount(0), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(1)),
+				true,
+			),
+			Entry("stays in the same CrashLoopBackOff across pod updates",
+				newContainerStatus("container-one", withRestartCount(13), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(143)),
+				newContainerStatus("container-one", withRestartCount(13), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(143)),
+				false,
+			),
+			Entry("moves from Terminated to CrashLoopBackOff for the same attempt",
+				newContainerStatus("container-one", withRestartCount(1), withTerminatedState(1)),
+				newContainerStatus("container-one", withRestartCount(1), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(1)),
+				false,
+			),
+			Entry("transitions from CrashLoopBackOff directly to Running",
+				newContainerStatus("container-one", withRestartCount(13), withWaitingState("CrashLoopBackOff"), withLastTerminatedState(143)),
+				newContainerStatus("container-one", withRestartCount(14), withRunningState(), withLastTerminatedState(143)),
+				true,
+			),
+			Entry("restarts rapidly from Running to Running with incremented RestartCount",
+				newContainerStatus("container-one", withRestartCount(0), withRunningState()),
+				newContainerStatus("container-one", withRestartCount(1), withRunningState(), withLastTerminatedState(137)),
+				true,
+			),
+			Entry("starts for the first time (Waiting to Running with RestartCount 0)",
+				newContainerStatus("container-one", withRestartCount(0), withWaitingState("ContainerCreating")),
+				newContainerStatus("container-one", withRestartCount(0), withRunningState()),
+				false,
+			),
+			Entry("previously restarted container stays Running with unchanged RestartCount",
+				newContainerStatus("container-one", withRestartCount(2), withRunningState()),
+				newContainerStatus("container-one", withRestartCount(2), withRunningState()),
+				false,
+			),
+		)
 	})
 	Describe("Provides the POD label selector", func() {
 		var selector *metav1.LabelSelector
@@ -354,3 +412,66 @@ var _ = Describe("BoostPodHandler", func() {
 		})
 	})
 })
+
+type containerStatusOpt func(*corev1.ContainerStatus)
+
+func newContainerStatus(name string, opts ...containerStatusOpt) corev1.ContainerStatus {
+	status := corev1.ContainerStatus{Name: name}
+	for _, opt := range opts {
+		opt(&status)
+	}
+	return status
+}
+
+func withRestartCount(count int32) containerStatusOpt {
+	return func(s *corev1.ContainerStatus) {
+		s.RestartCount = count
+	}
+}
+
+func withRunningState() containerStatusOpt {
+	return func(s *corev1.ContainerStatus) {
+		s.State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+	}
+}
+
+func withWaitingState(reason string) containerStatusOpt {
+	return func(s *corev1.ContainerStatus) {
+		s.State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: reason}}
+	}
+}
+
+func withTerminatedState(exitCode int32) containerStatusOpt {
+	return func(s *corev1.ContainerStatus) {
+		s.State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: exitCode}}
+	}
+}
+
+func withLastTerminatedState(exitCode int32) containerStatusOpt {
+	return func(s *corev1.ContainerStatus) {
+		s.LastTerminationState = corev1.ContainerState{
+			Terminated: &corev1.ContainerStateTerminated{ExitCode: exitCode},
+		}
+	}
+}
+
+type podOpt func(*corev1.Pod)
+
+func withDeletionTimestamp() podOpt {
+	return func(p *corev1.Pod) {
+		now := metav1.Now()
+		p.DeletionTimestamp = &now
+	}
+}
+
+func withPodPhase(phase corev1.PodPhase) podOpt {
+	return func(p *corev1.Pod) {
+		p.Status.Phase = phase
+	}
+}
+
+func withRestartPolicy(policy corev1.RestartPolicy) podOpt {
+	return func(p *corev1.Pod) {
+		p.Spec.RestartPolicy = policy
+	}
+}

@@ -137,11 +137,11 @@ func (h *boostPodHandler) Update(ctx context.Context, e event.UpdateEvent,
 		}
 	}
 
-	if len(restartingContainers) > 0 {
-		handleEvent(bpod.PodEventTypeContainerRestarting, restartingContainers)
-	}
 	if conditionsChanged {
 		handleEvent(bpod.PodEventTypeConditionChanged, nil)
+	}
+	if len(restartingContainers) > 0 {
+		handleEvent(bpod.PodEventTypeContainerRestarting, restartingContainers)
 	}
 }
 
@@ -168,18 +168,12 @@ func (h *boostPodHandler) GetPodLabelSelector() *metav1.LabelSelector {
 }
 
 func getRestartingContainers(oldPod, newPod *corev1.Pod) []string {
-	if newPod.GetDeletionTimestamp() != nil {
-		return nil
-	}
-	if newPod.Status.Phase == corev1.PodFailed || newPod.Status.Phase == corev1.PodSucceeded {
-		return nil
-	}
-	if newPod.Spec.RestartPolicy == corev1.RestartPolicyNever {
+	if !canPodContainersRestart(newPod) {
 		return nil
 	}
 
 	var restarting []string
-	oldStatuses := make(map[string]corev1.ContainerStatus)
+	oldStatuses := make(map[string]corev1.ContainerStatus, len(oldPod.Status.ContainerStatuses))
 	for _, status := range oldPod.Status.ContainerStatuses {
 		oldStatuses[status.Name] = status
 	}
@@ -188,13 +182,64 @@ func getRestartingContainers(oldPod, newPod *corev1.Pod) []string {
 		if !exists {
 			continue
 		}
-		if newStatus.State.Terminated != nil && oldStatus.State.Terminated == nil {
-			if newPod.Spec.RestartPolicy == corev1.RestartPolicyOnFailure && newStatus.State.Terminated.ExitCode == 0 {
-				continue
-			}
+		if isContainerRestarting(newPod.Spec.RestartPolicy, oldStatus, newStatus) {
 			restarting = append(restarting, newStatus.Name)
-			continue
 		}
 	}
 	return restarting
+}
+
+func canPodContainersRestart(pod *corev1.Pod) bool {
+	if pod.GetDeletionTimestamp() != nil {
+		return false
+	}
+	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+		return false
+	}
+	return pod.Spec.RestartPolicy != corev1.RestartPolicyNever
+}
+
+func willRestartAfterTermination(restartPolicy corev1.RestartPolicy, terminated *corev1.ContainerStateTerminated) bool {
+	if terminated == nil || restartPolicy == corev1.RestartPolicyNever {
+		return false
+	}
+	return restartPolicy != corev1.RestartPolicyOnFailure || terminated.ExitCode != 0
+}
+
+// isEnteringTerminated detects when a container transitions directly into the Terminated state
+// and will be restarted according to the Pod's restart policy.
+func isEnteringTerminated(restartPolicy corev1.RestartPolicy, oldStatus, newStatus corev1.ContainerStatus) bool {
+	if oldStatus.State.Terminated != nil || newStatus.State.Terminated == nil {
+		return false
+	}
+	return willRestartAfterTermination(restartPolicy, newStatus.State.Terminated)
+}
+
+// isWaitingAfterTermination detects when a container terminates and kubelet immediately places it
+// into a Waiting state (e.g., CrashLoopBackOff), moving termination details to LastTerminationState.
+func isWaitingAfterTermination(restartPolicy corev1.RestartPolicy, oldStatus, newStatus corev1.ContainerStatus) bool {
+	if newStatus.State.Waiting == nil {
+		return false
+	}
+	if !willRestartAfterTermination(restartPolicy, newStatus.LastTerminationState.Terminated) {
+		return false
+	}
+	return oldStatus.State.Running != nil ||
+		newStatus.RestartCount > oldStatus.RestartCount ||
+		(oldStatus.LastTerminationState.Terminated == nil && oldStatus.State.Terminated == nil)
+}
+
+// isRestartedIntoRunning detects when a restarted container transitions directly into Running
+// (e.g., fast 0s-backoff restarts or exiting CrashLoopBackOff when pre-start states were missed).
+func isRestartedIntoRunning(oldStatus, newStatus corev1.ContainerStatus) bool {
+	if newStatus.State.Running == nil || newStatus.RestartCount == 0 {
+		return false
+	}
+	return oldStatus.State.Running == nil || newStatus.RestartCount > oldStatus.RestartCount
+}
+
+func isContainerRestarting(restartPolicy corev1.RestartPolicy, oldStatus, newStatus corev1.ContainerStatus) bool {
+	return isEnteringTerminated(restartPolicy, oldStatus, newStatus) ||
+		isWaitingAfterTermination(restartPolicy, oldStatus, newStatus) ||
+		isRestartedIntoRunning(oldStatus, newStatus)
 }

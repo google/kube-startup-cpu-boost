@@ -34,13 +34,13 @@ import (
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	rest "k8s.io/client-go/rest"
-	events "k8s.io/client-go/tools/events"
 	record "k8s.io/client-go/tools/record"
 	cache "sigs.k8s.io/controller-runtime/pkg/cache"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	config "sigs.k8s.io/controller-runtime/pkg/config"
 	healthz "sigs.k8s.io/controller-runtime/pkg/healthz"
 	manager "sigs.k8s.io/controller-runtime/pkg/manager"
+	recorder "sigs.k8s.io/controller-runtime/pkg/recorder"
 	webhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 	conversion "sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 )
@@ -224,10 +224,10 @@ func (mr *MockCtrlManagerMockRecorder) GetConverterRegistry() *gomock.Call {
 }
 
 // GetEventRecorder mocks base method.
-func (m *MockCtrlManager) GetEventRecorder(name string) events.EventRecorder {
+func (m *MockCtrlManager) GetEventRecorder(name string) recorder.EventRecorder {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventRecorder", name)
-	ret0, _ := ret[0].(events.EventRecorder)
+	ret0, _ := ret[0].(recorder.EventRecorder)
 	return ret0
 }
 
