@@ -1,6 +1,15 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.5](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.4...v0.21.5) (2026-11-12)
+
+
+### Bug Fixes
+
+* **boost-on-restart:** added new restart scenarios ([bf36d25](https://github.com/google/kube-startup-cpu-boost/commit/bf36d2589aca049e3dd6adc8a4795bd0852b2adc))
+* **deps:** bump distroless/static from `d620678` to `25ac8f0` ([#211](https://github.com/google/kube-startup-cpu-boost/issues/211)) ([79b6bc7](https://github.com/google/kube-startup-cpu-boost/commit/79b6bc7c6f922623696023f6a47bdca03a572bba))
+* **deps:** bump the go-dependencies group with 4 updates ([f96dcbe](https://github.com/google/kube-startup-cpu-boost/commit/f96dcbed3df7cb1cf8c8fdafb48d2d78c4db70ca))
+
 ## [0.21.4](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.3...v0.21.4) (2026-11-03)
 
 
