@@ -177,8 +177,9 @@ the operator can re-apply CPU boosts to existing Pods when their containers rest
 This ensures that the boost is applied throughout the entire lifecycle of the workload.
 
 The operator continues watching Pods even after CPU resources have been restored to their
-original values. Container restarts are detected by observing container status changes and reacting
-to the `terminated` state.
+original values. Container restarts are detected by observing container status transitions
+(`terminated`, post-termination `waiting` states such as `CrashLoopBackOff`, and `restartCount`
+increases).
 
 > [!NOTE]
 > This feature requires the `BOOST_ON_RESTART` environment variable to be set to `true`.
