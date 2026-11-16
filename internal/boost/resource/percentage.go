@@ -55,6 +55,7 @@ func increaseQuantity(quantity apiResource.Quantity, incPerc int64) *apiResource
 	decResult := &inf.Dec{}
 	decResult.Mul(quantityDec, decPerc)
 	decRoundedResult := inf.Dec{}
-	decRoundedResult.Round(decResult, 2, inf.RoundCeil)
+	// round up to the nearest millicore, the finest CPU precision in Kubernetes
+	decRoundedResult.Round(decResult, 3, inf.RoundCeil)
 	return apiResource.NewDecimalQuantity(decRoundedResult, quantity.Format)
 }
