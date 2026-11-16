@@ -1,6 +1,15 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.6](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.5...v0.21.6) (2026-11-16)
+
+
+### Bug Fixes
+
+* **core:** round percentage CPU increase to millicore precision ([#218](https://github.com/google/kube-startup-cpu-boost/issues/218)) ([31aa16c](https://github.com/google/kube-startup-cpu-boost/commit/31aa16ce5301aea352a9c05307901ed7834678ac))
+* **deps:** bump distroless/static from `25ac8f0` to `aafe993` ([#216](https://github.com/google/kube-startup-cpu-boost/issues/216)) ([2b408cf](https://github.com/google/kube-startup-cpu-boost/commit/2b408cfd6c4b4f34693be85a206290da1f7b5f23))
+* **deps:** bump github.com/onsi/ginkgo/v2 ([#215](https://github.com/google/kube-startup-cpu-boost/issues/215)) ([6516b77](https://github.com/google/kube-startup-cpu-boost/commit/6516b779a638883edd6eb80afcb9f998f2fcbbdd))
+
 ## [0.21.5](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.4...v0.21.5) (2026-11-12)
 
 
