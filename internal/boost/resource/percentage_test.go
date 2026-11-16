@@ -59,6 +59,24 @@ var _ = Describe("PercentageResourcePolicy", func() {
 			Expect(qty.String()).To(Equal("2400m"))
 		})
 	})
+	When("There are resources and limits with millicore precision defined", func() {
+		BeforeEach(func() {
+			percentage = 25
+			container = containerTemplate.DeepCopy()
+			container.Resources.Requests[corev1.ResourceCPU] = apiResource.MustParse("100m")
+			container.Resources.Limits[corev1.ResourceCPU] = apiResource.MustParse("250m")
+		})
+		It("returns resources with CPU requests increased by the exact percentage", func() {
+			Expect(newResources.Requests).To(HaveKey(corev1.ResourceCPU))
+			qty := newResources.Requests[corev1.ResourceCPU]
+			Expect(qty.String()).To(Equal("125m"))
+		})
+		It("returns resources with CPU limits rounded up to the nearest millicore", func() {
+			Expect(newResources.Limits).To(HaveKey(corev1.ResourceCPU))
+			qty := newResources.Limits[corev1.ResourceCPU]
+			Expect(qty.String()).To(Equal("313m"))
+		})
+	})
 	When("There are no requests and limits defined", func() {
 		BeforeEach(func() {
 			container = containerTemplate.DeepCopy()
