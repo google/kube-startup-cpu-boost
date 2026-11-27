@@ -1,6 +1,14 @@
 <!-- markdownlint-disable -->
 # Changelog
 
+## [0.21.7](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.6...v0.21.7) (2026-11-27)
+
+
+### Bug Fixes
+
+* **deps:** bump distroless/static from `aafe993` to `8ce6dd8` ([#222](https://github.com/google/kube-startup-cpu-boost/issues/222)) ([2731e32](https://github.com/google/kube-startup-cpu-boost/commit/2731e3236191ad16490f6e4df900b01e38befc45))
+* **deps:** bump the go-dependencies group across 1 directory with 2 updates ([#221](https://github.com/google/kube-startup-cpu-boost/issues/221)) ([f221711](https://github.com/google/kube-startup-cpu-boost/commit/f221711c3b9d72d32634af034b7de5172f5b2095))
+
 ## [0.21.6](https://github.com/google/kube-startup-cpu-boost/compare/v0.21.5...v0.21.6) (2026-11-16)
 
 
